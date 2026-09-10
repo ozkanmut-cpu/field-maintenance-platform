@@ -12,6 +12,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
+import { businessDayRange } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
 
@@ -99,9 +100,7 @@ export class NonMaintenanceVisitService {
 
     const date = dateInput ? new Date(dateInput) : new Date();
     this.assertDate(date, 'date');
-    const start = this.dateOnly(date);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { key, start, end } = businessDayRange(date);
 
     const items = await this.prisma.nonMaintenanceVisit.findMany({
       where: {
@@ -115,7 +114,7 @@ export class NonMaintenanceVisitService {
     });
 
     return {
-      date: start.toISOString().slice(0, 10),
+      date: key,
       technician,
       count: items.length,
       items,
@@ -126,7 +125,4 @@ export class NonMaintenanceVisitService {
     if (Number.isNaN(value.getTime())) throw new BadRequestException(`${field} geçersiz`);
   }
 
-  private dateOnly(date: Date) {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  }
 }

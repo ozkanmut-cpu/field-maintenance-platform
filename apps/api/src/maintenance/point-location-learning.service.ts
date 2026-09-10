@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LocationSource, Prisma, VisitStatus } from '@prisma/client';
+import { businessDateKey } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Evidence = {
@@ -182,6 +183,6 @@ export class PointLocationLearningService {
   }
 
   private dateKey(date: Date) {
-    return date.toISOString().slice(0, 10);
+    return businessDateKey(date);
   }
 }

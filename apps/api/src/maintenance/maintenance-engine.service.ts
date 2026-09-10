@@ -7,6 +7,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
+import { businessDateKey, dateOnlyForBusinessDate } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Priority = 'OVERDUE' | 'CURRENT';
@@ -195,10 +196,10 @@ export class MaintenanceEngineService {
 
   private toDateOnly(date: Date) {
     if (Number.isNaN(date.getTime())) throw new Error('Invalid date');
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return dateOnlyForBusinessDate(date);
   }
 
   private isoDate(date: Date) {
-    return date.toISOString().slice(0, 10);
+    return businessDateKey(date);
   }
 }

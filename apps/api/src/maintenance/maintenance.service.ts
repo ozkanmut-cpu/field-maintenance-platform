@@ -17,6 +17,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
+import { businessDateKey, businessDayRange, dateOnlyForBusinessDate } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
@@ -49,9 +50,7 @@ export class MaintenanceService {
     const technician = await this.requireTechnician(technicianId);
     const asOf = asOfInput ? new Date(asOfInput) : new Date();
     this.assertValidDate(asOf, 'asOf');
-    const dayStart = this.dateOnly(asOf);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    const { start: dayStart, end: dayEnd } = businessDayRange(asOf);
 
     const due = await this.engine.due(this.dateKey(asOf));
     const assigned = due.items.filter((item) => item.technicianId === technicianId);
@@ -113,9 +112,7 @@ export class MaintenanceService {
     await this.requireTechnician(technicianId);
     const date = dateInput ? new Date(dateInput) : new Date();
     this.assertValidDate(date, 'date');
-    const start = this.dateOnly(date);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = businessDayRange(date);
 
     const [visits, attempts] = await Promise.all([
       this.prisma.maintenanceVisit.findMany({
@@ -482,10 +479,10 @@ export class MaintenanceService {
   }
 
   private dateOnly(date: Date) {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return dateOnlyForBusinessDate(date);
   }
 
   private dateKey(date: Date) {
-    return this.dateOnly(date).toISOString().slice(0, 10);
+    return businessDateKey(date);
   }
 }
