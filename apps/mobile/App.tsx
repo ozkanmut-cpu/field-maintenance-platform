@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ import {
   AuthUser,
   clearSessionToken,
   confirmEfesim,
+  completeMaintenance,
   createProspectVisit,
   EfesimExtractResult,
   extractEfesim,
@@ -24,17 +26,23 @@ import {
   me,
   ProspectRecord,
   ProspectVisitPurpose,
+  HelpTarget,
+  TechnicianDashboard,
+  helpTargets,
+  technicianDashboard,
   restoreSessionToken,
+  recordMaintenanceAttempt,
+  AttemptReason,
 } from './src/api';
 
-type Step = 'START' | 'RESULT' | 'SAVED' | 'VISIT_SAVED';
+type Step = 'HOME' | 'MY_TASKS' | 'UNREGISTERED' | 'RESULT' | 'SAVED' | 'VISIT_SAVED';
 
 export default function App() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [step, setStep] = useState<Step>('START');
+  const [step, setStep] = useState<Step>('HOME');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<EfesimExtractResult | null>(null);
   const [customerName, setCustomerName] = useState('');
@@ -43,6 +51,10 @@ export default function App() {
   const [useGoogle, setUseGoogle] = useState(true);
   const [prospect, setProspect] = useState<ProspectRecord | null>(null);
   const [visitPurpose, setVisitPurpose] = useState<ProspectVisitPurpose>('SURVEY');
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpPeople, setHelpPeople] = useState<HelpTarget[]>([]);
+  const [helpDashboard, setHelpDashboard] = useState<TechnicianDashboard | null>(null);
+  const [myDashboard, setMyDashboard] = useState<TechnicianDashboard | null>(null);
 
   const google = result?.googleMatch;
   const strongGoogleMatch = Boolean(google?.matched && google.placeId);
@@ -75,14 +87,14 @@ export default function App() {
   }
 
   async function signIn() {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || password.length < 8) {
-      Alert.alert('Giriş bilgileri eksik', 'E-posta ve şifreni kontrol et.');
+    const cleanUsername = username.trim().toLowerCase();
+    if (!cleanUsername || password.length < 8) {
+      Alert.alert('Giriş bilgileri eksik', 'Kullanıcı adı ve şifreni kontrol et.');
       return;
     }
     setBusy(true);
     try {
-      const session = await login(cleanEmail, password);
+      const session = await login(cleanUsername, password);
       if (session.user.role !== 'TECHNICIAN') {
         await clearSessionToken();
         throw new Error('Bu mobil uygulama teknisyen hesabı gerektiriyor.');
@@ -91,6 +103,56 @@ export default function App() {
       setPassword('');
     } catch (error) {
       Alert.alert('Giriş yapılamadı', error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openMyTasks() {
+    setBusy(true);
+    try { setMyDashboard(await technicianDashboard()); setStep('MY_TASKS'); }
+    catch (error) { Alert.alert('Görevler alınamadı', error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function openHelp() {
+    setBusy(true);
+    try {
+      const targets = await helpTargets();
+      setHelpPeople(targets);
+      setHelpDashboard(null);
+      setHelpOpen(true);
+    } catch (error) { Alert.alert('Yardım listesi alınamadı', error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function chooseHelpTarget(target: HelpTarget) {
+    setBusy(true);
+    try { setHelpDashboard(await technicianDashboard(target.id)); }
+    catch (error) { Alert.alert('Görevler alınamadı', error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function completeHelpTask(task: TechnicianDashboard['due'][number]) {
+    if (!helpDashboard) return;
+    setBusy(true);
+    try {
+      const location = await ensureLocation();
+      await completeMaintenance({
+        pointId: task.pointId,
+        assistedForTechnicianId: helpDashboard.technician.id,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracyMeters: location.coords.accuracy ?? undefined,
+        locationCapturedAt: new Date(location.timestamp).toISOString(),
+        deviceRecordedAt: new Date().toISOString(),
+        idempotencyKey: `help-maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      });
+      const refreshed = await technicianDashboard(helpDashboard.technician.id);
+      setHelpDashboard(refreshed);
+      Alert.alert('Bakım kaydedildi', `${task.pointName} bakımını ${helpDashboard.technician.name} adına tamamladın.`);
+    } catch (error) {
+      Alert.alert('Bakım kaydedilemedi', error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -137,6 +199,62 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+
+  async function openDirections(task: import('./src/api').DueTask) {
+    const destination = task.latitude != null && task.longitude != null
+      ? `${task.latitude},${task.longitude}`
+      : [task.pointName, task.address, task.regionName].filter(Boolean).join(' ');
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+    try { await Linking.openURL(url); }
+    catch { Alert.alert('Harita açılamadı', 'Google Maps veya tarayıcı açılamadı.'); }
+  }
+
+  function chooseAttemptReason(task: import('./src/api').DueTask, assistedForTechnicianId?: string) {
+    const choices: Array<{ text: string; reason: AttemptReason }> = [
+      { text: 'İşletme kapalı', reason: 'BUSINESS_CLOSED' },
+      { text: 'Yetkili kişi yok', reason: 'AUTHORIZED_PERSON_UNAVAILABLE' },
+      { text: 'Erişim sağlanamadı', reason: 'ACCESS_FAILED' },
+      { text: 'Diğer', reason: 'OTHER' },
+    ];
+    Alert.alert('Bakım yapılamadı', task.pointName, [
+      ...choices.map((choice) => ({ text: choice.text, onPress: () => void saveAttempt(task, choice.reason, assistedForTechnicianId) })),
+      { text: 'Vazgeç', style: 'cancel' as const },
+    ]);
+  }
+
+  async function saveAttempt(task: import('./src/api').DueTask, reason: AttemptReason, assistedForTechnicianId?: string) {
+    setBusy(true);
+    try {
+      const location = await ensureLocation();
+      await recordMaintenanceAttempt({
+        pointId: task.pointId, assistedForTechnicianId, reason,
+        latitude: location.coords.latitude, longitude: location.coords.longitude,
+        accuracyMeters: location.coords.accuracy ?? undefined,
+        locationCapturedAt: new Date(location.timestamp).toISOString(),
+        idempotencyKey: `attempt-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      });
+      Alert.alert('Kaydedildi', 'Bakım yapılamadı kaydı oluşturuldu. Görev açık kalır.');
+    } catch (error) { Alert.alert('Kayıt oluşturulamadı', error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function completeOwnTask(task: import('./src/api').DueTask) {
+    setBusy(true);
+    try {
+      const location = await ensureLocation();
+      await completeMaintenance({
+        pointId: task.pointId,
+        latitude: location.coords.latitude, longitude: location.coords.longitude,
+        accuracyMeters: location.coords.accuracy ?? undefined,
+        locationCapturedAt: new Date(location.timestamp).toISOString(),
+        idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      });
+      setMyDashboard(await technicianDashboard());
+      Alert.alert('Tamamlandı', `${task.pointName} bakım kaydı oluşturuldu.`);
+    } catch (error) { Alert.alert('Bakım kaydedilemedi', error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
   }
 
   async function saveProspect() {
@@ -193,7 +311,7 @@ export default function App() {
   }
 
   function reset() {
-    setStep('START');
+    setStep('HOME');
     setResult(null);
     setCustomerName('');
     setSapNo('');
@@ -214,7 +332,7 @@ export default function App() {
         <View style={styles.loginWrap}>
           <Text style={styles.title}>Field Maintenance</Text>
           <Text style={styles.subtitle}>Teknisyen girişi</Text>
-          <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" placeholder="E-posta" />
+          <TextInput style={styles.input} value={username} onChangeText={setUsername} autoCapitalize="none" autoComplete="username" placeholder="Kullanıcı adı" />
           <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="password" placeholder="Şifre" onSubmitEditing={() => void signIn()} />
           <PrimaryButton title="GİRİŞ YAP" onPress={() => void signIn()} disabled={busy} />
           {busy && <ActivityIndicator size="large" />}
@@ -228,11 +346,51 @@ export default function App() {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.headerRow}>
-          <View><Text style={styles.title}>Kayıtlı Olmayan Nokta</Text><Text style={styles.subtitle}>{user.name}</Text></View>
-          <TouchableOpacity onPress={() => void signOut()}><Text style={styles.logout}>ÇIKIŞ</Text></TouchableOpacity>
+          <View><Text style={styles.title}>Saha Bakım</Text><Text style={styles.subtitle}>{user.name}</Text></View>
+          <View style={styles.headerActions}><TouchableOpacity onPress={() => void openHelp()}><Text style={styles.helpAction}>YARDIM ET</Text></TouchableOpacity><TouchableOpacity onPress={() => void signOut()}><Text style={styles.logout}>ÇIKIŞ</Text></TouchableOpacity></View>
         </View>
 
-        {step === 'START' && <View style={styles.card}>
+        {helpOpen && <View style={styles.card}>
+          <View style={styles.helpHeader}><Text style={styles.cardTitle}>Yardım Et</Text><TouchableOpacity onPress={() => { setHelpOpen(false); setHelpDashboard(null); }}><Text style={styles.logout}>KAPAT</Text></TouchableOpacity></View>
+          {helpPeople.length === 0 ? <Text style={styles.help}>Yönetici sana henüz yardım yetkisi vermemiş.</Text> : !helpDashboard ? <>
+            <Text style={styles.help}>Kimin görevlerine yardım edeceğini seç.</Text>
+            {helpPeople.map((target) => <TouchableOpacity key={target.id} style={styles.helpPerson} onPress={() => void chooseHelpTarget(target)}><Text style={styles.googleName}>{target.name}</Text><Text style={styles.help}>@{target.username}</Text></TouchableOpacity>)}
+          </> : <>
+            <Text style={styles.googleName}>{helpDashboard.technician.name}</Text>
+            <Text style={styles.help}>Gecikmiş: {helpDashboard.overdue} · Bu dönem: {helpDashboard.current}</Text>
+            {helpDashboard.due.length === 0 ? <Text style={styles.success}>Açık görev yok</Text> : helpDashboard.due.map((task) => <View key={task.pointId} style={styles.taskCard}>
+              <Text style={styles.sectionLabel}>{task.priority === 'OVERDUE' ? 'GECİKMİŞ' : 'BU DÖNEM'}</Text>
+              <Text style={styles.googleName}>{task.pointName}</Text>
+              <Text style={styles.help}>{task.pointCode} · {task.regionName}{task.overduePeriods > 0 ? ` · ${task.overduePeriods} dönem gecikmiş` : ''}</Text>
+              <View style={styles.taskActions}><TouchableOpacity style={styles.outlineButton} onPress={() => void openDirections(task)} disabled={busy}><Text style={styles.outlineButtonText}>YOL TARİFİ</Text></TouchableOpacity><TouchableOpacity style={styles.outlineButton} onPress={() => chooseAttemptReason(task, helpDashboard.technician.id)} disabled={busy}><Text style={styles.outlineButtonText}>YAPILAMADI</Text></TouchableOpacity></View>
+              <PrimaryButton title="BAKIM YAPILDI" onPress={() => void completeHelpTask(task)} disabled={busy} />
+            </View>)}
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setHelpDashboard(null)}><Text style={styles.secondaryButtonText}>BAŞKA TEKNİSYEN SEÇ</Text></TouchableOpacity>
+          </>}
+        </View>}
+
+        {step === 'HOME' && <>
+          <View style={styles.card}><Text style={styles.cardTitle}>Benim İşlerim</Text><Text style={styles.help}>Gecikmiş işler her zaman en üstte gelir.</Text><PrimaryButton title="BENİM İŞLERİM" onPress={() => void openMyTasks()} disabled={busy} /></View>
+          <View style={styles.card}><Text style={styles.cardTitle}>Yardım Et</Text><Text style={styles.help}>Yalnızca yöneticinin izin verdiği teknisyenlerin görevlerini görürsün.</Text><PrimaryButton title="YARDIM ET" onPress={() => void openHelp()} disabled={busy} /></View>
+          <View style={styles.card}><Text style={styles.cardTitle}>Kayıtlı Olmayan Nokta</Text><Text style={styles.help}>Keşif veya kurma için önce EFESİM ekran görüntüsü ile başla.</Text><PrimaryButton title="YENİ NOKTA / EFESİM" onPress={() => setStep('UNREGISTERED')} disabled={busy} /></View>
+        </>}
+
+        {step === 'MY_TASKS' && <View style={styles.card}>
+          <View style={styles.helpHeader}><Text style={styles.cardTitle}>Benim İşlerim</Text><TouchableOpacity onPress={() => setStep('HOME')}><Text style={styles.logout}>GERİ</Text></TouchableOpacity></View>
+          {!myDashboard ? <Text style={styles.help}>Görevler yükleniyor...</Text> : <>
+            <Text style={styles.help}>Gecikmiş: {myDashboard.overdue} · Bu dönem: {myDashboard.current}</Text>
+            {myDashboard.due.length === 0 ? <Text style={styles.success}>Açık görev yok</Text> : myDashboard.due.map((task) => <View key={task.pointId} style={styles.taskCard}>
+              <Text style={styles.sectionLabel}>{task.priority === 'OVERDUE' ? 'GECİKMİŞ' : 'BU DÖNEM'}</Text>
+              <Text style={styles.googleName}>{task.pointName}</Text>
+              <Text style={styles.help}>{task.pointCode} · {task.regionName}{task.overduePeriods > 0 ? ` · ${task.overduePeriods} dönem gecikmiş` : ''}</Text>
+              <View style={styles.taskActions}><TouchableOpacity style={styles.outlineButton} onPress={() => void openDirections(task)} disabled={busy}><Text style={styles.outlineButtonText}>YOL TARİFİ</Text></TouchableOpacity><TouchableOpacity style={styles.outlineButton} onPress={() => chooseAttemptReason(task)} disabled={busy}><Text style={styles.outlineButtonText}>YAPILAMADI</Text></TouchableOpacity></View>
+              <PrimaryButton title="BAKIM YAPILDI" onPress={() => void completeOwnTask(task)} disabled={busy} />
+            </View>)}
+          </>}
+        </View>}
+
+        {step === 'UNREGISTERED' && <View style={styles.card}>
+          <View style={styles.helpHeader}><Text style={styles.cardTitle}>Kayıtlı Olmayan Nokta</Text><TouchableOpacity onPress={() => setStep('HOME')}><Text style={styles.logout}>GERİ</Text></TouchableOpacity></View>
           <Text style={styles.cardTitle}>Önce EFESİM</Text>
           <Text style={styles.help}>Ekran görüntüsünden müşteri adı ve SAP No okunur; GPS ile Google Maps eşleşmesi denenir.</Text>
           <PrimaryButton title="EFESİM EKRAN GÖRÜNTÜSÜ SEÇ" onPress={() => void beginEfesimFlow()} disabled={busy} />
@@ -288,6 +446,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800' },
   subtitle: { fontSize: 16, fontWeight: '700', marginTop: 4 },
   logout: { fontSize: 13, fontWeight: '900' },
+  helpAction: { fontSize: 13, fontWeight: '900', color: '#3867d6' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 12 },
   warningCard: { backgroundColor: '#fff3cd', borderRadius: 14, padding: 16, gap: 8 },
   warningTitle: { fontSize: 17, fontWeight: '800' },
@@ -310,4 +470,10 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   loader: { marginTop: 12 },
   success: { fontSize: 21, fontWeight: '900' },
+  helpHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  helpPerson: { borderWidth: 1, borderColor: '#dedede', borderRadius: 12, padding: 12, gap: 3 },
+  taskCard: { borderWidth: 1, borderColor: '#dedede', borderRadius: 12, padding: 12, gap: 8 },
+  taskActions: { flexDirection: 'row', gap: 8 },
+  outlineButton: { flex: 1, borderWidth: 1, borderColor: '#cfd4da', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  outlineButtonText: { fontSize: 12, fontWeight: '900' },
 });

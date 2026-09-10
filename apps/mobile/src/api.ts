@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 export type AuthUser = {
   id: string;
   name: string;
-  email: string;
+  username: string;
   role: 'ADMIN' | 'TECHNICIAN';
   tokenVersion: number;
 };
@@ -85,10 +85,10 @@ async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> 
   return body as T;
 }
 
-export async function login(email: string, password: string) {
+export async function login(username: string, password: string) {
   const result = await jsonRequest<{ user: AuthUser; accessToken: string; tokenType: string; expiresIn: number }>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   });
   await saveSessionToken(result.accessToken);
   return result;
@@ -128,4 +128,47 @@ export function createProspectVisit(input: {
   idempotencyKey: string;
 }) {
   return jsonRequest<Record<string, unknown>>('/prospects/visits', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export type HelpTarget = { id: string; name: string; username: string };
+export type DueTask = {
+  pointId: string; pointCode: string; pointName: string; regionName: string;
+  maintenanceType: 'STANDARD' | 'SMARTCLEAN'; priority: 'OVERDUE' | 'CURRENT';
+  overduePeriods: number; dueStart: string; dueEnd: string;
+  address?: string | null; latitude?: number | null; longitude?: number | null;
+};
+export type TechnicianDashboard = { technician: HelpTarget; overdue: number; current: number; due: DueTask[] };
+
+export function helpTargets() {
+  return jsonRequest<HelpTarget[]>('/maintenance/help-targets');
+}
+
+export function technicianDashboard(technicianId?: string) {
+  const query = technicianId ? `?technicianId=${encodeURIComponent(technicianId)}` : '';
+  return jsonRequest<TechnicianDashboard>(`/maintenance/technician-dashboard${query}`);
+}
+
+export function completeMaintenance(input: {
+  pointId: string;
+  assistedForTechnicianId?: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  locationCapturedAt: string;
+  deviceRecordedAt?: string;
+  idempotencyKey: string;
+}) {
+  return jsonRequest<Record<string, unknown>>('/maintenance/complete', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export type AttemptReason = 'BUSINESS_CLOSED' | 'AUTHORIZED_PERSON_UNAVAILABLE' | 'ACCESS_FAILED' | 'OTHER';
+
+export function recordMaintenanceAttempt(input: {
+  pointId: string; assistedForTechnicianId?: string; reason: AttemptReason; note?: string;
+  latitude: number; longitude: number; accuracyMeters?: number; locationCapturedAt: string; idempotencyKey: string;
+}) {
+  return jsonRequest<Record<string, unknown>>('/maintenance/attempt', { method: 'POST', body: JSON.stringify(input) });
 }

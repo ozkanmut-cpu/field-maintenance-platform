@@ -22,7 +22,7 @@ export class PointsService {
         aliases: { orderBy: { createdAt: 'asc' } },
         region: {
           include: {
-            technician: { select: { id: true, name: true, email: true, active: true } },
+            technician: { select: { id: true, name: true, username: true, active: true } },
           },
         },
       },
@@ -48,7 +48,7 @@ export class PointsService {
       data: {
         code: dto.code.trim(),
         name: dto.name.trim(),
-        address: dto.address?.trim() || null,
+        address: null,
         regionId: dto.regionId,
         status: dto.status,
         maintenanceType: dto.maintenanceType,
@@ -72,7 +72,6 @@ export class PointsService {
     const data: Prisma.PointUpdateInput = {
       ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-      ...(dto.address !== undefined ? { address: dto.address.trim() || null } : {}),
       ...(dto.regionId !== undefined ? { region: { connect: { id: dto.regionId } } } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
       maintenanceType,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  AttemptReviewStatus,
   MaintenanceObligationStatus,
   MaintenanceType,
   PointStatus,
@@ -54,6 +55,9 @@ export class MaintenanceEngineService {
         pointName: oldest.point.name,
         regionId: oldest.point.regionId,
         regionName: oldest.point.region.name,
+        address: oldest.point.address,
+        latitude: oldest.point.canonicalLatitude ? Number(oldest.point.canonicalLatitude) : null,
+        longitude: oldest.point.canonicalLongitude ? Number(oldest.point.canonicalLongitude) : null,
         maintenanceType: oldest.point.maintenanceType,
         maintenanceWeek: oldest.point.maintenanceWeek,
         dueStart: oldest.dueStart,
@@ -77,6 +81,11 @@ export class MaintenanceEngineService {
           orderBy: { performedAt: 'desc' },
           take: 1,
         },
+        attempts: {
+          where: { reviewStatus: AttemptReviewStatus.APPROVED, closedDueDate: { not: null } },
+          orderBy: { reviewedAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -84,7 +93,9 @@ export class MaintenanceEngineService {
       .map((point) => {
         const base = point.visits[0]?.performedAt ?? point.smartcleanReferenceAt;
         if (!base) return null;
-        const dueDate = this.addCalendarMonths(this.toDateOnly(base), 2);
+        let dueDate = this.addCalendarMonths(this.toDateOnly(base), 2);
+        const closedDueDate = point.attempts[0]?.closedDueDate ?? null;
+        while (closedDueDate && dueDate <= closedDueDate) dueDate = this.addCalendarMonths(dueDate, 2);
         if (dueDate > asOf) return null;
         return {
           pointId: point.id,
@@ -92,6 +103,9 @@ export class MaintenanceEngineService {
           pointName: point.name,
           regionId: point.regionId,
           regionName: point.region.name,
+          address: point.address,
+          latitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
+          longitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
           maintenanceType: point.maintenanceType,
           maintenanceWeek: null,
           dueStart: dueDate,

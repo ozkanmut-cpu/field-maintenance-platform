@@ -8,6 +8,10 @@ export class CompleteMaintenanceDto {
   technicianId!: string;
 
   @IsOptional()
+  @IsUUID()
+  assistedForTechnicianId?: string;
+
+  @IsOptional()
   @IsString()
   performedAt?: string;
 

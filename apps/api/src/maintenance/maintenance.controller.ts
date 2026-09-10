@@ -11,6 +11,7 @@ import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
 import { ResolveReviewDto } from './dto/resolve-review.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
+import { ReviewAttemptDto } from './dto/review-attempt.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { MaintenanceService } from './maintenance.service';
 import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
@@ -31,14 +32,21 @@ export class MaintenanceController {
     return this.maintenance.due(asOf);
   }
 
+  @Roles(UserRole.TECHNICIAN)
+  @Get('help-targets')
+  helpTargets(@CurrentUser() user: AuthenticatedUser) {
+    return this.maintenance.helpTargets(user.id);
+  }
+
   @Get('technician-dashboard')
   technicianDashboard(
     @CurrentUser() user: AuthenticatedUser,
     @Query('technicianId') technicianId?: string,
     @Query('asOf') asOf?: string,
   ) {
-    const targetId = user.role === UserRole.ADMIN && technicianId ? technicianId : user.id;
-    return this.maintenance.technicianDashboard(targetId, asOf);
+    const targetId = technicianId ?? user.id;
+    if (user.role === UserRole.ADMIN) return this.maintenance.technicianDashboard(targetId, asOf);
+    return this.maintenance.technicianDashboard(targetId, asOf, user.id);
   }
 
   @Get('technician-history')
@@ -79,6 +87,24 @@ export class MaintenanceController {
   ) {
     const targetId = user.role === UserRole.ADMIN && technicianId ? technicianId : user.id;
     return this.nonMaintenanceVisits.technicianHistory(targetId, date);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('attempt-review-queue')
+  attemptReviewQueue() {
+    return this.maintenance.attemptReviewQueue();
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('attempt-review-history')
+  attemptReviewHistory(@Query('limit') limit?: string) {
+    return this.maintenance.attemptReviewHistory(limit ? Number(limit) : 100);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('attempt-review')
+  reviewAttempt(@CurrentUser() user: AuthenticatedUser, @Body() dto: ReviewAttemptDto) {
+    return this.maintenance.reviewAttempt(user.id, dto);
   }
 
   @Roles(UserRole.ADMIN)

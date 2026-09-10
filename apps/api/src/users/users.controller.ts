@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { AuthenticatedUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { SetHelpTargetsDto } from './dto/set-help-targets.dto';
 import { UsersService } from './users.service';
 
 @Roles(UserRole.ADMIN)
@@ -20,9 +23,19 @@ export class UsersController {
     return this.users.create(dto);
   }
 
+  @Get(':id/help-targets')
+  helpTargets(@Param('id') id: string) {
+    return this.users.helpTargets(id);
+  }
+
+  @Patch(':id/help-targets')
+  setHelpTargets(@Param('id') id: string, @Body() dto: SetHelpTargetsDto) {
+    return this.users.setHelpTargets(id, dto);
+  }
+
   @Patch(':id/activate')
-  activate(@Param('id') id: string) {
-    return this.users.setActive(id, true);
+  activate(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string) {
+    return this.users.setActive(id, true, actor.id);
   }
 
   @Patch(':id/password')
@@ -31,7 +44,7 @@ export class UsersController {
   }
 
   @Patch(':id/deactivate')
-  deactivate(@Param('id') id: string) {
-    return this.users.setActive(id, false);
+  deactivate(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string) {
+    return this.users.setActive(id, false, actor.id);
   }
 }

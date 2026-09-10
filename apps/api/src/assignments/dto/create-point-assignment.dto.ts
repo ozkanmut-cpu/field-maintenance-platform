@@ -23,11 +23,13 @@ export class CreatePointAssignmentDto {
   @MaxLength(240)
   reason?: string;
 
+  @IsOptional()
   @IsUUID()
   adminUserId!: string;
 }
 
 export class DeactivatePointAssignmentDto {
+  @IsOptional()
   @IsUUID()
   adminUserId!: string;
 

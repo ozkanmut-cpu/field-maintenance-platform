@@ -1,11 +1,12 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import Operations from './operations';
 
 type User = {
   id: string;
   name: string;
-  email: string;
+  username: string;
   role: 'ADMIN' | 'TECHNICIAN';
   active: boolean;
   lastLoginAt?: string | null;
@@ -13,21 +14,23 @@ type User = {
 
 type NewUser = {
   name: string;
-  email: string;
+  username: string;
   role: 'ADMIN' | 'TECHNICIAN';
   password: string;
 };
 
-const emptyUser: NewUser = { name: '', email: '', role: 'TECHNICIAN', password: '' };
+const emptyUser: NewUser = { name: '', username: '', role: 'TECHNICIAN', password: '' };
 
 export default function Home() {
   const [me, setMe] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [newUser, setNewUser] = useState<NewUser>(emptyUser);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [helpEditorId, setHelpEditorId] = useState('');
+  const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
 
   useEffect(() => {
     void restore();
@@ -67,7 +70,7 @@ export default function Home() {
     try {
       const result = await api<{ user: User }>('/api/session/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
       });
       setMe(result.user);
       setPassword('');
@@ -114,8 +117,30 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function openHelpSettings(helperId: string) {
+    setBusy(true); setError('');
+    try {
+      const data = await api<{ targets: User[] }>(`/api/backend/users/${helperId}/help-targets`);
+      setHelpEditorId(helperId);
+      setHelpTargetIds(data.targets.map((item) => item.id));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function saveHelpSettings() {
+    if (!helpEditorId) return;
+    setBusy(true); setError('');
+    try {
+      await api(`/api/backend/users/${helpEditorId}/help-targets`, {
+        method: 'PATCH', body: JSON.stringify({ targetIds: helpTargetIds }),
+      });
+      window.alert('Yardım yetkileri kaydedildi.');
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
   async function resetPassword(user: User) {
-    const next = window.prompt(`${user.name} için yeni şifre (en az 12 karakter):`);
+    const next = window.prompt(`${user.name} için yeni şifre (en az 8 karakter):`);
     if (!next) return;
     setBusy(true);
     setError('');
@@ -139,7 +164,7 @@ export default function Home() {
           <div className="brand">FIELD MAINTENANCE</div>
           <h1>Yönetim Paneli</h1>
           <p>Yönetici hesabınla giriş yap.</p>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="E-posta" autoComplete="email" required />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Kullanıcı adı" autoComplete="username" required />
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Şifre" autoComplete="current-password" required />
           {error ? <div className="error">{error}</div> : null}
           <button disabled={busy} type="submit">{busy ? 'GİRİŞ YAPILIYOR...' : 'GİRİŞ YAP'}</button>
@@ -168,6 +193,7 @@ export default function Home() {
         <div className="stat"><strong>{users.filter((u) => u.role === 'TECHNICIAN' && u.active).length}</strong><span>Aktif teknisyen</span></div>
         <div className="stat"><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></div>
       </section>
+      <Operations users={users} />
       <section className="panel">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
@@ -175,17 +201,18 @@ export default function Home() {
         </div>
         <div className="tableWrap">
           <table>
-            <thead><tr><th>Ad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Son giriş</th><th></th></tr></thead>
+            <thead><tr><th>Ad</th><th>Kullanıcı adı</th><th>Rol</th><th>Durum</th><th>Son giriş</th><th></th></tr></thead>
             <tbody>
               {users.map((user) => (
                 <tr key={user.id}>
                   <td><strong>{user.name}</strong></td>
-                  <td>{user.email}</td>
+                  <td>{user.username}</td>
                   <td>{user.role === 'ADMIN' ? 'Yönetici' : 'Teknisyen'}</td>
                   <td><span className={user.active ? 'pill active' : 'pill'}>{user.active ? 'Aktif' : 'Pasif'}</span></td>
                   <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('tr-TR') : '—'}</td>
                   <td className="actions">
                     <button className="small" onClick={() => void resetPassword(user)} disabled={busy}>Şifre</button>
+                    {user.role === 'TECHNICIAN' ? <button className="small" onClick={() => void openHelpSettings(user.id)} disabled={busy}>Yardım</button> : null}
                     <button className="small" onClick={() => void toggleActive(user)} disabled={busy || user.id === me.id}>{user.active ? 'Pasifleştir' : 'Aktifleştir'}</button>
                   </td>
                 </tr>
@@ -194,16 +221,29 @@ export default function Home() {
           </table>
         </div>
       </section>
+      {helpEditorId ? <section className="panel">
+        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => setHelpEditorId('')}>Kapat</button></div>
+        <div className="helpGrid">
+          {users.filter((u) => u.role === 'TECHNICIAN' && u.active && u.id !== helpEditorId).map((target) => (
+            <label className="helpOption" key={target.id}>
+              <input type="checkbox" checked={helpTargetIds.includes(target.id)} onChange={(e) => setHelpTargetIds(e.target.checked ? [...helpTargetIds, target.id] : helpTargetIds.filter((id) => id !== target.id))} />
+              <span><strong>{target.name}</strong><small>@{target.username}</small></span>
+            </label>
+          ))}
+        </div>
+        <button onClick={() => void saveHelpSettings()} disabled={busy}>YARDIM YETKİLERİNİ KAYDET</button>
+      </section> : null}
+
       <section className="panel">
         <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />
-          <input value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} type="email" placeholder="E-posta" required />
+          <input value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase() })} placeholder="Kullanıcı adı" required />
           <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value as NewUser['role'] })}>
             <option value="TECHNICIAN">Teknisyen</option>
             <option value="ADMIN">Yönetici</option>
           </select>
-          <input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} type="password" placeholder="Geçici şifre (min. 12 karakter)" minLength={12} required />
+          <input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} type="password" placeholder="Geçici şifre (min. 8 karakter)" minLength={8} required />
           <button type="submit" disabled={busy}>KULLANICI OLUŞTUR</button>
         </form>
       </section>

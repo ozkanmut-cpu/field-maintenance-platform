@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AttemptReviewStatus,
   MaintenanceObligationStatus,
   MaintenanceType,
   PaperworkKind,
@@ -23,6 +24,7 @@ import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
+import { AttemptAdminDecision, ReviewAttemptDto } from './dto/review-attempt.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
@@ -46,7 +48,29 @@ export class MaintenanceService {
     return this.engine.due(asOf);
   }
 
-  async technicianDashboard(technicianId: string, asOfInput?: string) {
+  async helpTargets(helperId: string) {
+    await this.requireTechnician(helperId);
+    const permissions = await this.prisma.technicianHelpPermission.findMany({
+      where: { helperId, target: { active: true, role: UserRole.TECHNICIAN } },
+      include: { target: { select: { id: true, name: true, username: true } } },
+      orderBy: { target: { name: 'asc' } },
+    });
+    return permissions.map((item) => item.target);
+  }
+
+  async assertCanHelp(helperId: string, targetId: string) {
+    if (helperId === targetId) return;
+    const permission = await this.prisma.technicianHelpPermission.findUnique({
+      where: { helperId_targetId: { helperId, targetId } },
+      include: { target: { select: { active: true, role: true } } },
+    });
+    if (!permission || !permission.target.active || permission.target.role !== UserRole.TECHNICIAN) {
+      throw new ForbiddenException('Bu teknisyenin görevlerine yardım yetkin yok');
+    }
+  }
+
+  async technicianDashboard(technicianId: string, asOfInput?: string, requesterId?: string) {
+    if (requesterId && requesterId !== technicianId) await this.assertCanHelp(requesterId, technicianId);
     const technician = await this.requireTechnician(technicianId);
     const asOf = asOfInput ? new Date(asOfInput) : new Date();
     this.assertValidDate(asOf, 'asOf');
@@ -125,6 +149,8 @@ export class MaintenanceService {
           id: true,
           performedAt: true,
           enteredLate: true,
+          assistedForTechnicianId: true,
+          assistedForTechnician: { select: { id: true, name: true, username: true } },
           serviceSlipStatus: true,
           confirmationStatus: true,
           point: { select: { id: true, code: true, name: true, maintenanceType: true } },
@@ -225,7 +251,12 @@ export class MaintenanceService {
       throw new BadRequestException('Bu nokta için atanmış aktif teknisyen bulunmuyor');
     }
     if (effectiveAssignment.technicianId !== dto.technicianId) {
-      throw new ForbiddenException('Bu bakım tarihinde nokta başka bir teknisyene atanmış');
+      if (!dto.assistedForTechnicianId || dto.assistedForTechnicianId !== effectiveAssignment.technicianId) {
+        throw new ForbiddenException('Bu bakım tarihinde nokta başka bir teknisyene atanmış');
+      }
+      await this.assertCanHelp(dto.technicianId, dto.assistedForTechnicianId);
+    } else if (dto.assistedForTechnicianId && dto.assistedForTechnicianId !== dto.technicianId) {
+      throw new BadRequestException('Yardım hedefi bu noktanın atanmış teknisyeni değil');
     }
 
     const enteredLate = this.dateKey(performedAt) < this.dateKey(now);
@@ -266,6 +297,7 @@ export class MaintenanceService {
           data: {
             pointId: point.id,
             technicianId: dto.technicianId,
+            assistedForTechnicianId: dto.assistedForTechnicianId ?? null,
             obligationId: obligation?.id ?? null,
             performedAt,
             deviceRecordedAt,
@@ -386,7 +418,12 @@ export class MaintenanceService {
       throw new BadRequestException('Bu nokta için atanmış aktif teknisyen bulunmuyor');
     }
     if (effectiveAssignment.technicianId !== dto.technicianId) {
-      throw new ForbiddenException('Bu nokta başka bir teknisyene atanmış');
+      if (!dto.assistedForTechnicianId || dto.assistedForTechnicianId !== effectiveAssignment.technicianId) {
+        throw new ForbiddenException('Bu nokta başka bir teknisyene atanmış');
+      }
+      await this.assertCanHelp(dto.technicianId, dto.assistedForTechnicianId);
+    } else if (dto.assistedForTechnicianId && dto.assistedForTechnicianId !== dto.technicianId) {
+      throw new BadRequestException('Yardım hedefi bu noktanın atanmış teknisyeni değil');
     }
 
     const locationCapturedAt = new Date(dto.locationCapturedAt);
@@ -397,6 +434,7 @@ export class MaintenanceService {
         data: {
           pointId: dto.pointId,
           technicianId: dto.technicianId,
+          assistedForTechnicianId: dto.assistedForTechnicianId ?? null,
           reason: dto.reason,
           note: dto.note ?? null,
           latitude: new Prisma.Decimal(dto.latitude),
@@ -413,6 +451,99 @@ export class MaintenanceService {
       }
       throw error;
     }
+  }
+
+  async attemptReviewQueue() {
+    const items = await this.prisma.maintenanceAttempt.findMany({
+      where: { reviewStatus: AttemptReviewStatus.PENDING },
+      select: {
+        id: true, reason: true, note: true, attemptedAt: true,
+        latitude: true, longitude: true, accuracyMeters: true,
+        point: { select: { id: true, code: true, name: true, maintenanceType: true, region: { select: { name: true } } } },
+        technician: { select: { id: true, name: true, username: true } },
+        assistedForTechnician: { select: { id: true, name: true, username: true } },
+      },
+      orderBy: { attemptedAt: 'asc' },
+    });
+    return { count: items.length, items };
+  }
+
+  async attemptReviewHistory(limit = 100) {
+    const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 500) : 100;
+    const items = await this.prisma.maintenanceAttempt.findMany({
+      where: { reviewStatus: { in: [AttemptReviewStatus.APPROVED, AttemptReviewStatus.REJECTED] } },
+      select: {
+        id: true, reason: true, note: true, attemptedAt: true, reviewStatus: true, reviewedAt: true, reviewNote: true, closedDueDate: true,
+        point: { select: { id: true, code: true, name: true, maintenanceType: true, region: { select: { name: true } } } },
+        technician: { select: { id: true, name: true, username: true } },
+        assistedForTechnician: { select: { id: true, name: true, username: true } },
+        reviewedBy: { select: { id: true, name: true, username: true } },
+      },
+      orderBy: { reviewedAt: 'desc' },
+      take: safeLimit,
+    });
+    return { count: items.length, items };
+  }
+
+  async reviewAttempt(adminUserId: string, dto: ReviewAttemptDto) {
+    const [admin, attempt] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: adminUserId, active: true, role: UserRole.ADMIN }, select: { id: true, name: true } }),
+      this.prisma.maintenanceAttempt.findUnique({
+        where: { id: dto.attemptId },
+        include: {
+          point: {
+            include: { visits: { where: { status: VisitStatus.VALID }, orderBy: { performedAt: 'desc' }, take: 1 } },
+          },
+        },
+      }),
+    ]);
+    if (!admin) throw new ForbiddenException('Bu işlemi yalnızca admin yapabilir');
+    if (!attempt) throw new NotFoundException('Yapılamadı kaydı bulunamadı');
+    if (attempt.reviewStatus !== AttemptReviewStatus.PENDING) {
+      throw new BadRequestException('Bu kayıt daha önce incelenmiş');
+    }
+
+    if (dto.decision === AttemptAdminDecision.REJECTED) {
+      const updated = await this.prisma.maintenanceAttempt.update({
+        where: { id: attempt.id },
+        data: { reviewStatus: AttemptReviewStatus.REJECTED, reviewedAt: new Date(), reviewedById: admin.id, reviewNote: dto.note?.trim() || null },
+      });
+      await this.prisma.adminAuditLog.create({ data: { entityType: 'MAINTENANCE_ATTEMPT', entityId: attempt.id, action: 'REJECTED', actorId: admin.id, note: dto.note?.trim() || null } });
+      return { closed: false, attempt: updated };
+    }
+
+    let closedDueDate: Date | null = null;
+    return this.prisma.$transaction(async (tx) => {
+      let closedObligations = 0;
+      if (attempt.point.maintenanceType === MaintenanceType.STANDARD) {
+        const dueDate = this.dateOnly(attempt.attemptedAt);
+        const open = await tx.maintenanceObligation.findMany({ where: { pointId: attempt.pointId, status: MaintenanceObligationStatus.OPEN, dueStart: { lte: dueDate } }, select: { id: true, dueStart: true } });
+        if (open.length) {
+          closedDueDate = open.reduce((latest, item) => item.dueStart > latest ? item.dueStart : latest, open[0].dueStart);
+          const result = await tx.maintenanceObligation.updateMany({
+            where: { id: { in: open.map((item) => item.id) }, status: MaintenanceObligationStatus.OPEN },
+            data: { status: MaintenanceObligationStatus.MISSED, resolvedAt: attempt.attemptedAt, resolvedByAttemptId: attempt.id, completedAt: null },
+          });
+          closedObligations = result.count;
+        }
+      } else {
+        const base = attempt.point.visits[0]?.performedAt ?? attempt.point.smartcleanReferenceAt;
+        if (base) {
+          let due = this.addCalendarMonths(this.dateOnly(base), 2);
+          const attemptedDate = this.dateOnly(attempt.attemptedAt);
+          while (due <= attemptedDate) { closedDueDate = due; due = this.addCalendarMonths(due, 2); }
+        }
+      }
+
+      const updated = await tx.maintenanceAttempt.update({
+        where: { id: attempt.id },
+        data: { reviewStatus: AttemptReviewStatus.APPROVED, reviewedAt: new Date(), reviewedById: admin.id, reviewNote: dto.note?.trim() || null, closedDueDate },
+      });
+      await tx.adminAuditLog.create({
+        data: { entityType: 'MAINTENANCE_ATTEMPT', entityId: attempt.id, action: 'APPROVED_TASK_CLOSED', actorId: admin.id, newValue: { pointId: attempt.pointId, closedObligations, closedDueDate: closedDueDate?.toISOString() ?? null }, note: dto.note?.trim() || null },
+      });
+      return { closed: true, closedObligations, closedDueDate, attempt: updated };
+    });
   }
 
   async updatePaperwork(dto: UpdatePaperworkDto) {
@@ -506,6 +637,15 @@ export class MaintenanceService {
 
   private assertValidDate(value: Date, field: string) {
     if (Number.isNaN(value.getTime())) throw new BadRequestException(`${field} geçersiz`);
+  }
+
+  private addCalendarMonths(date: Date, months: number) {
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    const day = date.getUTCDate();
+    const first = new Date(Date.UTC(year, month + months, 1));
+    const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, lastDay)));
   }
 
   private dateOnly(date: Date) {

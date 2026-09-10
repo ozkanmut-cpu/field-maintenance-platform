@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class BootstrapDto {
   @IsString()
@@ -6,12 +6,14 @@ export class BootstrapDto {
   @MaxLength(120)
   name!: string;
 
-  @IsEmail()
-  @MaxLength(200)
-  email!: string;
+  @IsString()
+  @MinLength(3)
+  @MaxLength(50)
+  @Matches(/^[a-zA-Z0-9._-]+$/)
+  username!: string;
 
   @IsString()
-  @MinLength(12)
+  @MinLength(8)
   @MaxLength(200)
   password!: string;
 }

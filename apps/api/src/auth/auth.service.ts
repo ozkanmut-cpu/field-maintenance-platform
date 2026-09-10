@@ -24,7 +24,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
-        email: dto.email.trim().toLowerCase(),
+        username: dto.username.trim().toLowerCase(),
         role: UserRole.ADMIN,
         active: true,
         passwordHash: hashPassword(dto.password),
@@ -36,11 +36,11 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.trim().toLowerCase() },
+      where: { username: dto.username.trim().toLowerCase() },
       select: { ...this.userSelect(), passwordHash: true },
     });
     if (!user || !user.active || !verifyPassword(dto.password, user.passwordHash)) {
-      throw new UnauthorizedException('E-posta veya şifre hatalı');
+      throw new UnauthorizedException('Kullanıcı adı veya şifre hatalı');
     }
     const updated = await this.prisma.user.update({
       where: { id: user.id }, data: { lastLoginAt: new Date() }, select: this.userSelect(),
@@ -122,6 +122,6 @@ export class AuthService {
     return left.length === right.length && timingSafeEqual(left, right);
   }
   private userSelect() {
-    return { id: true, name: true, email: true, role: true, active: true, tokenVersion: true, lastLoginAt: true } as const;
+    return { id: true, name: true, username: true, role: true, active: true, tokenVersion: true, lastLoginAt: true } as const;
   }
 }

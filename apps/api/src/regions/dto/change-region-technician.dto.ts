@@ -6,6 +6,7 @@ export class PreviewRegionTechnicianChangeDto {
 }
 
 export class ChangeRegionTechnicianDto extends PreviewRegionTechnicianChangeDto {
+  @IsOptional()
   @IsUUID()
   adminUserId!: string;
 

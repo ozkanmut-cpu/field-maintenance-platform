@@ -9,6 +9,10 @@ export class MaintenanceAttemptDto {
   @IsUUID()
   technicianId!: string;
 
+  @IsOptional()
+  @IsUUID()
+  assistedForTechnicianId?: string;
+
   @IsEnum(AttemptReason)
   reason!: AttemptReason;
 

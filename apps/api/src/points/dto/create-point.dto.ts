@@ -12,10 +12,6 @@ export class CreatePointDto {
   @MaxLength(200)
   name!: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  address?: string;
 
   @IsUUID()
   regionId!: string;

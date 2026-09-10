@@ -41,3 +41,14 @@ th { color: #68707a; font-size: 12px; text-transform: uppercase; letter-spacing:
   .topbar { align-items: flex-start; }
   .account { flex-direction: column; align-items: flex-end; }
 }
+.compactForm { display: grid; grid-template-columns: 1.5fr 1.3fr auto; gap: 10px; margin-top: 18px; }
+.pointForm { display: grid; grid-template-columns: .8fr 1.2fr 1.5fr 1fr 1fr 1fr auto; gap: 10px; margin-top: 18px; align-items: center; }
+.muted { color: #7b848e; font-size: 12px; margin-top: 4px; }
+@media (max-width: 1000px) { .pointForm { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 650px) { .compactForm, .pointForm { grid-template-columns: 1fr; } }
+
+.helpGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.helpOption { display: flex; align-items: center; gap: 10px; border: 1px solid #e1e5e9; border-radius: 12px; padding: 12px; }
+.helpOption input { width: auto; }
+.helpOption span { display: grid; gap: 2px; }
+.helpOption small { color: #7b848e; }

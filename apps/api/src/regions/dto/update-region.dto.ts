@@ -1,6 +1,7 @@
 import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateRegionDto {
+  @IsOptional()
   @IsUUID()
   adminUserId!: string;
 

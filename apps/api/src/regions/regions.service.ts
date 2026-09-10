@@ -13,7 +13,7 @@ export class RegionsService {
     return this.prisma.region.findMany({
       orderBy: { name: 'asc' },
       include: {
-        technician: { select: { id: true, name: true, email: true, active: true } },
+        technician: { select: { id: true, name: true, username: true, active: true } },
         _count: { select: { points: true } },
       },
     });
