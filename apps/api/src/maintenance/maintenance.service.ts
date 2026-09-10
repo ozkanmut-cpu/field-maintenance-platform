@@ -21,6 +21,7 @@ import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
+import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { MaintenanceEngineService } from './maintenance-engine.service';
 import { PointLocationLearningService } from './point-location-learning.service';
@@ -34,6 +35,7 @@ export class MaintenanceService {
     private readonly engine: MaintenanceEngineService,
     private readonly anomaly: MaintenanceAnomalyService,
     private readonly locationLearning: PointLocationLearningService,
+    private readonly googlePlaces: GooglePlaceMatchService,
   ) {}
 
   due(asOf?: string) {
@@ -428,6 +430,7 @@ export class MaintenanceService {
     try {
       await this.anomaly.scanTechnician(technicianId, 24);
       await this.locationLearning.refreshPoint(pointId);
+      await this.googlePlaces.matchPoint(pointId);
     } catch (error) {
       // The maintenance itself is already valid and must never be rolled back
       // because a background quality/enrichment step failed.
