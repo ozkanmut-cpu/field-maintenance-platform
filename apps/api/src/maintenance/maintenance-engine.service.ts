@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MaintenanceType, PointStatus, VisitStatus } from '@prisma/client';
+import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Priority = 'OVERDUE' | 'CURRENT';
@@ -10,6 +11,7 @@ export class MaintenanceEngineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly assignments: AssignmentsService,
   ) {}
 
   async due(asOfInput?: string) {
@@ -49,7 +51,6 @@ export class MaintenanceEngineService {
         pointName: oldest.point.name,
         regionId: oldest.point.regionId,
         regionName: oldest.point.region.name,
-        technicianId: oldest.point.region.technicianId,
         maintenanceType: oldest.point.maintenanceType,
         maintenanceWeek: oldest.point.maintenanceWeek,
         dueStart: oldest.dueStart,
@@ -89,7 +90,6 @@ export class MaintenanceEngineService {
           pointName: point.name,
           regionId: point.regionId,
           regionName: point.region.name,
-          technicianId: point.region.technicianId,
           maintenanceType: point.maintenanceType,
           maintenanceWeek: null,
           dueStart: dueDate,
@@ -101,12 +101,28 @@ export class MaintenanceEngineService {
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);
 
-    const rows = [...standardRows, ...smartcleanRows].sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority === 'OVERDUE' ? -1 : 1;
-      if (a.overduePeriods !== b.overduePeriods) return b.overduePeriods - a.overduePeriods;
-      if (a.dueStart.getTime() !== b.dueStart.getTime()) return a.dueStart.getTime() - b.dueStart.getTime();
-      return a.pointName.localeCompare(b.pointName, 'tr');
-    });
+    const rawRows = [...standardRows, ...smartcleanRows];
+    const effectiveAssignments = await this.assignments.resolveMany(
+      rawRows.map((row) => row.pointId),
+      asOf,
+    );
+
+    const rows = rawRows
+      .map((row) => {
+        const assignment = effectiveAssignments.get(row.pointId);
+        return {
+          ...row,
+          technicianId: assignment?.technicianId ?? null,
+          assignmentSource: assignment?.source ?? 'REGION',
+          assignmentId: assignment?.assignmentId ?? null,
+        };
+      })
+      .sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority === 'OVERDUE' ? -1 : 1;
+        if (a.overduePeriods !== b.overduePeriods) return b.overduePeriods - a.overduePeriods;
+        if (a.dueStart.getTime() !== b.dueStart.getTime()) return a.dueStart.getTime() - b.dueStart.getTime();
+        return a.pointName.localeCompare(b.pointName, 'tr');
+      });
 
     return { asOf, count: rows.length, items: rows };
   }
