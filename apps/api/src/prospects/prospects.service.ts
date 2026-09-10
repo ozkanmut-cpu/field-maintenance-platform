@@ -77,26 +77,41 @@ export class ProspectsService {
       }
     }
 
+    const googlePlaceId = dto.googlePlaceId?.trim() || null;
     const duplicate = await this.prisma.prospectCustomer.findFirst({
       where: {
         status: ProspectStatus.CANDIDATE,
         OR: [
-          ...(dto.googlePlaceId ? [{ googlePlaceId: dto.googlePlaceId }] : []),
+          ...(googlePlaceId ? [{ googlePlaceId }] : []),
           ...(sapNo ? [{ sapNo }] : []),
         ],
       },
     });
     if (duplicate) return duplicate;
 
+    let address: string | null = null;
+    let latitude = dto.latitude;
+    let longitude = dto.longitude;
+
+    if (googlePlaceId) {
+      const place = await this.getGooglePlace(googlePlaceId);
+      if (!place) {
+        throw new BadRequestException('Google Maps işletme bilgisi doğrulanamadı');
+      }
+      address = place.address;
+      latitude = place.latitude;
+      longitude = place.longitude;
+    }
+
     return this.prisma.prospectCustomer.create({
       data: {
         name,
         sapNo,
         source: dto.source,
-        googlePlaceId: dto.googlePlaceId?.trim() || null,
-        address: dto.address?.trim() || null,
-        latitude: new Prisma.Decimal(dto.latitude),
-        longitude: new Prisma.Decimal(dto.longitude),
+        googlePlaceId,
+        address,
+        latitude: new Prisma.Decimal(latitude),
+        longitude: new Prisma.Decimal(longitude),
         createdById: dto.technicianId,
       },
     });
@@ -235,6 +250,7 @@ export class ProspectsService {
       googleMatch,
       nextStep,
       flow: ['EFESIM', 'GOOGLE_MATCH', 'MANUAL_ENTRY'],
+      addressPolicy: 'GOOGLE_ONLY',
       suggestedCreatePayload: googleMatch?.matched
         ? {
             technicianId: dto.technicianId,
@@ -242,7 +258,6 @@ export class ProspectsService {
             sapNo,
             source: ProspectSource.EFESIM,
             googlePlaceId: googleMatch.placeId,
-            address: googleMatch.address,
             latitude: googleMatch.latitude,
             longitude: googleMatch.longitude,
           }
@@ -251,11 +266,48 @@ export class ProspectsService {
             name: customerName,
             sapNo,
             source: ProspectSource.EFESIM,
-            address: dto.address ?? null,
             latitude: dto.latitude ?? null,
             longitude: dto.longitude ?? null,
           },
     };
+  }
+
+  private async getGooglePlace(placeId: string) {
+    const apiKey = this.config.get<string>('GOOGLE_MAPS_API_KEY')?.trim();
+    if (!apiKey) return null;
+
+    try {
+      const response = await fetch(
+        `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=tr&regionCode=TR`,
+        {
+          headers: {
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'id,formattedAddress,location,businessStatus',
+          },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (!response.ok) return null;
+      const place = (await response.json()) as GoogleNearbyPlace;
+      const latitude = place.location?.latitude;
+      const longitude = place.location?.longitude;
+      if (
+        !place.id ||
+        latitude === undefined ||
+        longitude === undefined ||
+        place.businessStatus === 'CLOSED_PERMANENTLY'
+      ) {
+        return null;
+      }
+      return {
+        placeId: place.id,
+        address: place.formattedAddress?.trim() || null,
+        latitude,
+        longitude,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async findGoogleMatch(customerName: string, latitude: number, longitude: number) {
