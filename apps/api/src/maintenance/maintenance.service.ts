@@ -1,7 +1,22 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { MaintenanceType, PointStatus, Prisma, VisitStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  MaintenanceType,
+  PaperworkStatus,
+  PointStatus,
+  Prisma,
+  UserRole,
+  VisitStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
+import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
+import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { MaintenanceEngineService } from './maintenance-engine.service';
 
 @Injectable()
@@ -13,6 +28,75 @@ export class MaintenanceService {
 
   due(asOf?: string) {
     return this.engine.due(asOf);
+  }
+
+  async technicianDashboard(technicianId: string, asOfInput?: string) {
+    const technician = await this.prisma.user.findFirst({
+      where: { id: technicianId, active: true, role: UserRole.TECHNICIAN },
+      select: { id: true, name: true },
+    });
+    if (!technician) throw new NotFoundException('Teknisyen bulunamadı veya pasif');
+
+    const asOf = asOfInput ? new Date(asOfInput) : new Date();
+    this.assertValidDate(asOf, 'asOf');
+    const dayStart = this.dateOnly(asOf);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    const due = await this.engine.due(this.dateKey(asOf));
+    const assigned = due.items.filter((item) => item.technicianId === technicianId);
+
+    const [todayCompleted, missingVisits] = await Promise.all([
+      this.prisma.maintenanceVisit.count({
+        where: {
+          technicianId,
+          status: VisitStatus.VALID,
+          performedAt: { gte: dayStart, lt: dayEnd },
+        },
+      }),
+      this.prisma.maintenanceVisit.findMany({
+        where: {
+          technicianId,
+          status: VisitStatus.VALID,
+          OR: [
+            { serviceSlipStatus: PaperworkStatus.MISSING },
+            { confirmationStatus: PaperworkStatus.MISSING },
+          ],
+        },
+        select: {
+          id: true,
+          performedAt: true,
+          serviceSlipStatus: true,
+          confirmationStatus: true,
+          point: { select: { id: true, code: true, name: true } },
+        },
+        orderBy: { performedAt: 'asc' },
+      }),
+    ]);
+
+    const paperwork = missingVisits.reduce(
+      (acc, visit) => {
+        const slipMissing = visit.serviceSlipStatus === PaperworkStatus.MISSING;
+        const confirmationMissing = visit.confirmationStatus === PaperworkStatus.MISSING;
+        if (slipMissing && confirmationMissing) acc.both += 1;
+        else if (slipMissing) acc.serviceSlip += 1;
+        else if (confirmationMissing) acc.confirmation += 1;
+        return acc;
+      },
+      { serviceSlip: 0, confirmation: 0, both: 0 },
+    );
+
+    return {
+      asOf: this.dateKey(asOf),
+      technician,
+      overdue: assigned.filter((item) => item.priority === 'OVERDUE').length,
+      current: assigned.filter((item) => item.priority === 'CURRENT').length,
+      missingPaperwork: missingVisits.length,
+      paperwork,
+      todayCompleted,
+      due: assigned,
+      missingItems: missingVisits,
+    };
   }
 
   async complete(dto: CompleteMaintenanceDto) {
@@ -31,7 +115,7 @@ export class MaintenanceService {
     }
 
     const technician = await this.prisma.user.findFirst({
-      where: { id: dto.technicianId, active: true },
+      where: { id: dto.technicianId, active: true, role: UserRole.TECHNICIAN },
       select: { id: true },
     });
     if (!technician) throw new NotFoundException('Teknisyen bulunamadı veya pasif');
@@ -113,6 +197,87 @@ export class MaintenanceService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Bu bakım kaydı zaten işlendi');
+      }
+      throw error;
+    }
+  }
+
+  async revert(dto: RevertMaintenanceDto) {
+    const [visit, actor] = await Promise.all([
+      this.prisma.maintenanceVisit.findUnique({ where: { id: dto.visitId } }),
+      this.prisma.user.findFirst({ where: { id: dto.userId, active: true } }),
+    ]);
+    if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
+    if (!actor) throw new NotFoundException('Kullanıcı bulunamadı veya pasif');
+    if (visit.status === VisitStatus.REVERSED) return visit;
+
+    if (actor.role !== UserRole.ADMIN && visit.technicianId !== actor.id) {
+      throw new ForbiddenException('Teknisyen yalnızca kendi bakım kaydını geri alabilir');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const reverted = await tx.maintenanceVisit.update({
+        where: { id: visit.id },
+        data: {
+          status: VisitStatus.REVERSED,
+          reversedAt: new Date(),
+          reversedByUserId: actor.id,
+          reviewRecommended: true,
+          reviewReason: `GERİ ALINDI: ${dto.reason}`,
+          locationLearningEligible: false,
+        },
+      });
+
+      if (visit.obligationId) {
+        await tx.maintenanceObligation.update({
+          where: { id: visit.obligationId },
+          data: { completedAt: null },
+        });
+      }
+
+      return reverted;
+    });
+  }
+
+  async recordAttempt(dto: MaintenanceAttemptDto) {
+    const existing = await this.prisma.maintenanceAttempt.findUnique({
+      where: { idempotencyKey: dto.idempotencyKey },
+    });
+    if (existing) return existing;
+
+    const [point, technician] = await Promise.all([
+      this.prisma.point.findFirst({ where: { id: dto.pointId, deletedAt: null } }),
+      this.prisma.user.findFirst({
+        where: { id: dto.technicianId, active: true, role: UserRole.TECHNICIAN },
+      }),
+    ]);
+    if (!point) throw new NotFoundException('Nokta bulunamadı');
+    if (!technician) throw new NotFoundException('Teknisyen bulunamadı veya pasif');
+    if (point.status !== PointStatus.ACTIVE) {
+      throw new BadRequestException('Pasif veya iptal noktada bakım denemesi kaydedilemez');
+    }
+
+    const locationCapturedAt = new Date(dto.locationCapturedAt);
+    this.assertValidDate(locationCapturedAt, 'locationCapturedAt');
+
+    try {
+      return await this.prisma.maintenanceAttempt.create({
+        data: {
+          pointId: dto.pointId,
+          technicianId: dto.technicianId,
+          reason: dto.reason,
+          note: dto.note ?? null,
+          latitude: new Prisma.Decimal(dto.latitude),
+          longitude: new Prisma.Decimal(dto.longitude),
+          accuracyMeters:
+            dto.accuracyMeters !== undefined ? new Prisma.Decimal(dto.accuracyMeters) : null,
+          locationCapturedAt,
+          idempotencyKey: dto.idempotencyKey,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Bu bakım denemesi zaten işlendi');
       }
       throw error;
     }
