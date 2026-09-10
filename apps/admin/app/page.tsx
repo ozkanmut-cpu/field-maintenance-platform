@@ -161,8 +161,9 @@ export default function Home() {
     return (
       <main className="loginPage">
         <form className="loginCard" onSubmit={signIn}>
-          <div className="brand">FIELD MAINTENANCE</div>
-          <h1>Yönetim Paneli</h1>
+          <div className="brand">OPERASYON MERKEZİ</div>
+          <h1>Genel Bakış</h1>
+          <p className="pageLead">Saha operasyonlarını tek ekrandan yönet.</p>
           <p>Yönetici hesabınla giriş yap.</p>
           <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Kullanıcı adı" autoComplete="username" required />
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Şifre" autoComplete="current-password" required />
@@ -174,8 +175,21 @@ export default function Home() {
   }
 
   return (
-    <main className="shell">
-      <header className="topbar">
+    <main className="adminLayout">
+      <aside className="sidebar">
+        <div className="sidebarBrand"><span className="brandMark">S</span><div><strong>SAHA BAKIM</strong><small>Yönetim Sistemi</small></div></div>
+        <nav className="sideNav">
+          <a className="active" href="#dashboard">▣ <span>Dashboard</span></a>
+          <a href="#approvals">! <span>Onaylar</span></a>
+          <a href="#regions">◉ <span>Bölgeler</span></a>
+          <a href="#points">● <span>Noktalar</span></a>
+          <a href="#users">♙ <span>Teknisyenler</span></a>
+          <a href="#new-user">＋ <span>Yeni Kullanıcı</span></a>
+        </nav>
+        <div className="sidebarFoot">Saha operasyon yönetimi</div>
+      </aside>
+      <div className="adminMain">
+      <header className="topbar" id="dashboard">
         <div>
           <div className="brand">FIELD MAINTENANCE</div>
           <h1>Yönetim Paneli</h1>
@@ -188,13 +202,14 @@ export default function Home() {
 
       {error ? <div className="error banner">{error}</div> : null}
 
+      <div className="sectionEyebrow">KULLANICI ÖZETİ</div>
       <section className="stats">
         <div className="stat"><strong>{users.length}</strong><span>Toplam kullanıcı</span></div>
         <div className="stat"><strong>{users.filter((u) => u.role === 'TECHNICIAN' && u.active).length}</strong><span>Aktif teknisyen</span></div>
         <div className="stat"><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></div>
       </section>
       <Operations users={users} />
-      <section className="panel">
+      <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
           <button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button>
@@ -234,7 +249,7 @@ export default function Home() {
         <button onClick={() => void saveHelpSettings()} disabled={busy}>YARDIM YETKİLERİNİ KAYDET</button>
       </section> : null}
 
-      <section className="panel">
+      <section className="panel" id="new-user">
         <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />
@@ -247,6 +262,7 @@ export default function Home() {
           <button type="submit" disabled={busy}>KULLANICI OLUŞTUR</button>
         </form>
       </section>
+      </div>
     </main>
   );
 }

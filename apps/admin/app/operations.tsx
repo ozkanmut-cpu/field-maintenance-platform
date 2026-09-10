@@ -156,7 +156,7 @@ export default function Operations({ users }: Props) {
   return (
     <>
       {error ? <div className="error banner">{error}</div> : null}
-      <section className="panel">
+      <section className="panel" id="regions">
         <div className="panelHeader">
           <div><h2>Bölgeler</h2><p>Bölge sorumlularını ve nokta dağılımını yönet.</p></div>
           <button className="ghost" onClick={() => void load()} disabled={busy}>Yenile</button>
@@ -190,7 +190,7 @@ export default function Operations({ users }: Props) {
         </form>
       </section>
 
-      <section className="panel">
+      <section className="panel priorityPanel" id="approvals">
         <div className="panelHeader">
           <div><h2>Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
           <span className="pill">{attemptQueue.length} bekliyor</span>
@@ -229,7 +229,7 @@ export default function Operations({ users }: Props) {
         </table></div>
       </section>
 
-      <section className="panel">
+      <section className="panel" id="points">
         <div className="panelHeader"><div><h2>Noktalar</h2><p>Aktif, pasif ve iptal noktaları buradan yönet.</p></div></div>
         <div className="tableWrap">
           <table>
