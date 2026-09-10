@@ -7,172 +7,105 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  ADMIN
-  TECHNICIAN
-}
-
-enum PointStatus {
-  ACTIVE
-  PASSIVE
-  CANCELLED
-}
-
-enum MaintenanceType {
-  STANDARD
-  SMARTCLEAN
-}
-
-enum VisitStatus {
-  VALID
-  REVERSED
-}
-
-enum PaperworkStatus {
-  PENDING
-  PRESENT
-  MISSING
-}
-
-enum PaperworkKind {
-  SERVICE_SLIP
-  CONFIRMATION
-}
-
-enum LocationSource {
-  UNKNOWN
-  GOOGLE_MATCH
-  FIELD_CONFIRMED
-  MANUAL
-}
-
-enum AttemptReason {
-  BUSINESS_CLOSED
-  AUTHORIZED_PERSON_UNAVAILABLE
-  ACCESS_FAILED
-  OTHER
-}
-
-enum ReviewDecision {
-  NO_ISSUE
-  KEEP_LOCATION_EXCLUDED
-  NEEDS_FOLLOWUP
-}
-
-enum PointAssignmentKind {
-  POINT_OVERRIDE
-  TEMPORARY
-}
-
-enum NonMaintenanceVisitPurpose {
-  BREAKDOWN
-  SURVEY
-  INSTALLATION
-  REMOVAL
-}
-
-enum ProspectSource {
-  GOOGLE_MAPS
-  MANUAL
-  EFESIM
-}
-
-enum ProspectStatus {
-  CANDIDATE
-  CONVERTED
-  ARCHIVED
-}
-
-enum ProspectVisitPurpose {
-  SURVEY
-  INSTALLATION
-}
+enum UserRole { ADMIN TECHNICIAN }
+enum PointStatus { ACTIVE PASSIVE CANCELLED }
+enum MaintenanceType { STANDARD SMARTCLEAN }
+enum VisitStatus { VALID REVERSED }
+enum PaperworkStatus { PENDING PRESENT MISSING }
+enum PaperworkKind { SERVICE_SLIP CONFIRMATION }
+enum LocationSource { UNKNOWN GOOGLE_MATCH FIELD_CONFIRMED MANUAL }
+enum AttemptReason { BUSINESS_CLOSED AUTHORIZED_PERSON_UNAVAILABLE ACCESS_FAILED OTHER }
+enum ReviewDecision { NO_ISSUE KEEP_LOCATION_EXCLUDED NEEDS_FOLLOWUP }
+enum PointAssignmentKind { POINT_OVERRIDE TEMPORARY }
+enum NonMaintenanceVisitPurpose { BREAKDOWN SURVEY INSTALLATION REMOVAL }
+enum ProspectSource { GOOGLE_MAPS MANUAL EFESIM }
+enum ProspectStatus { CANDIDATE CONVERTED ARCHIVED }
+enum ProspectVisitPurpose { SURVEY INSTALLATION }
 
 model User {
-  id                    String                        @id @default(uuid()) @db.Uuid
-  name                  String
-  email                 String                        @unique
-  role                  UserRole
-  active                Boolean                       @default(true)
-  createdAt             DateTime                      @default(now()) @map("created_at")
-  updatedAt             DateTime                      @updatedAt @map("updated_at")
-  visits                MaintenanceVisit[]
-  attempts              MaintenanceAttempt[]
-  nonMaintenanceVisits  NonMaintenanceVisit[]
-  prospectVisits        ProspectVisit[]
-  prospectsCreated      ProspectCustomer[]             @relation("ProspectCreatedBy")
-  regions               Region[]                      @relation("RegionTechnician")
-  paperworkChanges      PaperworkStatusHistory[]      @relation("PaperworkChangedBy")
-  reviewResolutions     MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
-  pointAliases          PointAlias[]                   @relation("PointAliasCreatedBy")
-  pointAssignments      PointAssignment[]              @relation("PointAssignedTechnician")
-  assignmentsCreated    PointAssignment[]              @relation("PointAssignmentCreatedBy")
-  auditEvents           AdminAuditLog[]                @relation("AuditActor")
-
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  email String @unique
+  role UserRole
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  visits MaintenanceVisit[]
+  attempts MaintenanceAttempt[]
+  nonMaintenanceVisits NonMaintenanceVisit[]
+  prospectVisits ProspectVisit[]
+  prospectsCreated ProspectCustomer[] @relation("ProspectCreatedBy")
+  regions Region[] @relation("RegionTechnician")
+  paperworkChanges PaperworkStatusHistory[] @relation("PaperworkChangedBy")
+  reviewResolutions MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
+  pointAliases PointAlias[] @relation("PointAliasCreatedBy")
+  pointAssignments PointAssignment[] @relation("PointAssignedTechnician")
+  assignmentsCreated PointAssignment[] @relation("PointAssignmentCreatedBy")
+  auditEvents AdminAuditLog[] @relation("AuditActor")
   @@map("users")
 }
 
 model Region {
-  id           String   @id @default(uuid()) @db.Uuid
-  name         String   @unique
-  technicianId String?  @db.Uuid @map("technician_id")
-  technician   User?    @relation("RegionTechnician", fields: [technicianId], references: [id])
-  points       Point[]
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  technicianId String? @db.Uuid @map("technician_id")
+  technician User? @relation("RegionTechnician", fields: [technicianId], references: [id])
+  points Point[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
   @@map("regions")
 }
 
 model Point {
-  id                    String            @id @default(uuid()) @db.Uuid
-  code                  String            @unique
-  name                  String
-  address               String?
-  regionId              String            @db.Uuid @map("region_id")
-  region                Region            @relation(fields: [regionId], references: [id])
-  status                PointStatus       @default(ACTIVE)
-  maintenanceType       MaintenanceType   @default(STANDARD) @map("maintenance_type")
-  maintenanceWeek       Int?              @map("maintenance_week")
-  smartcleanReferenceAt DateTime?         @db.Date @map("smartclean_reference_at")
-  canonicalLatitude     Decimal?          @db.Decimal(9, 6) @map("canonical_latitude")
-  canonicalLongitude    Decimal?          @db.Decimal(9, 6) @map("canonical_longitude")
-  locationSource        LocationSource    @default(UNKNOWN) @map("location_source")
-  locationConfidence    Int               @default(0) @map("location_confidence")
-  googlePlaceId         String?           @map("google_place_id")
-  googleBusinessName    String?           @map("google_business_name")
-  createdAt             DateTime          @default(now()) @map("created_at")
-  updatedAt             DateTime          @updatedAt @map("updated_at")
-  deletedAt             DateTime?         @map("deleted_at")
-  obligations           MaintenanceObligation[]
-  visits                MaintenanceVisit[]
-  attempts              MaintenanceAttempt[]
-  nonMaintenanceVisits  NonMaintenanceVisit[]
-  aliases               PointAlias[]
-  assignments           PointAssignment[]
-
+  id String @id @default(uuid()) @db.Uuid
+  code String @unique
+  name String
+  address String?
+  regionId String @db.Uuid @map("region_id")
+  region Region @relation(fields: [regionId], references: [id])
+  status PointStatus @default(ACTIVE)
+  maintenanceType MaintenanceType @default(STANDARD) @map("maintenance_type")
+  maintenanceWeek Int? @map("maintenance_week")
+  smartcleanReferenceAt DateTime? @db.Date @map("smartclean_reference_at")
+  canonicalLatitude Decimal? @db.Decimal(9, 6) @map("canonical_latitude")
+  canonicalLongitude Decimal? @db.Decimal(9, 6) @map("canonical_longitude")
+  locationSource LocationSource @default(UNKNOWN) @map("location_source")
+  locationConfidence Int @default(0) @map("location_confidence")
+  googlePlaceId String? @map("google_place_id")
+  googleBusinessName String? @map("google_business_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  obligations MaintenanceObligation[]
+  visits MaintenanceVisit[]
+  attempts MaintenanceAttempt[]
+  nonMaintenanceVisits NonMaintenanceVisit[]
+  aliases PointAlias[]
+  assignments PointAssignment[]
+  convertedFromProspect ProspectCustomer? @relation("ProspectConvertedPoint")
   @@index([regionId, status])
   @@index([maintenanceType, maintenanceWeek])
   @@map("points")
 }
 
 model ProspectCustomer {
-  id             String         @id @default(uuid()) @db.Uuid
-  name           String
-  sapNo          String?        @map("sap_no")
-  source         ProspectSource
-  status         ProspectStatus @default(CANDIDATE)
-  googlePlaceId  String?        @map("google_place_id")
-  address        String?
-  latitude       Decimal        @db.Decimal(9, 6)
-  longitude      Decimal        @db.Decimal(9, 6)
-  createdById    String         @db.Uuid @map("created_by_id")
-  createdBy      User           @relation("ProspectCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  convertedAt    DateTime?      @map("converted_at")
-  visits         ProspectVisit[]
-
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  sapNo String? @map("sap_no")
+  source ProspectSource
+  status ProspectStatus @default(CANDIDATE)
+  googlePlaceId String? @map("google_place_id")
+  address String?
+  latitude Decimal @db.Decimal(9, 6)
+  longitude Decimal @db.Decimal(9, 6)
+  createdById String @db.Uuid @map("created_by_id")
+  createdBy User @relation("ProspectCreatedBy", fields: [createdById], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  convertedAt DateTime? @map("converted_at")
+  convertedPointId String? @unique @db.Uuid @map("converted_point_id")
+  convertedPoint Point? @relation("ProspectConvertedPoint", fields: [convertedPointId], references: [id])
+  visits ProspectVisit[]
   @@index([status, createdAt])
   @@index([sapNo])
   @@index([googlePlaceId])
@@ -180,128 +113,121 @@ model ProspectCustomer {
 }
 
 model ProspectVisit {
-  id                 String               @id @default(uuid()) @db.Uuid
-  prospectId         String               @db.Uuid @map("prospect_id")
-  prospect           ProspectCustomer     @relation(fields: [prospectId], references: [id])
-  technicianId       String               @db.Uuid @map("technician_id")
-  technician         User                 @relation(fields: [technicianId], references: [id])
-  purpose            ProspectVisitPurpose
-  note               String?
-  latitude           Decimal              @db.Decimal(9, 6)
-  longitude          Decimal              @db.Decimal(9, 6)
-  accuracyMeters     Decimal?             @db.Decimal(8, 2) @map("accuracy_meters")
-  locationCapturedAt DateTime             @map("location_captured_at")
-  visitedAt          DateTime             @default(now()) @map("visited_at")
-  recordedAtServer   DateTime             @default(now()) @map("recorded_at_server")
-  idempotencyKey     String               @unique @map("idempotency_key")
-  createdAt          DateTime             @default(now()) @map("created_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  prospectId String @db.Uuid @map("prospect_id")
+  prospect ProspectCustomer @relation(fields: [prospectId], references: [id])
+  technicianId String @db.Uuid @map("technician_id")
+  technician User @relation(fields: [technicianId], references: [id])
+  purpose ProspectVisitPurpose
+  note String?
+  latitude Decimal @db.Decimal(9, 6)
+  longitude Decimal @db.Decimal(9, 6)
+  accuracyMeters Decimal? @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime @map("location_captured_at")
+  visitedAt DateTime @default(now()) @map("visited_at")
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt DateTime @default(now()) @map("created_at")
   @@index([prospectId, visitedAt])
   @@index([technicianId, visitedAt])
   @@map("prospect_visits")
 }
 
 model PointAlias {
-  id          String   @id @default(uuid()) @db.Uuid
-  pointId     String   @db.Uuid @map("point_id")
-  point       Point    @relation(fields: [pointId], references: [id], onDelete: Cascade)
-  alias       String
-  normalized  String
-  createdById String   @db.Uuid @map("created_by_id")
-  createdBy   User     @relation("PointAliasCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now()) @map("created_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  pointId String @db.Uuid @map("point_id")
+  point Point @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  alias String
+  normalized String
+  createdById String @db.Uuid @map("created_by_id")
+  createdBy User @relation("PointAliasCreatedBy", fields: [createdById], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
   @@unique([pointId, normalized])
   @@index([normalized])
   @@map("point_aliases")
 }
 
 model PointAssignment {
-  id            String              @id @default(uuid()) @db.Uuid
-  pointId       String              @db.Uuid @map("point_id")
-  point         Point               @relation(fields: [pointId], references: [id], onDelete: Cascade)
-  technicianId  String              @db.Uuid @map("technician_id")
-  technician    User                @relation("PointAssignedTechnician", fields: [technicianId], references: [id])
-  kind          PointAssignmentKind
-  startsAt      DateTime            @map("starts_at")
-  endsAt        DateTime?           @map("ends_at")
-  active        Boolean             @default(true)
-  reason        String?
-  createdById   String              @db.Uuid @map("created_by_id")
-  createdBy     User                @relation("PointAssignmentCreatedBy", fields: [createdById], references: [id])
-  createdAt     DateTime            @default(now()) @map("created_at")
-  deactivatedAt DateTime?           @map("deactivated_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  pointId String @db.Uuid @map("point_id")
+  point Point @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  technicianId String @db.Uuid @map("technician_id")
+  technician User @relation("PointAssignedTechnician", fields: [technicianId], references: [id])
+  kind PointAssignmentKind
+  startsAt DateTime @map("starts_at")
+  endsAt DateTime? @map("ends_at")
+  active Boolean @default(true)
+  reason String?
+  createdById String @db.Uuid @map("created_by_id")
+  createdBy User @relation("PointAssignmentCreatedBy", fields: [createdById], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  deactivatedAt DateTime? @map("deactivated_at")
   @@index([pointId, active, startsAt, endsAt])
   @@index([technicianId, active])
   @@map("point_assignments")
 }
 
 model AdminAuditLog {
-  id         String   @id @default(uuid()) @db.Uuid
-  entityType String   @map("entity_type")
-  entityId   String   @map("entity_id")
-  action     String
-  actorId    String   @db.Uuid @map("actor_id")
-  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
-  oldValue   Json?    @map("old_value")
-  newValue   Json?    @map("new_value")
-  note       String?
-  createdAt  DateTime @default(now()) @map("created_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  entityType String @map("entity_type")
+  entityId String @map("entity_id")
+  action String
+  actorId String @db.Uuid @map("actor_id")
+  actor User @relation("AuditActor", fields: [actorId], references: [id])
+  oldValue Json? @map("old_value")
+  newValue Json? @map("new_value")
+  note String?
+  createdAt DateTime @default(now()) @map("created_at")
   @@index([entityType, entityId, createdAt])
   @@index([actorId, createdAt])
   @@map("admin_audit_logs")
 }
 
 model MaintenanceObligation {
-  id          String          @id @default(uuid()) @db.Uuid
-  pointId     String          @db.Uuid @map("point_id")
-  point       Point           @relation(fields: [pointId], references: [id])
-  cycleKey    String          @map("cycle_key")
-  dueStart    DateTime        @db.Date @map("due_start")
-  dueEnd      DateTime        @db.Date @map("due_end")
-  completedAt DateTime?       @map("completed_at")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  visits      MaintenanceVisit[]
-
+  id String @id @default(uuid()) @db.Uuid
+  pointId String @db.Uuid @map("point_id")
+  point Point @relation(fields: [pointId], references: [id])
+  cycleKey String @map("cycle_key")
+  dueStart DateTime @db.Date @map("due_start")
+  dueEnd DateTime @db.Date @map("due_end")
+  completedAt DateTime? @map("completed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  visits MaintenanceVisit[]
   @@unique([pointId, cycleKey])
   @@index([dueStart, dueEnd, completedAt])
   @@map("maintenance_obligations")
 }
 
 model MaintenanceVisit {
-  id                       String                        @id @default(uuid()) @db.Uuid
-  pointId                  String                        @db.Uuid @map("point_id")
-  point                    Point                         @relation(fields: [pointId], references: [id])
-  technicianId             String                        @db.Uuid @map("technician_id")
-  technician               User                          @relation(fields: [technicianId], references: [id])
-  obligationId             String?                       @db.Uuid @map("obligation_id")
-  obligation               MaintenanceObligation?        @relation(fields: [obligationId], references: [id])
-  performedAt              DateTime                      @map("performed_at")
-  recordedAtServer         DateTime                      @default(now()) @map("recorded_at_server")
-  deviceRecordedAt         DateTime?                     @map("device_recorded_at")
-  enteredLate              Boolean                       @default(false) @map("entered_late")
-  lateEntryMinutes         Int?                          @map("late_entry_minutes")
-  lateEntryReason          String?                       @map("late_entry_reason")
-  latitude                 Decimal                       @db.Decimal(9, 6)
-  longitude                Decimal                       @db.Decimal(9, 6)
-  accuracyMeters           Decimal?                      @db.Decimal(8, 2) @map("accuracy_meters")
-  locationCapturedAt       DateTime                      @map("location_captured_at")
-  locationLearningEligible Boolean                       @default(true) @map("location_learning_eligible")
-  suspiciousBatch          Boolean                       @default(false) @map("suspicious_batch")
-  reviewRecommended        Boolean                       @default(false) @map("review_recommended")
-  reviewReason             String?                       @map("review_reason")
-  status                   VisitStatus                   @default(VALID)
-  reversedAt               DateTime?                     @map("reversed_at")
-  reversedByUserId         String?                       @db.Uuid @map("reversed_by_user_id")
-  serviceSlipStatus        PaperworkStatus               @default(PENDING) @map("service_slip_status")
-  confirmationStatus       PaperworkStatus               @default(PENDING) @map("confirmation_status")
-  idempotencyKey           String                        @unique @map("idempotency_key")
-  createdAt                DateTime                      @default(now()) @map("created_at")
-  paperworkHistory         PaperworkStatusHistory[]
-  reviewResolutions        MaintenanceReviewResolution[]
-
+  id String @id @default(uuid()) @db.Uuid
+  pointId String @db.Uuid @map("point_id")
+  point Point @relation(fields: [pointId], references: [id])
+  technicianId String @db.Uuid @map("technician_id")
+  technician User @relation(fields: [technicianId], references: [id])
+  obligationId String? @db.Uuid @map("obligation_id")
+  obligation MaintenanceObligation? @relation(fields: [obligationId], references: [id])
+  performedAt DateTime @map("performed_at")
+  recordedAtServer DateTime @default(now()) @map("recorded_at_server")
+  deviceRecordedAt DateTime? @map("device_recorded_at")
+  enteredLate Boolean @default(false) @map("entered_late")
+  lateEntryMinutes Int? @map("late_entry_minutes")
+  lateEntryReason String? @map("late_entry_reason")
+  latitude Decimal @db.Decimal(9, 6)
+  longitude Decimal @db.Decimal(9, 6)
+  accuracyMeters Decimal? @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime @map("location_captured_at")
+  locationLearningEligible Boolean @default(true) @map("location_learning_eligible")
+  suspiciousBatch Boolean @default(false) @map("suspicious_batch")
+  reviewRecommended Boolean @default(false) @map("review_recommended")
+  reviewReason String? @map("review_reason")
+  status VisitStatus @default(VALID)
+  reversedAt DateTime? @map("reversed_at")
+  reversedByUserId String? @db.Uuid @map("reversed_by_user_id")
+  serviceSlipStatus PaperworkStatus @default(PENDING) @map("service_slip_status")
+  confirmationStatus PaperworkStatus @default(PENDING) @map("confirmation_status")
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt DateTime @default(now()) @map("created_at")
+  paperworkHistory PaperworkStatusHistory[]
+  reviewResolutions MaintenanceReviewResolution[]
   @@index([pointId, performedAt])
   @@index([technicianId, performedAt])
   @@index([serviceSlipStatus, confirmationStatus])
@@ -309,76 +235,72 @@ model MaintenanceVisit {
 }
 
 model MaintenanceAttempt {
-  id                 String        @id @default(uuid()) @db.Uuid
-  pointId            String        @db.Uuid @map("point_id")
-  point              Point         @relation(fields: [pointId], references: [id])
-  technicianId       String        @db.Uuid @map("technician_id")
-  technician         User          @relation(fields: [technicianId], references: [id])
-  reason             AttemptReason
-  note               String?
-  latitude           Decimal       @db.Decimal(9, 6)
-  longitude          Decimal       @db.Decimal(9, 6)
-  accuracyMeters     Decimal?      @db.Decimal(8, 2) @map("accuracy_meters")
-  locationCapturedAt DateTime      @map("location_captured_at")
-  attemptedAt        DateTime      @default(now()) @map("attempted_at")
-  idempotencyKey     String        @unique @map("idempotency_key")
-  createdAt          DateTime      @default(now()) @map("created_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  pointId String @db.Uuid @map("point_id")
+  point Point @relation(fields: [pointId], references: [id])
+  technicianId String @db.Uuid @map("technician_id")
+  technician User @relation(fields: [technicianId], references: [id])
+  reason AttemptReason
+  note String?
+  latitude Decimal @db.Decimal(9, 6)
+  longitude Decimal @db.Decimal(9, 6)
+  accuracyMeters Decimal? @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime @map("location_captured_at")
+  attemptedAt DateTime @default(now()) @map("attempted_at")
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt DateTime @default(now()) @map("created_at")
   @@index([pointId, attemptedAt])
   @@index([technicianId, attemptedAt])
   @@map("maintenance_attempts")
 }
 
 model NonMaintenanceVisit {
-  id                 String                     @id @default(uuid()) @db.Uuid
-  pointId            String                     @db.Uuid @map("point_id")
-  point              Point                      @relation(fields: [pointId], references: [id])
-  technicianId       String                     @db.Uuid @map("technician_id")
-  technician         User                       @relation(fields: [technicianId], references: [id])
-  purpose            NonMaintenanceVisitPurpose
-  note               String?
-  latitude           Decimal                    @db.Decimal(9, 6)
-  longitude          Decimal                    @db.Decimal(9, 6)
-  accuracyMeters     Decimal?                   @db.Decimal(8, 2) @map("accuracy_meters")
-  locationCapturedAt DateTime                   @map("location_captured_at")
-  visitedAt          DateTime                   @default(now()) @map("visited_at")
-  recordedAtServer   DateTime                   @default(now()) @map("recorded_at_server")
-  idempotencyKey     String                     @unique @map("idempotency_key")
-  createdAt          DateTime                   @default(now()) @map("created_at")
-
+  id String @id @default(uuid()) @db.Uuid
+  pointId String @db.Uuid @map("point_id")
+  point Point @relation(fields: [pointId], references: [id])
+  technicianId String @db.Uuid @map("technician_id")
+  technician User @relation(fields: [technicianId], references: [id])
+  purpose NonMaintenanceVisitPurpose
+  note String?
+  latitude Decimal @db.Decimal(9, 6)
+  longitude Decimal @db.Decimal(9, 6)
+  accuracyMeters Decimal? @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime @map("location_captured_at")
+  visitedAt DateTime @default(now()) @map("visited_at")
+  recordedAtServer DateTime @default(now()) @map("recorded_at_server")
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt DateTime @default(now()) @map("created_at")
   @@index([pointId, visitedAt])
   @@index([technicianId, visitedAt])
   @@map("non_maintenance_visits")
 }
 
 model PaperworkStatusHistory {
-  id             String           @id @default(uuid()) @db.Uuid
-  visitId        String           @db.Uuid @map("visit_id")
-  visit          MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  kind           PaperworkKind
-  previousStatus PaperworkStatus  @map("previous_status")
-  newStatus      PaperworkStatus  @map("new_status")
-  changedById    String           @db.Uuid @map("changed_by_id")
-  changedBy      User             @relation("PaperworkChangedBy", fields: [changedById], references: [id])
-  changedAt      DateTime         @default(now()) @map("changed_at")
-  note           String?
-
+  id String @id @default(uuid()) @db.Uuid
+  visitId String @db.Uuid @map("visit_id")
+  visit MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  kind PaperworkKind
+  previousStatus PaperworkStatus @map("previous_status")
+  newStatus PaperworkStatus @map("new_status")
+  changedById String @db.Uuid @map("changed_by_id")
+  changedBy User @relation("PaperworkChangedBy", fields: [changedById], references: [id])
+  changedAt DateTime @default(now()) @map("changed_at")
+  note String?
   @@index([visitId, changedAt])
   @@index([changedById, changedAt])
   @@map("paperwork_status_history")
 }
 
 model MaintenanceReviewResolution {
-  id             String           @id @default(uuid()) @db.Uuid
-  visitId        String           @db.Uuid @map("visit_id")
-  visit          MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  decision       ReviewDecision
-  previousReason String?          @map("previous_reason")
-  resolvedById   String           @db.Uuid @map("resolved_by_id")
-  resolvedBy     User             @relation("ReviewResolvedBy", fields: [resolvedById], references: [id])
-  resolvedAt     DateTime         @default(now()) @map("resolved_at")
-  note           String?
-
+  id String @id @default(uuid()) @db.Uuid
+  visitId String @db.Uuid @map("visit_id")
+  visit MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  decision ReviewDecision
+  previousReason String? @map("previous_reason")
+  resolvedById String @db.Uuid @map("resolved_by_id")
+  resolvedBy User @relation("ReviewResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt DateTime @default(now()) @map("resolved_at")
+  note String?
   @@index([visitId, resolvedAt])
   @@index([resolvedById, resolvedAt])
   @@map("maintenance_review_resolutions")
