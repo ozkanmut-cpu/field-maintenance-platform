@@ -172,3 +172,18 @@ export function recordMaintenanceAttempt(input: {
 }) {
   return jsonRequest<Record<string, unknown>>('/maintenance/attempt', { method: 'POST', body: JSON.stringify(input) });
 }
+
+export type TechnicianHistoryItem = {
+  type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'PROSPECT_VISIT';
+  at: string;
+  point?: { id: string; code: string; name: string };
+  prospect?: { id: string; name: string; sapNo?: string | null };
+  assistedForTechnician?: { id: string; name: string; username: string } | null;
+  reason?: AttemptReason;
+  purpose?: string;
+};
+
+export function technicianHistory(date?: string) {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return jsonRequest<{ date: string; totalOperations: number; items: TechnicianHistoryItem[] }>(`/maintenance/technician-history${query}`);
+}
