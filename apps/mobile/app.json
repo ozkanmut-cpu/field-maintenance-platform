@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Field Maintenance",
+    "slug": "field-maintenance",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.fmp.mobile",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "plugins": [
+      "expo-image-picker",
+      "expo-location"
+    ]
+  }
+}
