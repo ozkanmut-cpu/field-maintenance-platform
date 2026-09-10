@@ -19,6 +19,11 @@ export class AssignmentsController {
     return this.assignments.deactivate(id, dto);
   }
 
+  @Get(':id/audit-history')
+  auditHistory(@Param('id') id: string) {
+    return this.assignments.auditHistory(id);
+  }
+
   @Get('point/:pointId')
   pointHistory(@Param('pointId') pointId: string) {
     return this.assignments.pointHistory(pointId);
