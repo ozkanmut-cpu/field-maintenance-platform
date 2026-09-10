@@ -1,4 +1,4 @@
-import { IsLatitude, IsLongitude, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsLatitude, IsLongitude, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class EfesimExtractDto {
   @IsUUID()
@@ -14,9 +14,4 @@ export class EfesimExtractDto {
   @IsOptional()
   @IsLongitude()
   longitude?: number;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  address?: string;
 }
