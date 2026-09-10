@@ -7,22 +7,78 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole { ADMIN TECHNICIAN }
-enum PointStatus { ACTIVE PASSIVE CANCELLED }
-enum MaintenanceType { STANDARD SMARTCLEAN }
-enum VisitStatus { VALID REVERSED }
-enum PaperworkStatus { PENDING PRESENT MISSING }
-enum PaperworkKind { SERVICE_SLIP CONFIRMATION }
-enum LocationSource { UNKNOWN GOOGLE_MATCH FIELD_CONFIRMED MANUAL }
-enum AttemptReason { BUSINESS_CLOSED AUTHORIZED_PERSON_UNAVAILABLE ACCESS_FAILED OTHER }
-enum ReviewDecision { NO_ISSUE KEEP_LOCATION_EXCLUDED NEEDS_FOLLOWUP }
-enum PointAssignmentKind { POINT_OVERRIDE TEMPORARY }
-enum NonMaintenanceVisitPurpose { BREAKDOWN SURVEY INSTALLATION REMOVAL }
-enum ProspectSource { GOOGLE_MAPS MANUAL EFESIM }
-enum ProspectStatus { CANDIDATE CONVERTED ARCHIVED }
-enum ProspectVisitPurpose { SURVEY INSTALLATION }
-enum MaintenanceObligationStatus { OPEN COMPLETED MISSED }
-
+enum UserRole {
+  ADMIN
+  TECHNICIAN
+}
+enum PointStatus {
+  ACTIVE
+  PASSIVE
+  CANCELLED
+}
+enum MaintenanceType {
+  STANDARD
+  SMARTCLEAN
+}
+enum VisitStatus {
+  VALID
+  REVERSED
+}
+enum PaperworkStatus {
+  PENDING
+  PRESENT
+  MISSING
+}
+enum PaperworkKind {
+  SERVICE_SLIP
+  CONFIRMATION
+}
+enum LocationSource {
+  UNKNOWN
+  GOOGLE_MATCH
+  FIELD_CONFIRMED
+  MANUAL
+}
+enum AttemptReason {
+  BUSINESS_CLOSED
+  AUTHORIZED_PERSON_UNAVAILABLE
+  ACCESS_FAILED
+  OTHER
+}
+enum ReviewDecision {
+  NO_ISSUE
+  KEEP_LOCATION_EXCLUDED
+  NEEDS_FOLLOWUP
+}
+enum PointAssignmentKind {
+  POINT_OVERRIDE
+  TEMPORARY
+}
+enum NonMaintenanceVisitPurpose {
+  BREAKDOWN
+  SURVEY
+  INSTALLATION
+  REMOVAL
+}
+enum ProspectSource {
+  GOOGLE_MAPS
+  MANUAL
+  EFESIM
+}
+enum ProspectStatus {
+  CANDIDATE
+  CONVERTED
+  ARCHIVED
+}
+enum ProspectVisitPurpose {
+  SURVEY
+  INSTALLATION
+}
+enum MaintenanceObligationStatus {
+  OPEN
+  COMPLETED
+  MISSED
+}
 model User {
   id String @id @default(uuid()) @db.Uuid
   name String
