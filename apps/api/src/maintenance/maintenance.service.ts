@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  MaintenanceObligationStatus,
   MaintenanceType,
   PaperworkKind,
   PaperworkStatus,
@@ -150,16 +151,8 @@ export class MaintenanceService {
     ]);
 
     const items = [
-      ...visits.map((visit) => ({
-        type: 'MAINTENANCE' as const,
-        at: visit.performedAt,
-        ...visit,
-      })),
-      ...attempts.map((attempt) => ({
-        type: 'ATTEMPT' as const,
-        at: attempt.attemptedAt,
-        ...attempt,
-      })),
+      ...visits.map((visit) => ({ type: 'MAINTENANCE' as const, at: visit.performedAt, ...visit })),
+      ...attempts.map((attempt) => ({ type: 'ATTEMPT' as const, at: attempt.attemptedAt, ...attempt })),
     ].sort((a, b) => a.at.getTime() - b.at.getTime());
 
     return {
@@ -215,28 +208,33 @@ export class MaintenanceService {
 
     await this.engine.ensureStandardObligations(performedAt);
 
-    const obligation =
+    const openObligations =
       point.maintenanceType === MaintenanceType.STANDARD
-        ? await this.prisma.maintenanceObligation.findFirst({
+        ? await this.prisma.maintenanceObligation.findMany({
             where: {
               pointId: point.id,
-              completedAt: null,
+              status: MaintenanceObligationStatus.OPEN,
               dueStart: { lte: this.dateOnly(performedAt) },
             },
             orderBy: { dueStart: 'asc' },
           })
-        : null;
+        : [];
 
+    const obligation = openObligations.length ? openObligations[openObligations.length - 1] : null;
     if (point.maintenanceType === MaintenanceType.STANDARD && !obligation) {
       throw new BadRequestException('Bu tarih için açık Standard bakım yükümlülüğü bulunamadı');
     }
+
+    const backlogToMiss = obligation
+      ? openObligations.filter((item) => item.id !== obligation.id)
+      : [];
 
     const lateEntryMinutes = enteredLate
       ? Math.max(1, Math.floor((now.getTime() - performedAt.getTime()) / 60_000))
       : null;
 
     try {
-      const visit = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const created = await tx.maintenanceVisit.create({
           data: {
             pointId: point.id,
@@ -261,21 +259,38 @@ export class MaintenanceService {
           },
         });
 
-        if (obligation) {
-          await tx.maintenanceObligation.update({
-            where: { id: obligation.id },
-            data: { completedAt: performedAt },
+        if (backlogToMiss.length) {
+          await tx.maintenanceObligation.updateMany({
+            where: { id: { in: backlogToMiss.map((item) => item.id) }, status: MaintenanceObligationStatus.OPEN },
+            data: {
+              status: MaintenanceObligationStatus.MISSED,
+              resolvedAt: performedAt,
+              resolvedByVisitId: created.id,
+              completedAt: null,
+            },
           });
         }
 
-        return created;
+        if (obligation) {
+          await tx.maintenanceObligation.update({
+            where: { id: obligation.id },
+            data: {
+              status: MaintenanceObligationStatus.COMPLETED,
+              completedAt: performedAt,
+              resolvedAt: performedAt,
+              resolvedByVisitId: created.id,
+            },
+          });
+        }
+
+        return { visit: created, missedPeriods: backlogToMiss.length };
       });
 
       await this.runPostProcessing(dto.technicianId, point.id);
 
-      return (
-        (await this.prisma.maintenanceVisit.findUnique({ where: { id: visit.id } })) ?? visit
-      );
+      const visit =
+        (await this.prisma.maintenanceVisit.findUnique({ where: { id: result.visit.id } })) ?? result.visit;
+      return { ...visit, resolvedBacklogPeriods: result.missedPeriods };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Bu bakım kaydı zaten işlendi');
@@ -310,12 +325,15 @@ export class MaintenanceService {
         },
       });
 
-      if (visit.obligationId) {
-        await tx.maintenanceObligation.update({
-          where: { id: visit.obligationId },
-          data: { completedAt: null },
-        });
-      }
+      await tx.maintenanceObligation.updateMany({
+        where: { resolvedByVisitId: visit.id },
+        data: {
+          status: MaintenanceObligationStatus.OPEN,
+          completedAt: null,
+          resolvedAt: null,
+          resolvedByVisitId: null,
+        },
+      });
 
       return reverted;
     });
@@ -384,10 +402,7 @@ export class MaintenanceService {
     }
 
     const previousStatus =
-      dto.kind === PaperworkKind.SERVICE_SLIP
-        ? visit.serviceSlipStatus
-        : visit.confirmationStatus;
-
+      dto.kind === PaperworkKind.SERVICE_SLIP ? visit.serviceSlipStatus : visit.confirmationStatus;
     if (previousStatus === dto.status) return visit;
 
     return this.prisma.$transaction(async (tx) => {
@@ -416,9 +431,7 @@ export class MaintenanceService {
 
   async bulkUpdatePaperwork(dto: BulkUpdatePaperworkDto) {
     const results = [];
-    for (const item of dto.items) {
-      results.push(await this.updatePaperwork(item));
-    }
+    for (const item of dto.items) results.push(await this.updatePaperwork(item));
     return { updated: results.length, items: results };
   }
 
@@ -440,7 +453,6 @@ export class MaintenanceService {
       include: { changedBy: { select: { id: true, name: true } } },
       orderBy: { changedAt: 'asc' },
     });
-
     return { visit, history };
   }
 
@@ -451,9 +463,7 @@ export class MaintenanceService {
       await this.googlePlaces.matchPoint(pointId);
     } catch (error) {
       this.logger.warn(
-        `Maintenance post-processing failed for point ${pointId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Maintenance post-processing failed for point ${pointId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
