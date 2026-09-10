@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AssignmentsModule } from './assignments/assignments.module';
 import { HealthController } from './health/health.controller';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { PointsModule } from './points/points.module';
@@ -17,6 +18,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     RegionsModule,
     PointsModule,
+    AssignmentsModule,
     MaintenanceModule,
   ],
   controllers: [HealthController],
