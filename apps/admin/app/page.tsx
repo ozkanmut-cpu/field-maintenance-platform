@@ -31,6 +31,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
+  const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'users' | 'new-user'>('dashboard');
 
   useEffect(() => {
     void restore();
@@ -179,13 +180,13 @@ export default function Home() {
       <aside className="sidebar">
         <div className="sidebarBrand"><span className="brandMark">S</span><div><strong>SAHA BAKIM</strong><small>Yönetim Sistemi</small></div></div>
         <nav className="sideNav">
-          <a className="active" href="#dashboard">▣ <span>Dashboard</span></a>
-          <a href="#approvals">! <span>Onaylar</span></a>
-          <a href="#setup-pending">⚙ <span>Ayar Bekleyenler</span></a>
-          <a href="#regions">◉ <span>Bölgeler</span></a>
-          <a href="#points">● <span>Noktalar</span></a>
-          <a href="#users">♙ <span>Teknisyenler</span></a>
-          <a href="#new-user">＋ <span>Yeni Kullanıcı</span></a>
+          <button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>▣ <span>Dashboard</span></button>
+          <button className={section === 'approvals' ? 'active' : ''} onClick={() => setSection('approvals')}>! <span>Onaylar</span></button>
+          <button className={section === 'setup-pending' ? 'active' : ''} onClick={() => setSection('setup-pending')}>⚙ <span>Ayar Bekleyenler</span></button>
+          <button className={section === 'regions' ? 'active' : ''} onClick={() => setSection('regions')}>◉ <span>Bölgeler</span></button>
+          <button className={section === 'points' ? 'active' : ''} onClick={() => setSection('points')}>● <span>Noktalar</span></button>
+          <button className={section === 'users' ? 'active' : ''} onClick={() => setSection('users')}>♙ <span>Teknisyenler</span></button>
+          <button className={section === 'new-user' ? 'active' : ''} onClick={() => setSection('new-user')}>＋ <span>Yeni Kullanıcı</span></button>
         </nav>
         <div className="sidebarFoot">Saha operasyon yönetimi</div>
       </aside>
@@ -193,7 +194,7 @@ export default function Home() {
       <header className="topbar" id="dashboard">
         <div>
           <div className="brand">FIELD MAINTENANCE</div>
-          <h1>Yönetim Paneli</h1>
+          <h1>{section === 'dashboard' ? 'Dashboard' : section === 'approvals' ? 'Onaylar' : section === 'setup-pending' ? 'Ayar Bekleyen Noktalar' : section === 'regions' ? 'Bölgeler' : section === 'points' ? 'Noktalar' : section === 'users' ? 'Teknisyenler' : 'Yeni Kullanıcı'}</h1>
         </div>
         <div className="account">
           <span>{me.name}</span>
@@ -203,14 +204,16 @@ export default function Home() {
 
       {error ? <div className="error banner">{error}</div> : null}
 
-      <div className="sectionEyebrow">KULLANICI ÖZETİ</div>
-      <section className="stats">
-        <div className="stat"><strong>{users.length}</strong><span>Toplam kullanıcı</span></div>
-        <div className="stat"><strong>{users.filter((u) => u.role === 'TECHNICIAN' && u.active).length}</strong><span>Aktif teknisyen</span></div>
-        <div className="stat"><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></div>
-      </section>
-      <Operations users={users} />
-      <section className="panel" id="users">
+      {section === 'dashboard' ? <>
+        <div className="sectionEyebrow">KULLANICI ÖZETİ</div>
+        <section className="stats">
+          <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.length}</strong><span>Toplam kullanıcı</span></button>
+          <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => u.role === 'TECHNICIAN' && u.active).length}</strong><span>Aktif teknisyen</span></button>
+          <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></button>
+        </section>
+      </> : null}
+      <Operations users={users} activeSection={section} onNavigate={setSection} />
+      {section === 'users' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
           <button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button>
@@ -236,8 +239,8 @@ export default function Home() {
             </tbody>
           </table>
         </div>
-      </section>
-      {helpEditorId ? <section className="panel">
+      </section> : null}
+      {section === 'users' && helpEditorId ? <section className="panel">
         <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => setHelpEditorId('')}>Kapat</button></div>
         <div className="helpGrid">
           {users.filter((u) => u.role === 'TECHNICIAN' && u.active && u.id !== helpEditorId).map((target) => (
@@ -250,7 +253,7 @@ export default function Home() {
         <button onClick={() => void saveHelpSettings()} disabled={busy}>YARDIM YETKİLERİNİ KAYDET</button>
       </section> : null}
 
-      <section className="panel" id="new-user">
+      {section === 'new-user' ? <section className="panel" id="new-user">
         <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />
@@ -262,7 +265,7 @@ export default function Home() {
           <input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} type="password" placeholder="Geçici şifre (min. 8 karakter)" minLength={8} required />
           <button type="submit" disabled={busy}>KULLANICI OLUŞTUR</button>
         </form>
-      </section>
+      </section> : null}
       </div>
     </main>
   );
