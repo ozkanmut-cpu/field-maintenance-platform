@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AssignmentsModule } from './assignments/assignments.module';
+import { AuthModule } from './auth/auth.module';
 import { HealthController } from './health/health.controller';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { PointsModule } from './points/points.module';
@@ -16,6 +17,7 @@ import { UsersModule } from './users/users.module';
       envFilePath: ['../../.env', '.env'],
     }),
     PrismaModule,
+    AuthModule,
     UsersModule,
     RegionsModule,
     PointsModule,

@@ -1,4 +1,8 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { AuthenticatedUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { Roles } from '../auth/roles.decorator';
 import { ConfirmEfesimProspectDto } from './dto/confirm-efesim-prospect.dto';
 import { ConvertProspectDto } from './dto/convert-prospect.dto';
 import { CreateProspectDto } from './dto/create-prospect.dto';
@@ -16,38 +20,41 @@ export class ProspectsController {
     private readonly conversion: ProspectConversionService,
   ) {}
 
+  @Roles(UserRole.ADMIN)
   @Get()
   list() {
     return this.prospects.list();
   }
 
   @Post()
-  create(@Body() dto: CreateProspectDto) {
-    return this.prospects.create(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateProspectDto) {
+    return this.prospects.create({ ...dto, technicianId: user.id });
   }
 
   @Post('visits')
-  createVisit(@Body() dto: CreateProspectVisitDto) {
-    return this.prospects.createVisit(dto);
+  createVisit(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateProspectVisitDto) {
+    return this.prospects.createVisit({ ...dto, technicianId: user.id });
   }
 
   @Post('efesim-extract')
-  extractEfesim(@Body() dto: EfesimExtractDto) {
-    return this.prospects.extractEfesim(dto);
+  extractEfesim(@CurrentUser() user: AuthenticatedUser, @Body() dto: EfesimExtractDto) {
+    return this.prospects.extractEfesim({ ...dto, technicianId: user.id });
   }
 
   @Post('efesim-confirm')
-  confirmEfesim(@Body() dto: ConfirmEfesimProspectDto) {
-    return this.confirmation.confirm(dto);
+  confirmEfesim(@CurrentUser() user: AuthenticatedUser, @Body() dto: ConfirmEfesimProspectDto) {
+    return this.confirmation.confirm({ ...dto, technicianId: user.id });
   }
 
+  @Roles(UserRole.ADMIN)
   @Get(':id/history')
   history(@Param('id') id: string) {
     return this.conversion.history(id);
   }
 
+  @Roles(UserRole.ADMIN)
   @Post(':id/convert')
-  convert(@Param('id') id: string, @Body() dto: ConvertProspectDto) {
-    return this.conversion.convert(id, dto);
+  convert(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ConvertProspectDto) {
+    return this.conversion.convert(id, { ...dto, adminUserId: user.id });
   }
 }

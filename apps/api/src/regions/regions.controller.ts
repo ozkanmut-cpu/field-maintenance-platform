@@ -1,9 +1,14 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { AuthenticatedUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { Roles } from '../auth/roles.decorator';
 import { ChangeRegionTechnicianDto } from './dto/change-region-technician.dto';
 import { CreateRegionDto } from './dto/create-region.dto';
 import { UpdateRegionDto } from './dto/update-region.dto';
 import { RegionsService } from './regions.service';
 
+@Roles(UserRole.ADMIN)
 @Controller('regions')
 export class RegionsController {
   constructor(private readonly regions: RegionsService) {}
@@ -32,12 +37,12 @@ export class RegionsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateRegionDto) {
-    return this.regions.update(id, dto);
+  update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateRegionDto) {
+    return this.regions.update(id, { ...dto, adminUserId: user.id });
   }
 
   @Patch(':id/technician')
-  changeTechnician(@Param('id') id: string, @Body() dto: ChangeRegionTechnicianDto) {
-    return this.regions.changeTechnician(id, dto);
+  changeTechnician(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ChangeRegionTechnicianDto) {
+    return this.regions.changeTechnician(id, { ...dto, adminUserId: user.id });
   }
 }
