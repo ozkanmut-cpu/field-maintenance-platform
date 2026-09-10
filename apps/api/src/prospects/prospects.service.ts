@@ -25,6 +25,14 @@ type EfesimVisionResult = {
   layoutMatched?: boolean;
 };
 
+type GoogleNearbyPlace = {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
+  businessStatus?: string;
+};
+
 @Injectable()
 export class ProspectsService {
   constructor(
@@ -196,32 +204,210 @@ export class ProspectsService {
       sapNo
         ? this.prisma.prospectCustomer.findFirst({
             where: { sapNo, status: ProspectStatus.CANDIDATE },
-            select: { id: true, name: true, sapNo: true, status: true },
+            select: { id: true, name: true, sapNo: true, status: true, googlePlaceId: true },
           })
         : null,
     ]);
+
+    const duplicate = existingPoint
+      ? { type: 'POINT' as const, item: existingPoint }
+      : existingProspect
+        ? { type: 'PROSPECT' as const, item: existingProspect }
+        : null;
+
+    const googleMatch =
+      !duplicate && customerName && dto.latitude !== undefined && dto.longitude !== undefined
+        ? await this.findGoogleMatch(customerName, dto.latitude, dto.longitude)
+        : null;
+
+    const nextStep = duplicate
+      ? 'USE_EXISTING'
+      : googleMatch?.matched
+        ? 'CONFIRM_GOOGLE_MATCH'
+        : 'MANUAL_ENTRY';
 
     return {
       customerName,
       sapNo,
       confidence: extracted.confidence ?? null,
       layoutMatched: extracted.layoutMatched ?? null,
-      requiresConfirmation: true,
-      duplicate: existingPoint
-        ? { type: 'POINT' as const, item: existingPoint }
-        : existingProspect
-          ? { type: 'PROSPECT' as const, item: existingProspect }
-          : null,
-      suggestedCreatePayload: {
-        technicianId: dto.technicianId,
-        name: customerName,
-        sapNo,
-        source: ProspectSource.EFESIM,
-        address: dto.address ?? null,
-        latitude: dto.latitude ?? null,
-        longitude: dto.longitude ?? null,
-      },
+      duplicate,
+      googleMatch,
+      nextStep,
+      flow: ['EFESIM', 'GOOGLE_MATCH', 'MANUAL_ENTRY'],
+      suggestedCreatePayload: googleMatch?.matched
+        ? {
+            technicianId: dto.technicianId,
+            name: customerName,
+            sapNo,
+            source: ProspectSource.EFESIM,
+            googlePlaceId: googleMatch.placeId,
+            address: googleMatch.address,
+            latitude: googleMatch.latitude,
+            longitude: googleMatch.longitude,
+          }
+        : {
+            technicianId: dto.technicianId,
+            name: customerName,
+            sapNo,
+            source: ProspectSource.EFESIM,
+            address: dto.address ?? null,
+            latitude: dto.latitude ?? null,
+            longitude: dto.longitude ?? null,
+          },
     };
+  }
+
+  private async findGoogleMatch(customerName: string, latitude: number, longitude: number) {
+    const apiKey = this.config.get<string>('GOOGLE_MAPS_API_KEY')?.trim();
+    if (!apiKey) {
+      return {
+        attempted: false,
+        matched: false,
+        reason: 'GOOGLE_MAPS_NOT_CONFIGURED',
+      } as const;
+    }
+
+    const radius = Number(this.config.get<string>('GOOGLE_PLACES_RADIUS_METERS') ?? '250');
+    const minNameScore = Number(this.config.get<string>('GOOGLE_PLACES_MIN_NAME_SCORE') ?? '0.72');
+    const minTotalScore = Number(this.config.get<string>('GOOGLE_PLACES_MIN_TOTAL_SCORE') ?? '0.82');
+    const minMargin = Number(this.config.get<string>('GOOGLE_PLACES_MIN_MARGIN') ?? '0.08');
+
+    try {
+      const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask':
+            'places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus',
+        },
+        body: JSON.stringify({
+          languageCode: 'tr',
+          regionCode: 'TR',
+          maxResultCount: 20,
+          locationRestriction: {
+            circle: {
+              center: { latitude, longitude },
+              radius,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        return {
+          attempted: true,
+          matched: false,
+          reason: `GOOGLE_PLACES_HTTP_${response.status}`,
+        } as const;
+      }
+
+      const payload = (await response.json()) as { places?: GoogleNearbyPlace[] };
+      const candidates = (payload.places ?? [])
+        .filter((place) => place.businessStatus !== 'CLOSED_PERMANENTLY')
+        .map((place) => {
+          const name = place.displayName?.text?.trim() ?? '';
+          const placeLat = place.location?.latitude;
+          const placeLng = place.location?.longitude;
+          if (!name || placeLat === undefined || placeLng === undefined || !place.id) return null;
+          const nameScore = this.diceSimilarity(customerName, name);
+          const distanceMeters = this.haversineMeters(latitude, longitude, placeLat, placeLng);
+          const proximityScore = Math.max(0, 1 - distanceMeters / Math.max(radius, 1));
+          const score = 0.8 * nameScore + 0.2 * proximityScore;
+          return {
+            placeId: place.id,
+            name,
+            address: place.formattedAddress ?? null,
+            latitude: placeLat,
+            longitude: placeLng,
+            distanceMeters: Math.round(distanceMeters),
+            nameScore: Number(nameScore.toFixed(3)),
+            score: Number(score.toFixed(3)),
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .sort((a, b) => b.score - a.score);
+
+      const best = candidates[0];
+      const second = candidates[1];
+      if (!best) {
+        return { attempted: true, matched: false, reason: 'NO_NEARBY_BUSINESS' } as const;
+      }
+
+      const margin = second ? best.score - second.score : best.score;
+      const matched =
+        best.nameScore >= minNameScore && best.score >= minTotalScore && margin >= minMargin;
+
+      if (!matched) {
+        return {
+          attempted: true,
+          matched: false,
+          reason: 'WEAK_OR_AMBIGUOUS_MATCH',
+          bestCandidate: best,
+          alternativeCandidates: candidates.slice(1, 4),
+        } as const;
+      }
+
+      return {
+        attempted: true,
+        matched: true,
+        ...best,
+        confidence: Math.min(100, Math.round(best.score * 100)),
+        alternatives: candidates.slice(1, 4),
+      } as const;
+    } catch (error) {
+      return {
+        attempted: true,
+        matched: false,
+        reason: error instanceof Error ? `GOOGLE_MATCH_ERROR:${error.message}` : 'GOOGLE_MATCH_ERROR',
+      } as const;
+    }
+  }
+
+  private diceSimilarity(a: string, b: string) {
+    const left = this.normalizeName(a);
+    const right = this.normalizeName(b);
+    if (left === right) return 1;
+    if (left.length < 2 || right.length < 2) return 0;
+    const grams = (value: string) => {
+      const result: string[] = [];
+      for (let i = 0; i < value.length - 1; i += 1) result.push(value.slice(i, i + 2));
+      return result;
+    };
+    const leftGrams = grams(left);
+    const rightGrams = grams(right);
+    const counts = new Map<string, number>();
+    for (const gram of leftGrams) counts.set(gram, (counts.get(gram) ?? 0) + 1);
+    let matches = 0;
+    for (const gram of rightGrams) {
+      const count = counts.get(gram) ?? 0;
+      if (count > 0) {
+        matches += 1;
+        counts.set(gram, count - 1);
+      }
+    }
+    return (2 * matches) / (leftGrams.length + rightGrams.length);
+  }
+
+  private normalizeName(value: string) {
+    return value
+      .toLocaleUpperCase('tr-TR')
+      .replace(/[^A-ZÇĞİÖŞÜ0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const earthRadius = 6_371_000;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   private cleanSapNo(value?: string) {
