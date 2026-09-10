@@ -36,11 +36,31 @@ export class MaintenanceController {
   }
 
   @Get('technician-history')
-  technicianHistory(
+  async technicianHistory(
     @Query('technicianId') technicianId: string,
     @Query('date') date?: string,
   ) {
-    return this.maintenance.technicianHistory(technicianId, date);
+    const [maintenanceHistory, otherVisits] = await Promise.all([
+      this.maintenance.technicianHistory(technicianId, date),
+      this.nonMaintenanceVisits.technicianHistory(technicianId, date),
+    ]);
+
+    const otherItems = otherVisits.items.map((item) => ({
+      type: 'NON_MAINTENANCE_VISIT' as const,
+      at: item.visitedAt,
+      ...item,
+    }));
+
+    const items = [...maintenanceHistory.items, ...otherItems].sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
+    );
+
+    return {
+      ...maintenanceHistory,
+      nonMaintenanceVisitCount: otherVisits.count,
+      totalOperations: items.length,
+      items,
+    };
   }
 
   @Get('non-maintenance-visits')
