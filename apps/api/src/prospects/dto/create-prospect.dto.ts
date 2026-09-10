@@ -30,11 +30,6 @@ export class CreateProspectDto {
   @MaxLength(220)
   googlePlaceId?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(400)
-  address?: string;
-
   @IsLatitude()
   latitude!: number;
 
