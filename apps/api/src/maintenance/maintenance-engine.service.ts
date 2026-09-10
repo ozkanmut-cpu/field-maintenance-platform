@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MaintenanceType, PointStatus, VisitStatus } from '@prisma/client';
+import {
+  MaintenanceObligationStatus,
+  MaintenanceType,
+  PointStatus,
+  VisitStatus,
+} from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -16,12 +21,11 @@ export class MaintenanceEngineService {
 
   async due(asOfInput?: string) {
     const asOf = this.toDateOnly(asOfInput ? new Date(asOfInput) : new Date());
-
     await this.ensureStandardObligations(asOf);
 
     const standardObligations = await this.prisma.maintenanceObligation.findMany({
       where: {
-        completedAt: null,
+        status: MaintenanceObligationStatus.OPEN,
         dueStart: { lte: asOf },
         point: {
           status: PointStatus.ACTIVE,
@@ -29,9 +33,7 @@ export class MaintenanceEngineService {
           maintenanceType: MaintenanceType.STANDARD,
         },
       },
-      include: {
-        point: { include: { region: true } },
-      },
+      include: { point: { include: { region: true } } },
       orderBy: [{ dueStart: 'asc' }],
     });
 
@@ -83,7 +85,6 @@ export class MaintenanceEngineService {
         if (!base) return null;
         const dueDate = this.addCalendarMonths(this.toDateOnly(base), 2);
         if (dueDate > asOf) return null;
-
         return {
           pointId: point.id,
           pointCode: point.code,
@@ -102,10 +103,7 @@ export class MaintenanceEngineService {
       .filter((row): row is NonNullable<typeof row> => row !== null);
 
     const rawRows = [...standardRows, ...smartcleanRows];
-    const effectiveAssignments = await this.assignments.resolveMany(
-      rawRows.map((row) => row.pointId),
-      asOf,
-    );
+    const effectiveAssignments = await this.assignments.resolveMany(rawRows.map((row) => row.pointId), asOf);
 
     const rows = rawRows
       .map((row) => {
@@ -130,41 +128,25 @@ export class MaintenanceEngineService {
   async ensureStandardObligations(asOfInput?: Date) {
     const asOf = this.toDateOnly(asOfInput ?? new Date());
     const points = await this.prisma.point.findMany({
-      where: {
-        status: PointStatus.ACTIVE,
-        deletedAt: null,
-        maintenanceType: MaintenanceType.STANDARD,
-      },
-      select: {
-        id: true,
-        maintenanceWeek: true,
-        createdAt: true,
-      },
+      where: { status: PointStatus.ACTIVE, deletedAt: null, maintenanceType: MaintenanceType.STANDARD },
+      select: { id: true, maintenanceWeek: true, createdAt: true },
     });
 
     for (const point of points) {
       if (![1, 2].includes(point.maintenanceWeek ?? 0)) continue;
-      const firstEligible = this.firstAssignedWindowOnOrAfter(
-        this.toDateOnly(point.createdAt),
-        point.maintenanceWeek!,
-      );
-
+      const firstEligible = this.firstAssignedWindowOnOrAfter(this.toDateOnly(point.createdAt), point.maintenanceWeek!);
       let start = firstEligible.start;
       while (start <= asOf) {
         const end = this.addDays(start, 6);
         await this.prisma.maintenanceObligation.upsert({
-          where: {
-            pointId_cycleKey: {
-              pointId: point.id,
-              cycleKey: `STD:${this.isoDate(start)}`,
-            },
-          },
+          where: { pointId_cycleKey: { pointId: point.id, cycleKey: `STD:${this.isoDate(start)}` } },
           update: {},
           create: {
             pointId: point.id,
             cycleKey: `STD:${this.isoDate(start)}`,
             dueStart: start,
             dueEnd: end,
+            status: MaintenanceObligationStatus.OPEN,
           },
         });
         start = this.addDays(start, 14);
@@ -176,17 +158,14 @@ export class MaintenanceEngineService {
     const monday = this.startOfWeek(date);
     const slot = this.slotForWeek(monday);
     let start = monday;
-
     if (slot !== maintenanceWeek) start = this.addDays(start, 7);
     if (date > this.addDays(start, 6)) start = this.addDays(start, 14);
-
     return { start, end: this.addDays(start, 6) };
   }
 
   private slotForWeek(monday: Date) {
     const anchorValue = this.config.get<string>('STANDARD_WEEK1_ANCHOR');
     if (!anchorValue) throw new Error('STANDARD_WEEK1_ANCHOR is required');
-
     const anchor = this.startOfWeek(this.toDateOnly(new Date(anchorValue)));
     const diffWeeks = Math.floor((monday.getTime() - anchor.getTime()) / 604800000);
     const parity = ((diffWeeks % 2) + 2) % 2;
@@ -198,17 +177,8 @@ export class MaintenanceEngineService {
     const month = date.getUTCMonth();
     const day = date.getUTCDate();
     const firstOfTarget = new Date(Date.UTC(year, month + months, 1));
-    const lastDay = new Date(
-      Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0),
-    ).getUTCDate();
-
-    return new Date(
-      Date.UTC(
-        firstOfTarget.getUTCFullYear(),
-        firstOfTarget.getUTCMonth(),
-        Math.min(day, lastDay),
-      ),
-    );
+    const lastDay = new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth(), Math.min(day, lastDay)));
   }
 
   private startOfWeek(date: Date) {
