@@ -33,7 +33,10 @@ export class PointLocationLearningService {
     if (!point) return { pointId, updated: false, reason: 'POINT_NOT_FOUND' };
 
     // Strong/manual sources are never silently overwritten by field evidence.
-    if ([LocationSource.MANUAL, LocationSource.GOOGLE_MATCH].includes(point.locationSource)) {
+    if (
+      point.locationSource === LocationSource.MANUAL ||
+      point.locationSource === LocationSource.GOOGLE_MATCH
+    ) {
       return { pointId, updated: false, reason: 'PROTECTED_SOURCE' };
     }
 
