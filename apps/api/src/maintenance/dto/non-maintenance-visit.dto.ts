@@ -18,9 +18,8 @@ export class NonMaintenanceVisitDto {
   @IsUUID()
   technicianId!: string;
 
-  @IsOptional()
   @IsEnum(NonMaintenanceVisitPurpose)
-  purpose?: NonMaintenanceVisitPurpose;
+  purpose!: NonMaintenanceVisitPurpose;
 
   @IsOptional()
   @IsString()
