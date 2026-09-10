@@ -22,6 +22,7 @@ type Candidate = {
   nameScore: number;
   proximityScore: number;
   totalScore: number;
+  matchedInputName: string;
 };
 
 @Injectable()
@@ -47,6 +48,7 @@ export class GooglePlaceMatchService {
         canonicalLatitude: true,
         canonicalLongitude: true,
         googlePlaceId: true,
+        aliases: { select: { alias: true } },
       },
     });
     if (!point) return { pointId, matched: false, reason: 'POINT_NOT_FOUND' };
@@ -64,10 +66,13 @@ export class GooglePlaceMatchService {
     const minNameScore = this.numberConfig('GOOGLE_PLACES_MIN_NAME_SCORE', 0.72);
     const minTotalScore = this.numberConfig('GOOGLE_PLACES_MIN_TOTAL_SCORE', 0.82);
     const minMargin = this.numberConfig('GOOGLE_PLACES_MIN_MARGIN', 0.08);
+    const pointNames = [point.name, ...point.aliases.map((item) => item.alias)];
 
     const places = await this.searchNearby(apiKey, evidence.latitude, evidence.longitude, radiusMeters);
     const candidates = places
-      .map((place) => this.scoreCandidate(point.name, place, evidence.latitude, evidence.longitude, radiusMeters))
+      .map((place) =>
+        this.scoreCandidate(pointNames, place, evidence.latitude, evidence.longitude, radiusMeters),
+      )
       .filter((candidate): candidate is Candidate => candidate !== null)
       .sort((a, b) => b.totalScore - a.totalScore);
 
@@ -76,11 +81,7 @@ export class GooglePlaceMatchService {
     if (!best) return { pointId, matched: false, reason: 'NO_GOOGLE_CANDIDATE' };
 
     const margin = second ? best.totalScore - second.totalScore : 1;
-    if (
-      best.nameScore < minNameScore ||
-      best.totalScore < minTotalScore ||
-      margin < minMargin
-    ) {
+    if (best.nameScore < minNameScore || best.totalScore < minTotalScore || margin < minMargin) {
       return {
         pointId,
         matched: false,
@@ -221,7 +222,7 @@ export class GooglePlaceMatchService {
   }
 
   private scoreCandidate(
-    pointName: string,
+    pointNames: string[],
     place: GooglePlace,
     centerLat: number,
     centerLng: number,
@@ -233,7 +234,13 @@ export class GooglePlaceMatchService {
     if (!name || latitude === undefined || longitude === undefined) return null;
     if (place.businessStatus === 'CLOSED_PERMANENTLY') return null;
 
-    const nameScore = this.nameSimilarity(pointName, name);
+    const nameMatches = pointNames.map((inputName) => ({
+      inputName,
+      score: this.nameSimilarity(inputName, name),
+    }));
+    nameMatches.sort((a, b) => b.score - a.score);
+    const bestNameMatch = nameMatches[0];
+    const nameScore = bestNameMatch?.score ?? 0;
     const distanceMeters = this.distanceMeters(centerLat, centerLng, latitude, longitude);
     const proximityScore = Math.max(0, 1 - distanceMeters / Math.max(radiusMeters, 1));
     const totalScore = nameScore * 0.8 + proximityScore * 0.2;
@@ -246,6 +253,7 @@ export class GooglePlaceMatchService {
       nameScore,
       proximityScore,
       totalScore,
+      matchedInputName: bestNameMatch?.inputName ?? pointNames[0] ?? '',
     };
   }
 
@@ -259,6 +267,7 @@ export class GooglePlaceMatchService {
       distanceMeters: Math.round(candidate.distanceMeters),
       nameScore: Number(candidate.nameScore.toFixed(3)),
       totalScore: Number(candidate.totalScore.toFixed(3)),
+      matchedInputName: candidate.matchedInputName,
     };
   }
 
