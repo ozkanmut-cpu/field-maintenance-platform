@@ -5,6 +5,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
 import { PointsModule } from './points/points.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RegionsModule } from './regions/regions.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { RegionsModule } from './regions/regions.module';
       envFilePath: ['../../.env', '.env'],
     }),
     PrismaModule,
+    UsersModule,
     RegionsModule,
     PointsModule,
     MaintenanceModule,
