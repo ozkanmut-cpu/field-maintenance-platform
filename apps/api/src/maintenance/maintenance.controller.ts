@@ -4,6 +4,7 @@ import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
+import { ResolveReviewDto } from './dto/resolve-review.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { MaintenanceService } from './maintenance.service';
@@ -49,6 +50,11 @@ export class MaintenanceController {
     return this.anomaly.reviewQueue(limit ? Number(limit) : 100);
   }
 
+  @Get('review-history')
+  reviewHistory(@Query('visitId') visitId: string) {
+    return this.anomaly.reviewHistory(visitId);
+  }
+
   @Post('complete')
   complete(@Body() dto: CompleteMaintenanceDto) {
     return this.maintenance.complete(dto);
@@ -83,6 +89,11 @@ export class MaintenanceController {
       technicianId,
       lookbackHours ? Number(lookbackHours) : 24,
     );
+  }
+
+  @Post('review-resolve')
+  reviewResolve(@Body() dto: ResolveReviewDto) {
+    return this.anomaly.resolveReview(dto);
   }
 
   @Post('location-refresh')
