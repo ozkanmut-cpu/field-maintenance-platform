@@ -67,7 +67,7 @@ export class NonMaintenanceVisitService {
         data: {
           pointId: dto.pointId,
           technicianId: dto.technicianId,
-          purpose: dto.purpose ?? NonMaintenanceVisitPurpose.OTHER,
+          purpose: dto.purpose,
           note: dto.note?.trim() || null,
           latitude: new Prisma.Decimal(dto.latitude),
           longitude: new Prisma.Decimal(dto.longitude),
