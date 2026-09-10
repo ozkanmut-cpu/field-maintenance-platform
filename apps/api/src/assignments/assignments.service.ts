@@ -19,15 +19,15 @@ export class AssignmentsService {
     const [point, technician, admin] = await Promise.all([
       this.prisma.point.findFirst({
         where: { id: dto.pointId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, code: true, name: true },
       }),
       this.prisma.user.findFirst({
         where: { id: dto.technicianId, active: true, role: UserRole.TECHNICIAN },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
       this.prisma.user.findFirst({
         where: { id: dto.adminUserId, active: true, role: UserRole.ADMIN },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
     ]);
 
@@ -64,17 +64,45 @@ export class AssignmentsService {
 
     return this.prisma.$transaction(async (tx) => {
       if (dto.kind === PointAssignmentKind.POINT_OVERRIDE) {
-        await tx.pointAssignment.updateMany({
+        const previous = await tx.pointAssignment.findMany({
           where: {
             pointId: dto.pointId,
             kind: PointAssignmentKind.POINT_OVERRIDE,
             active: true,
           },
-          data: { active: false, deactivatedAt: new Date() },
+          select: { id: true, technicianId: true, startsAt: true, endsAt: true, reason: true },
         });
+
+        if (previous.length > 0) {
+          await tx.pointAssignment.updateMany({
+            where: { id: { in: previous.map((item) => item.id) } },
+            data: { active: false, deactivatedAt: new Date() },
+          });
+
+          for (const old of previous) {
+            await tx.adminAuditLog.create({
+              data: {
+                entityType: 'POINT_ASSIGNMENT',
+                entityId: old.id,
+                action: 'AUTO_DEACTIVATED_BY_REPLACEMENT',
+                actorId: admin.id,
+                oldValue: {
+                  pointId: dto.pointId,
+                  technicianId: old.technicianId,
+                  startsAt: old.startsAt.toISOString(),
+                  endsAt: old.endsAt?.toISOString() ?? null,
+                  reason: old.reason,
+                  active: true,
+                },
+                newValue: { active: false },
+                note: 'Yeni kalıcı nokta istisnası oluşturuldu',
+              },
+            });
+          }
+        }
       }
 
-      return tx.pointAssignment.create({
+      const assignment = await tx.pointAssignment.create({
         data: {
           pointId: dto.pointId,
           technicianId: dto.technicianId,
@@ -89,37 +117,94 @@ export class AssignmentsService {
           createdBy: { select: { id: true, name: true } },
         },
       });
+
+      await tx.adminAuditLog.create({
+        data: {
+          entityType: 'POINT_ASSIGNMENT',
+          entityId: assignment.id,
+          action: 'CREATED',
+          actorId: admin.id,
+          newValue: {
+            pointId: point.id,
+            pointCode: point.code,
+            pointName: point.name,
+            technicianId: technician.id,
+            technicianName: technician.name,
+            kind: assignment.kind,
+            startsAt: assignment.startsAt.toISOString(),
+            endsAt: assignment.endsAt?.toISOString() ?? null,
+            active: assignment.active,
+          },
+          note: dto.reason?.trim() || null,
+        },
+      });
+
+      return assignment;
     });
   }
 
   async deactivate(id: string, dto: DeactivatePointAssignmentDto) {
     const [assignment, admin] = await Promise.all([
-      this.prisma.pointAssignment.findUnique({ where: { id } }),
+      this.prisma.pointAssignment.findUnique({
+        where: { id },
+        include: { technician: { select: { id: true, name: true } } },
+      }),
       this.prisma.user.findFirst({
         where: { id: dto.adminUserId, active: true, role: UserRole.ADMIN },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
     ]);
     if (!assignment) throw new NotFoundException('Görevlendirme bulunamadı');
     if (!admin) throw new ForbiddenException('Görevlendirmeyi yalnızca admin kapatabilir');
     if (!assignment.active) return assignment;
 
-    return this.prisma.pointAssignment.update({
-      where: { id },
-      data: {
-        active: false,
-        deactivatedAt: new Date(),
-        reason: dto.reason?.trim()
-          ? [assignment.reason, `KAPATMA: ${dto.reason.trim()}`].filter(Boolean).join(' | ')
-          : assignment.reason,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.pointAssignment.update({
+        where: { id },
+        data: {
+          active: false,
+          deactivatedAt: new Date(),
+          reason: dto.reason?.trim()
+            ? [assignment.reason, `KAPATMA: ${dto.reason.trim()}`].filter(Boolean).join(' | ')
+            : assignment.reason,
+        },
+      });
+
+      await tx.adminAuditLog.create({
+        data: {
+          entityType: 'POINT_ASSIGNMENT',
+          entityId: assignment.id,
+          action: 'DEACTIVATED',
+          actorId: admin.id,
+          oldValue: {
+            active: true,
+            technicianId: assignment.technicianId,
+            technicianName: assignment.technician.name,
+            kind: assignment.kind,
+            startsAt: assignment.startsAt.toISOString(),
+            endsAt: assignment.endsAt?.toISOString() ?? null,
+          },
+          newValue: {
+            active: false,
+            deactivatedAt: updated.deactivatedAt?.toISOString() ?? null,
+          },
+          note: dto.reason?.trim() || null,
+        },
+      });
+
+      return updated;
     });
   }
 
   async pointHistory(pointId: string) {
     const point = await this.prisma.point.findFirst({
       where: { id: pointId, deletedAt: null },
-      select: { id: true, code: true, name: true, region: { select: { id: true, name: true, technicianId: true } } },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        region: { select: { id: true, name: true, technicianId: true } },
+      },
     });
     if (!point) throw new NotFoundException('Nokta bulunamadı');
 
@@ -133,6 +218,22 @@ export class AssignmentsService {
     });
 
     return { point, assignments };
+  }
+
+  async auditHistory(assignmentId: string) {
+    const assignment = await this.prisma.pointAssignment.findUnique({
+      where: { id: assignmentId },
+      select: { id: true, pointId: true, kind: true, active: true },
+    });
+    if (!assignment) throw new NotFoundException('Görevlendirme bulunamadı');
+
+    const history = await this.prisma.adminAuditLog.findMany({
+      where: { entityType: 'POINT_ASSIGNMENT', entityId: assignmentId },
+      include: { actor: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { assignment, history };
   }
 
   async effectiveForPoint(pointId: string, asOfInput?: Date) {
