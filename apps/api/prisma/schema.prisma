@@ -160,11 +160,11 @@ model Region {
 
 model Point {
   id                    String                  @id @default(uuid()) @db.Uuid
-  code                  String                  @unique
+  code                  String
   name                  String
   address               String?
-  regionId              String                  @map("region_id") @db.Uuid
-  region                Region                  @relation(fields: [regionId], references: [id])
+  regionId              String?                 @map("region_id") @db.Uuid
+  region                Region?                 @relation(fields: [regionId], references: [id])
   status                PointStatus             @default(ACTIVE)
   maintenanceType       MaintenanceType         @default(STANDARD) @map("maintenance_type")
   maintenanceWeek       Int?                    @map("maintenance_week")
@@ -186,6 +186,7 @@ model Point {
   assignments           PointAssignment[]
   convertedFromProspect ProspectCustomer?       @relation("ProspectConvertedPoint")
 
+  @@index([code])
   @@index([regionId, status])
   @@index([maintenanceType, maintenanceWeek])
   @@map("points")

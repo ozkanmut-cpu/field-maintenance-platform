@@ -181,6 +181,7 @@ export default function Home() {
         <nav className="sideNav">
           <a className="active" href="#dashboard">▣ <span>Dashboard</span></a>
           <a href="#approvals">! <span>Onaylar</span></a>
+          <a href="#setup-pending">⚙ <span>Ayar Bekleyenler</span></a>
           <a href="#regions">◉ <span>Bölgeler</span></a>
           <a href="#points">● <span>Noktalar</span></a>
           <a href="#users">♙ <span>Teknisyenler</span></a>

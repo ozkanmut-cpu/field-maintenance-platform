@@ -59,7 +59,7 @@ export class ProspectConversionService {
       }
     }
 
-    const existingPoint = await this.prisma.point.findUnique({ where: { code } });
+    const existingPoint = await this.prisma.point.findFirst({ where: { code, deletedAt: null } });
     if (existingPoint) {
       throw new ConflictException({
         message: 'Bu SAP No / nokta kodu ile zaten gerçek bir nokta var',

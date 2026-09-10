@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
+import { ImportPointsDto } from './dto/import-points.dto';
 
 @Injectable()
 export class PointsService {
@@ -41,10 +42,12 @@ export class PointsService {
     return point;
   }
 
-  async create(dto: CreatePointDto) {
+  async create(adminUserId: string, dto: CreatePointDto) {
+    await this.requireAdmin(adminUserId);
+    await this.assertUniqueCode(dto.code);
     this.validateSchedule(dto.maintenanceType, dto.maintenanceWeek, dto.smartcleanReferenceAt);
 
-    return this.prisma.point.create({
+    const point = await this.prisma.point.create({
       data: {
         code: dto.code.trim(),
         name: dto.name.trim(),
@@ -59,30 +62,107 @@ export class PointsService {
             : null,
       },
     });
+    await this.audit(adminUserId, point.id, 'POINT_CREATED', null, point);
+    return point;
   }
 
-  async update(id: string, dto: UpdatePointDto) {
+  async update(adminUserId: string, id: string, dto: UpdatePointDto) {
+    await this.requireAdmin(adminUserId);
     const existing = await this.get(id);
+    if (dto.code !== undefined) await this.assertUniqueCode(dto.code, id);
     const maintenanceType = dto.maintenanceType ?? existing.maintenanceType;
     const maintenanceWeek = dto.maintenanceWeek ?? existing.maintenanceWeek ?? undefined;
     const smartcleanReferenceAt = dto.smartcleanReferenceAt ?? existing.smartcleanReferenceAt?.toISOString();
+    const scheduleTouched =
+      dto.maintenanceType !== undefined ||
+      dto.maintenanceWeek !== undefined ||
+      dto.smartcleanReferenceAt !== undefined;
 
-    this.validateSchedule(maintenanceType, maintenanceWeek, smartcleanReferenceAt);
+    if (scheduleTouched) {
+      this.validateSchedule(maintenanceType, maintenanceWeek, smartcleanReferenceAt);
+    }
 
     const data: Prisma.PointUpdateInput = {
       ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
       ...(dto.regionId !== undefined ? { region: { connect: { id: dto.regionId } } } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
-      maintenanceType,
-      maintenanceWeek: maintenanceType === MaintenanceType.STANDARD ? maintenanceWeek : null,
-      smartcleanReferenceAt:
-        maintenanceType === MaintenanceType.SMARTCLEAN && smartcleanReferenceAt
-          ? this.validDate(smartcleanReferenceAt, 'smartcleanReferenceAt')
-          : null,
+      ...(scheduleTouched
+        ? {
+            maintenanceType,
+            maintenanceWeek: maintenanceType === MaintenanceType.STANDARD ? maintenanceWeek : null,
+            smartcleanReferenceAt:
+              maintenanceType === MaintenanceType.SMARTCLEAN && smartcleanReferenceAt
+                ? this.validDate(smartcleanReferenceAt, 'smartcleanReferenceAt')
+                : null,
+          }
+        : {}),
     };
 
-    return this.prisma.point.update({ where: { id }, data });
+    const updated = await this.prisma.point.update({ where: { id }, data });
+    await this.audit(adminUserId, id, 'POINT_UPDATED', existing, updated);
+    return updated;
+  }
+
+  async setupPending() {
+    const points = await this.prisma.point.findMany({
+      where: { deletedAt: null, status: 'ACTIVE' },
+      orderBy: [{ name: 'asc' }],
+      include: { region: { include: { technician: { select: { id: true, name: true, username: true, active: true } } } } },
+    });
+    const allCodes = await this.prisma.point.findMany({ where: { deletedAt: null }, select: { code: true } });
+    const codeCounts = new Map<string, number>();
+    for (const point of allCodes) codeCounts.set(point.code.trim(), (codeCounts.get(point.code.trim()) ?? 0) + 1);
+    const items = points.flatMap((point) => {
+      const reasons: string[] = [];
+      if (/^GECICI-/i.test(point.code.trim())) reasons.push('TEMPORARY_CODE');
+      if (!point.region) reasons.push('REGION_MISSING');
+      else if (!point.region.technician || !point.region.technician.active) reasons.push('TECHNICIAN_MISSING');
+      if (point.maintenanceType === MaintenanceType.STANDARD && ![1, 2].includes(point.maintenanceWeek ?? 0)) reasons.push('STANDARD_WEEK_MISSING');
+      if (point.maintenanceType === MaintenanceType.SMARTCLEAN && !point.smartcleanReferenceAt) reasons.push('SMARTCLEAN_REFERENCE_MISSING');
+      if ((codeCounts.get(point.code.trim()) ?? 0) > 1) reasons.push('DUPLICATE_CODE');
+      return reasons.length ? [{ ...point, setupReasons: reasons }] : [];
+    });
+    return { count: items.length, items };
+  }
+
+  async importPoints(adminUserId: string, dto: ImportPointsDto) {
+    await this.requireAdmin(adminUserId);
+    let imported = 0, skippedPassiveMissingCode = 0, skippedExisting = 0, temporaryCodes = 0;
+    const createdIds: string[] = [];
+    for (const raw of dto.rows) {
+      const row = raw as Record<string, unknown>;
+      const statusText = String(row.status ?? row['Durum'] ?? 'ACTIVE').trim().toUpperCase();
+      const status = statusText === 'PASIF' || statusText === 'PASİF' || statusText === 'PASSIVE' ? 'PASSIVE' : statusText === 'CANCELLED' || statusText === 'IPTAL' || statusText === 'İPTAL' ? 'CANCELLED' : 'ACTIVE';
+      let code = String(row.customerNo ?? row['Müşteri No'] ?? '').trim();
+      const name = String(row.customerName ?? row['Müşteri Adı'] ?? '').trim();
+      if (!name) throw new BadRequestException('Import satırında müşteri adı zorunludur');
+      if (!code && status === 'PASSIVE') { skippedPassiveMissingCode += 1; continue; }
+      if (!code) { code = await this.nextTemporaryCode(); temporaryCodes += 1; }
+      const regionName = String(row.region ?? row['Bölge'] ?? '').trim();
+      const technicianName = String(row.technician ?? row['Teknisyen'] ?? '').trim();
+      let regionId: string | null = null;
+      if (regionName) {
+        const technician = technicianName ? await this.prisma.user.findFirst({ where: { name: { equals: technicianName, mode: 'insensitive' }, role: UserRole.TECHNICIAN, active: true } }) : null;
+        const region = await this.prisma.region.upsert({ where: { name: regionName }, update: technician ? { technicianId: technician.id } : {}, create: { name: regionName, technicianId: technician?.id ?? null } });
+        regionId = region.id;
+      }
+      const smartRaw = row.smartClean ?? row['SmartClean'] ?? row['Smartclean Var'];
+      const smart = smartRaw === true || /^(VAR|VAR 1|EVET|YES|TRUE|1)$/i.test(String(smartRaw ?? '').trim());
+      const weekRaw = row.maintenanceWeek ?? row['Rut Haftası'];
+      const week = Number(weekRaw);
+      const maintenanceWeek = !smart && [1,2].includes(week) ? week : null;
+      const maintenanceType = smart ? MaintenanceType.SMARTCLEAN : MaintenanceType.STANDARD;
+      const existingExact = await this.prisma.point.findFirst({
+        where: { code, name, regionId, status, maintenanceType, maintenanceWeek, deletedAt: null },
+        select: { id: true },
+      });
+      if (existingExact) { skippedExisting += 1; continue; }
+      const point = await this.prisma.point.create({ data: { code, name, regionId, status, maintenanceType, maintenanceWeek, smartcleanReferenceAt: null } });
+      await this.audit(adminUserId, point.id, 'POINT_IMPORTED', null, point);
+      createdIds.push(point.id); imported += 1;
+    }
+    return { imported, skippedPassiveMissingCode, skippedExisting, temporaryCodes, createdIds };
   }
 
   async addAlias(pointId: string, dto: AddPointAliasDto) {
@@ -215,7 +295,7 @@ export class PointsService {
     code: string;
     name: string;
     address: string | null;
-    regionId: string;
+    regionId: string | null;
     status: unknown;
     googlePlaceId: string | null;
     googleBusinessName: string | null;
@@ -295,6 +375,23 @@ export class PointsService {
       .replace(/[^a-z0-9]+/g, ' ')
       .trim()
       .replace(/\s+/g, ' ');
+  }
+
+  private async assertUniqueCode(code: string, excludeId?: string) {
+    const normalized = code.trim();
+    if (!normalized) throw new BadRequestException('Müşteri numarası boş olamaz');
+    const duplicate = await this.prisma.point.findFirst({ where: { code: normalized, deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) }, select: { id: true } });
+    if (duplicate) throw new BadRequestException('Bu müşteri numarası başka bir noktada kullanılıyor');
+  }
+
+  private async nextTemporaryCode() {
+    const rows = await this.prisma.point.findMany({ where: { code: { startsWith: 'GECICI-' } }, select: { code: true } });
+    const max = rows.reduce((acc, row) => Math.max(acc, Number(row.code.match(/^GECICI-(\d+)$/i)?.[1] ?? 0)), 0);
+    return `GECICI-${String(max + 1).padStart(4, '0')}`;
+  }
+
+  private async audit(actorId: string, entityId: string, action: string, oldValue: unknown, newValue: unknown) {
+    await this.prisma.adminAuditLog.create({ data: { actorId, entityType: 'Point', entityId, action, oldValue: oldValue as Prisma.InputJsonValue, newValue: newValue as Prisma.InputJsonValue } });
   }
 
   private validDate(value: string, field: string) {

@@ -19,13 +19,16 @@ type Point = {
   maintenanceType: 'STANDARD' | 'SMARTCLEAN';
   maintenanceWeek?: number | null;
   smartcleanReferenceAt?: string | null;
-  region: Region;
+  region: Region | null;
 };
+
+type SetupPendingReason = 'TEMPORARY_CODE' | 'REGION_MISSING' | 'TECHNICIAN_MISSING' | 'STANDARD_WEEK_MISSING' | 'SMARTCLEAN_REFERENCE_MISSING' | 'DUPLICATE_CODE';
+type SetupPendingItem = Point & { setupReasons: SetupPendingReason[] };
 
 type AttemptReviewItem = {
   id: string; reason: 'BUSINESS_CLOSED' | 'AUTHORIZED_PERSON_UNAVAILABLE' | 'ACCESS_FAILED' | 'OTHER';
   note?: string | null; attemptedAt: string;
-  point: { id: string; code: string; name: string; maintenanceType: 'STANDARD' | 'SMARTCLEAN'; region: { name: string } };
+  point: { id: string; code: string; name: string; maintenanceType: 'STANDARD' | 'SMARTCLEAN'; region: { name: string } | null };
   technician: { id: string; name: string; username: string };
   assistedForTechnician?: { id: string; name: string; username: string } | null;
 };
@@ -38,12 +41,14 @@ type Props = { users: Technician[] };
 export default function Operations({ users }: Props) {
   const [regions, setRegions] = useState<Region[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
+  const [setupPending, setSetupPending] = useState<SetupPendingItem[]>([]);
   const [attemptQueue, setAttemptQueue] = useState<AttemptReviewItem[]>([]);
   const [attemptHistory, setAttemptHistory] = useState<AttemptHistoryItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [regionName, setRegionName] = useState('');
   const [regionTechnicianId, setRegionTechnicianId] = useState('');
+  const [importResult, setImportResult] = useState('');
   const [pointForm, setPointForm] = useState({
     code: '', name: '', regionId: '', status: 'ACTIVE',
     maintenanceType: 'STANDARD', maintenanceWeek: '1', smartcleanReferenceAt: '',
@@ -67,14 +72,16 @@ export default function Operations({ users }: Props) {
   }
 
   async function load() {
-    const [regionList, pointList, attemptReview, reviewHistory] = await Promise.all([
+    const [regionList, pointList, setupQueue, attemptReview, reviewHistory] = await Promise.all([
       api<Region[]>('/api/backend/regions'),
       api<Point[]>('/api/backend/points'),
+      api<{ count: number; items: SetupPendingItem[] }>('/api/backend/points/setup-pending'),
       api<{ count: number; items: AttemptReviewItem[] }>('/api/backend/maintenance/attempt-review-queue'),
       api<{ count: number; items: AttemptHistoryItem[] }>('/api/backend/maintenance/attempt-review-history?limit=20'),
     ]);
     setRegions(regionList);
     setPoints(pointList);
+    setSetupPending(setupQueue.items);
     setAttemptQueue(attemptReview.items);
     setAttemptHistory(reviewHistory.items);
     setPointForm((current) => ({ ...current, regionId: current.regionId || regionList[0]?.id || '' }));
@@ -109,6 +116,38 @@ export default function Operations({ users }: Props) {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
+  async function importWorkbook(file: File) {
+    setBusy(true); setError(''); setImportResult('');
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) throw new Error('Excel dosyasında çalışma sayfası bulunamadı.');
+      const headers = new Map<string, number>();
+      worksheet.getRow(1).eachCell((cell, col) => headers.set(String(cell.text).trim(), col));
+      const required = ['Teknisyen', 'Bölge', 'Rut Haftası', 'Müşteri No', 'Müşteri Adı', 'Durum', 'SmartClean'];
+      const missing = required.filter((name) => !headers.has(name));
+      if (missing.length) throw new Error(`Eksik Excel sütunu: ${missing.join(', ')}`);
+      const rows: Record<string, unknown>[] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const get = (name: string) => row.getCell(headers.get(name)!).text.trim();
+        if (!get('Müşteri Adı')) return;
+        rows.push({
+          technician: get('Teknisyen'), region: get('Bölge'),
+          maintenanceWeek: get('Rut Haftası') ? Number(get('Rut Haftası')) : null,
+          customerNo: get('Müşteri No'), customerName: get('Müşteri Adı'),
+          status: get('Durum'), smartClean: get('SmartClean'),
+        });
+      });
+      const result = await api<{ imported: number; skippedPassiveMissingCode: number; skippedExisting: number; temporaryCodes: number }>('/api/backend/points/import', { method: 'POST', body: JSON.stringify({ rows }) });
+      setImportResult(`${result.imported} nokta aktarıldı · ${result.skippedExisting} zaten mevcut · ${result.temporaryCodes} geçici no · ${result.skippedPassiveMissingCode} pasif/no eksik atlandı`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
   async function createPoint(event: FormEvent) {
     event.preventDefault();
     setBusy(true); setError('');
@@ -153,6 +192,68 @@ export default function Operations({ users }: Props) {
     finally { setBusy(false); }
   }
 
+  async function fixSetup(point: SetupPendingItem, reason: SetupPendingReason) {
+    let payload: Record<string, unknown> | null = null;
+    if (reason === 'REGION_MISSING') {
+      const choices = regions.filter((region) => !/^(BELİRLENMEDİ|BELIRLENMEDI|AYAR BEKLİYOR|AYAR BEKLIYOR)$/i.test(region.name));
+      const value = window.prompt(`Bölge adını girin:\n${choices.map((region) => region.name).join(', ')}`);
+      if (value === null) return;
+      const selected = choices.find((region) => region.name.toLocaleLowerCase('tr-TR') === value.trim().toLocaleLowerCase('tr-TR'));
+      if (!selected) { setError('Listede bulunan geçerli bir bölge adı girilmelidir.'); return; }
+      payload = { regionId: selected.id };
+    } else if (reason === 'STANDARD_WEEK_MISSING') {
+      const value = window.prompt('Rut haftası seçin: 1 veya 2');
+      if (value === null) return;
+      if (value !== '1' && value !== '2') {
+        setError('Rut haftası yalnızca 1 veya 2 olabilir. 0 manuel girilemez.');
+        return;
+      }
+      payload = { maintenanceWeek: Number(value) };
+    } else if (reason === 'TECHNICIAN_MISSING') {
+      setError('Bu noktanın bölgesine önce Bölge bölümünden aktif teknisyen atayın.');
+      return;
+    } else if (reason === 'DUPLICATE_CODE') {
+      const value = window.prompt('Bu nokta için doğru benzersiz müşteri numarasını girin:', point.code);
+      if (value === null) return;
+      const code = value.trim();
+      if (!code || code === point.code) { setError('Farklı ve geçerli bir müşteri numarası girilmelidir.'); return; }
+      payload = { code };
+    } else if (reason === 'TEMPORARY_CODE') {
+      const value = window.prompt('Gerçek müşteri numarasını girin:', point.code);
+      if (value === null) return;
+      const code = value.trim();
+      if (!code || /^GECICI-/i.test(code)) {
+        setError('Geçerli gerçek müşteri numarası girilmelidir.');
+        return;
+      }
+      payload = { code };
+    } else {
+      const value = window.prompt('SmartClean referans tarihi (YYYY-MM-DD):');
+      if (value === null) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+        setError('Tarih YYYY-MM-DD formatında olmalıdır.');
+        return;
+      }
+      payload = { smartcleanReferenceAt: value.trim() };
+    }
+
+    setBusy(true); setError('');
+    try {
+      await api(`/api/backend/points/${point.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  function setupReasonLabel(reason: SetupPendingReason) {
+    if (reason === 'REGION_MISSING') return 'Bölge bekliyor';
+    if (reason === 'STANDARD_WEEK_MISSING') return 'Rut haftası bekliyor';
+    if (reason === 'TEMPORARY_CODE') return 'Geçici müşteri no';
+    if (reason === 'TECHNICIAN_MISSING') return 'Teknisyen bekliyor';
+    if (reason === 'DUPLICATE_CODE') return 'Mükerrer müşteri no';
+    return 'SmartClean referans tarihi bekliyor';
+  }
+
   return (
     <>
       {error ? <div className="error banner">{error}</div> : null}
@@ -190,6 +291,40 @@ export default function Operations({ users }: Props) {
         </form>
       </section>
 
+      <section className="panel" id="point-import">
+        <div className="panelHeader">
+          <div><h2>Excel Nokta Aktarımı</h2><p>Temiz liste XLSX dosyasını yükle. Hatalı/eksik ayarlar otomatik olarak Ayar Bekleyen Noktalar'a düşer.</p></div>
+        </div>
+        <div className="compactForm">
+          <input type="file" accept=".xlsx" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void importWorkbook(file); e.currentTarget.value = ''; }} />
+          {importResult ? <span className="pill active">{importResult}</span> : null}
+        </div>
+      </section>
+
+      <section className="panel priorityPanel" id="setup-pending">
+        <div className="panelHeader">
+          <div><h2>Ayar Bekleyen Noktalar</h2><p>Eksik veya geçici ayarı olan aktif noktalar otomatik olarak burada görünür. Düzeltildiğinde listeden kendiliğinden çıkar.</p></div>
+          <span className="pill">{setupPending.length} bekliyor</span>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead><tr><th>Nokta</th><th>Bölge</th><th>Bekleyen ayar</th><th></th></tr></thead>
+            <tbody>
+              {setupPending.length === 0 ? <tr><td colSpan={4}>Ayar bekleyen nokta yok.</td></tr> : setupPending.map((point) => (
+                <tr key={point.id}>
+                  <td><strong>{point.name}</strong><div className="muted">{point.code}</div></td>
+                  <td>{point.region?.name || 'Bölge bekliyor'}</td>
+                  <td>{point.setupReasons.map((reason) => <div key={reason}><span className="pill">{setupReasonLabel(reason)}</span></div>)}</td>
+                  <td className="actions">{point.setupReasons.map((reason) => (
+                    <button className="small" key={reason} disabled={busy} onClick={() => void fixSetup(point, reason)}>Düzelt</button>
+                  ))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="panel priorityPanel" id="approvals">
         <div className="panelHeader">
           <div><h2>Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
@@ -201,7 +336,7 @@ export default function Operations({ users }: Props) {
             <tbody>
               {attemptQueue.length === 0 ? <tr><td colSpan={5}>Bekleyen yapılamadı kaydı yok.</td></tr> : attemptQueue.map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region.name}</div></td>
+                  <td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region?.name || 'Bölge yok'}</div></td>
                   <td>{item.technician.name}{item.assistedForTechnician ? <div className="muted">{item.assistedForTechnician.name} için yardım</div> : null}</td>
                   <td>{item.reason === 'BUSINESS_CLOSED' ? 'İşletme kapalı' : item.reason === 'AUTHORIZED_PERSON_UNAVAILABLE' ? 'Yetkili kişi yok' : item.reason === 'ACCESS_FAILED' ? 'Erişim sağlanamadı' : 'Diğer'}{item.note ? <div className="muted">{item.note}</div> : null}</td>
                   <td>{new Date(item.attemptedAt).toLocaleString('tr-TR')}</td>
@@ -219,7 +354,7 @@ export default function Operations({ users }: Props) {
           <thead><tr><th>Nokta</th><th>Karar</th><th>Teknisyen</th><th>Yönetici</th><th>Tarih</th></tr></thead>
           <tbody>{attemptHistory.length === 0 ? <tr><td colSpan={5}>Henüz karar geçmişi yok.</td></tr> : attemptHistory.map((item) => (
             <tr key={item.id}>
-              <td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region.name}</div></td>
+              <td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region?.name || 'Bölge yok'}</div></td>
               <td><span className={item.reviewStatus === 'APPROVED' ? 'pill active' : 'pill'}>{item.reviewStatus === 'APPROVED' ? 'ONAYLANDI / KAPANDI' : 'REDDEDİLDİ / AÇIK'}</span>{item.reviewNote ? <div className="muted">{item.reviewNote}</div> : null}</td>
               <td>{item.technician.name}{item.assistedForTechnician ? <div className="muted">{item.assistedForTechnician.name} için yardım</div> : null}</td>
               <td>{item.reviewedBy?.name || '—'}</td>
@@ -239,8 +374,8 @@ export default function Operations({ users }: Props) {
                 <tr key={point.id}>
                   <td>{point.code}</td>
                   <td><strong>{point.name}</strong><div className="muted">{point.address || 'Adres yok'}</div></td>
-                  <td>{point.region.name}</td>
-                  <td>{point.maintenanceType === 'STANDARD' ? `Standart / Hafta ${point.maintenanceWeek}` : 'SmartClean'}</td>
+                  <td>{point.region?.name || 'Bölge bekliyor'}</td>
+                  <td>{point.maintenanceType === 'STANDARD' ? point.maintenanceWeek ? `Standart / Hafta ${point.maintenanceWeek}` : 'Standart / Ayar bekliyor' : 'SmartClean'}</td>
                   <td><select value={point.status} onChange={(e) => void changePointStatus(point, e.target.value as Point['status'])} disabled={busy}>
                     <option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option><option value="CANCELLED">İptal</option>
                   </select></td>

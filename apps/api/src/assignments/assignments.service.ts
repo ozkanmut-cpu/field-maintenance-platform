@@ -291,7 +291,7 @@ export class AssignmentsService {
       };
     }
 
-    const regionTechnician = point.region.technician;
+    const regionTechnician = point.region?.technician ?? null;
     return {
       pointId,
       source: 'REGION' as const,

@@ -46,10 +46,11 @@ export class MaintenanceEngineService {
       standardByPoint.set(obligation.pointId, list);
     }
 
-    const standardRows = Array.from(standardByPoint.values()).map((obligations) => {
+    const standardRows = Array.from(standardByPoint.values()).flatMap((obligations) => {
       const oldest = obligations[0];
       const overdueCount = obligations.filter((item) => item.dueEnd < asOf).length;
-      return {
+      if (!oldest.point.region) return [];
+      return [{
         pointId: oldest.point.id,
         pointCode: oldest.point.code,
         pointName: oldest.point.name,
@@ -65,7 +66,7 @@ export class MaintenanceEngineService {
         priority: overdueCount > 0 ? ('OVERDUE' as Priority) : ('CURRENT' as Priority),
         overduePeriods: overdueCount,
         obligationId: oldest.id,
-      };
+      }];
     });
 
     const smartcleanPoints = await this.prisma.point.findMany({
@@ -91,6 +92,7 @@ export class MaintenanceEngineService {
 
     const smartcleanRows = smartcleanPoints
       .map((point) => {
+        if (!point.region) return null;
         const base = point.visits[0]?.performedAt ?? point.smartcleanReferenceAt;
         if (!base) return null;
         let dueDate = this.addCalendarMonths(this.toDateOnly(base), 2);

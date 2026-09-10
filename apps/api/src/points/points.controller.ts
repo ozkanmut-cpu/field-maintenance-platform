@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
+import { ImportPointsDto } from './dto/import-points.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
 import { PointsService } from './points.service';
 
@@ -19,11 +20,20 @@ export class PointsController {
 
   @Roles(UserRole.ADMIN)
   @Get('duplicate-suggestions')
-  duplicateSuggestions(
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('limit') limit?: string,
-  ) {
+  duplicateSuggestions(@CurrentUser() user: AuthenticatedUser, @Query('limit') limit?: string) {
     return this.points.duplicateSuggestions(user.id, limit ? Number(limit) : 100);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('setup-pending')
+  setupPending() {
+    return this.points.setupPending();
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('import')
+  importPoints(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportPointsDto) {
+    return this.points.importPoints(user.id, dto);
   }
 
   @Get(':id')
@@ -38,8 +48,8 @@ export class PointsController {
 
   @Roles(UserRole.ADMIN)
   @Post()
-  create(@Body() dto: CreatePointDto) {
-    return this.points.create(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePointDto) {
+    return this.points.create(user.id, dto);
   }
 
   @Roles(UserRole.ADMIN)
@@ -50,7 +60,7 @@ export class PointsController {
 
   @Roles(UserRole.ADMIN)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdatePointDto) {
-    return this.points.update(id, dto);
+  update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdatePointDto) {
+    return this.points.update(user.id, id, dto);
   }
 }

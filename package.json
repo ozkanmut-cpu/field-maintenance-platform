@@ -10,7 +10,8 @@
     "dev:api": "npm run start:dev -w @fmp/api",
     "build:api": "npm run build -w @fmp/api",
     "prisma:generate": "npm run prisma:generate -w @fmp/api",
-    "prisma:migrate": "npm run prisma:migrate -w @fmp/api"
+    "prisma:migrate": "npm run prisma:migrate -w @fmp/api",
+    "prisma:validate": "npm run prisma:validate -w @fmp/api"
   },
   "engines": {
     "node": ">=22"
