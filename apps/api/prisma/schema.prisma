@@ -65,10 +65,10 @@ enum PointAssignmentKind {
 }
 
 enum NonMaintenanceVisitPurpose {
-  CONTROL
-  CUSTOMER_REQUEST
-  PAPERWORK
-  OTHER
+  BREAKDOWN
+  SURVEY
+  INSTALLATION
+  REMOVAL
 }
 
 model User {
@@ -271,7 +271,7 @@ model NonMaintenanceVisit {
   point              Point                      @relation(fields: [pointId], references: [id])
   technicianId       String                     @db.Uuid @map("technician_id")
   technician         User                       @relation(fields: [technicianId], references: [id])
-  purpose            NonMaintenanceVisitPurpose @default(OTHER)
+  purpose            NonMaintenanceVisitPurpose
   note               String?
   latitude           Decimal                    @db.Decimal(9, 6)
   longitude          Decimal                    @db.Decimal(9, 6)
