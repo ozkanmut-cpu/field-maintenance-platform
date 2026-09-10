@@ -34,6 +34,11 @@ enum PaperworkStatus {
   MISSING
 }
 
+enum PaperworkKind {
+  SERVICE_SLIP
+  CONFIRMATION
+}
+
 enum LocationSource {
   UNKNOWN
   GOOGLE_MATCH
@@ -49,16 +54,17 @@ enum AttemptReason {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  name         String
-  email        String   @unique
-  role         UserRole
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  visits       MaintenanceVisit[]
-  attempts     MaintenanceAttempt[]
-  regions      Region[] @relation("RegionTechnician")
+  id                 String                   @id @default(uuid()) @db.Uuid
+  name               String
+  email              String                   @unique
+  role               UserRole
+  active             Boolean                  @default(true)
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  visits             MaintenanceVisit[]
+  attempts           MaintenanceAttempt[]
+  regions            Region[]                 @relation("RegionTechnician")
+  paperworkChanges   PaperworkStatusHistory[] @relation("PaperworkChangedBy")
 
   @@map("users")
 }
@@ -121,34 +127,35 @@ model MaintenanceObligation {
 }
 
 model MaintenanceVisit {
-  id                       String          @id @default(uuid()) @db.Uuid
-  pointId                  String          @db.Uuid @map("point_id")
-  point                    Point           @relation(fields: [pointId], references: [id])
-  technicianId             String          @db.Uuid @map("technician_id")
-  technician               User            @relation(fields: [technicianId], references: [id])
-  obligationId             String?         @db.Uuid @map("obligation_id")
-  obligation               MaintenanceObligation? @relation(fields: [obligationId], references: [id])
-  performedAt              DateTime        @map("performed_at")
-  recordedAtServer         DateTime        @default(now()) @map("recorded_at_server")
-  deviceRecordedAt         DateTime?       @map("device_recorded_at")
-  enteredLate              Boolean         @default(false) @map("entered_late")
-  lateEntryMinutes         Int?            @map("late_entry_minutes")
-  lateEntryReason          String?         @map("late_entry_reason")
-  latitude                 Decimal         @db.Decimal(9, 6)
-  longitude                Decimal         @db.Decimal(9, 6)
-  accuracyMeters           Decimal?        @db.Decimal(8, 2) @map("accuracy_meters")
-  locationCapturedAt       DateTime        @map("location_captured_at")
-  locationLearningEligible Boolean         @default(true) @map("location_learning_eligible")
-  suspiciousBatch          Boolean         @default(false) @map("suspicious_batch")
-  reviewRecommended        Boolean         @default(false) @map("review_recommended")
-  reviewReason             String?         @map("review_reason")
-  status                   VisitStatus     @default(VALID)
-  reversedAt               DateTime?       @map("reversed_at")
-  reversedByUserId         String?         @db.Uuid @map("reversed_by_user_id")
-  serviceSlipStatus        PaperworkStatus @default(PENDING) @map("service_slip_status")
-  confirmationStatus       PaperworkStatus @default(PENDING) @map("confirmation_status")
-  idempotencyKey           String          @unique @map("idempotency_key")
-  createdAt                DateTime        @default(now()) @map("created_at")
+  id                       String                   @id @default(uuid()) @db.Uuid
+  pointId                  String                   @db.Uuid @map("point_id")
+  point                    Point                    @relation(fields: [pointId], references: [id])
+  technicianId             String                   @db.Uuid @map("technician_id")
+  technician               User                     @relation(fields: [technicianId], references: [id])
+  obligationId             String?                  @db.Uuid @map("obligation_id")
+  obligation               MaintenanceObligation?   @relation(fields: [obligationId], references: [id])
+  performedAt              DateTime                 @map("performed_at")
+  recordedAtServer         DateTime                 @default(now()) @map("recorded_at_server")
+  deviceRecordedAt         DateTime?                @map("device_recorded_at")
+  enteredLate              Boolean                  @default(false) @map("entered_late")
+  lateEntryMinutes         Int?                     @map("late_entry_minutes")
+  lateEntryReason          String?                  @map("late_entry_reason")
+  latitude                 Decimal                  @db.Decimal(9, 6)
+  longitude                Decimal                  @db.Decimal(9, 6)
+  accuracyMeters           Decimal?                 @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt       DateTime                 @map("location_captured_at")
+  locationLearningEligible Boolean                  @default(true) @map("location_learning_eligible")
+  suspiciousBatch          Boolean                  @default(false) @map("suspicious_batch")
+  reviewRecommended        Boolean                  @default(false) @map("review_recommended")
+  reviewReason             String?                  @map("review_reason")
+  status                   VisitStatus              @default(VALID)
+  reversedAt               DateTime?                @map("reversed_at")
+  reversedByUserId         String?                  @db.Uuid @map("reversed_by_user_id")
+  serviceSlipStatus        PaperworkStatus          @default(PENDING) @map("service_slip_status")
+  confirmationStatus       PaperworkStatus          @default(PENDING) @map("confirmation_status")
+  idempotencyKey           String                   @unique @map("idempotency_key")
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  paperworkHistory         PaperworkStatusHistory[]
 
   @@index([pointId, performedAt])
   @@index([technicianId, performedAt])
@@ -175,4 +182,21 @@ model MaintenanceAttempt {
   @@index([pointId, attemptedAt])
   @@index([technicianId, attemptedAt])
   @@map("maintenance_attempts")
+}
+
+model PaperworkStatusHistory {
+  id            String          @id @default(uuid()) @db.Uuid
+  visitId       String          @db.Uuid @map("visit_id")
+  visit         MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  kind          PaperworkKind
+  previousStatus PaperworkStatus @map("previous_status")
+  newStatus     PaperworkStatus @map("new_status")
+  changedById   String          @db.Uuid @map("changed_by_id")
+  changedBy     User            @relation("PaperworkChangedBy", fields: [changedById], references: [id])
+  changedAt     DateTime        @default(now()) @map("changed_at")
+  note          String?
+
+  @@index([visitId, changedAt])
+  @@index([changedById, changedAt])
+  @@map("paperwork_status_history")
 }
