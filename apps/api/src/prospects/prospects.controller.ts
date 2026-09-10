@@ -41,6 +41,11 @@ export class ProspectsController {
     return this.confirmation.confirm(dto);
   }
 
+  @Get(':id/history')
+  history(@Param('id') id: string) {
+    return this.conversion.history(id);
+  }
+
   @Post(':id/convert')
   convert(@Param('id') id: string, @Body() dto: ConvertProspectDto) {
     return this.conversion.convert(id, dto);
