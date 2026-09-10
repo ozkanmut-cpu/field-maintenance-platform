@@ -71,6 +71,23 @@ enum NonMaintenanceVisitPurpose {
   REMOVAL
 }
 
+enum ProspectSource {
+  GOOGLE_MAPS
+  MANUAL
+  EFESIM
+}
+
+enum ProspectStatus {
+  CANDIDATE
+  CONVERTED
+  ARCHIVED
+}
+
+enum ProspectVisitPurpose {
+  SURVEY
+  INSTALLATION
+}
+
 model User {
   id                    String                        @id @default(uuid()) @db.Uuid
   name                  String
@@ -82,6 +99,8 @@ model User {
   visits                MaintenanceVisit[]
   attempts              MaintenanceAttempt[]
   nonMaintenanceVisits  NonMaintenanceVisit[]
+  prospectVisits        ProspectVisit[]
+  prospectsCreated      ProspectCustomer[]             @relation("ProspectCreatedBy")
   regions               Region[]                      @relation("RegionTechnician")
   paperworkChanges      PaperworkStatusHistory[]      @relation("PaperworkChangedBy")
   reviewResolutions     MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
@@ -135,6 +154,51 @@ model Point {
   @@index([regionId, status])
   @@index([maintenanceType, maintenanceWeek])
   @@map("points")
+}
+
+model ProspectCustomer {
+  id             String         @id @default(uuid()) @db.Uuid
+  name           String
+  sapNo          String?        @map("sap_no")
+  source         ProspectSource
+  status         ProspectStatus @default(CANDIDATE)
+  googlePlaceId  String?        @map("google_place_id")
+  address        String?
+  latitude       Decimal        @db.Decimal(9, 6)
+  longitude      Decimal        @db.Decimal(9, 6)
+  createdById    String         @db.Uuid @map("created_by_id")
+  createdBy      User           @relation("ProspectCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  convertedAt    DateTime?      @map("converted_at")
+  visits         ProspectVisit[]
+
+  @@index([status, createdAt])
+  @@index([sapNo])
+  @@index([googlePlaceId])
+  @@map("prospect_customers")
+}
+
+model ProspectVisit {
+  id                 String               @id @default(uuid()) @db.Uuid
+  prospectId         String               @db.Uuid @map("prospect_id")
+  prospect           ProspectCustomer     @relation(fields: [prospectId], references: [id])
+  technicianId       String               @db.Uuid @map("technician_id")
+  technician         User                 @relation(fields: [technicianId], references: [id])
+  purpose            ProspectVisitPurpose
+  note               String?
+  latitude           Decimal              @db.Decimal(9, 6)
+  longitude          Decimal              @db.Decimal(9, 6)
+  accuracyMeters     Decimal?             @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime             @map("location_captured_at")
+  visitedAt          DateTime             @default(now()) @map("visited_at")
+  recordedAtServer   DateTime             @default(now()) @map("recorded_at_server")
+  idempotencyKey     String               @unique @map("idempotency_key")
+  createdAt          DateTime             @default(now()) @map("created_at")
+
+  @@index([prospectId, visitedAt])
+  @@index([technicianId, visitedAt])
+  @@map("prospect_visits")
 }
 
 model PointAlias {
