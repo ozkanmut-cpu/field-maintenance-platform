@@ -41,6 +41,13 @@ enum LocationSource {
   MANUAL
 }
 
+enum AttemptReason {
+  BUSINESS_CLOSED
+  AUTHORIZED_PERSON_UNAVAILABLE
+  ACCESS_FAILED
+  OTHER
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
@@ -50,6 +57,7 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   visits       MaintenanceVisit[]
+  attempts     MaintenanceAttempt[]
   regions      Region[] @relation("RegionTechnician")
 
   @@map("users")
@@ -89,6 +97,7 @@ model Point {
   deletedAt             DateTime?         @map("deleted_at")
   obligations           MaintenanceObligation[]
   visits                MaintenanceVisit[]
+  attempts              MaintenanceAttempt[]
 
   @@index([regionId, status])
   @@index([maintenanceType, maintenanceWeek])
@@ -145,4 +154,25 @@ model MaintenanceVisit {
   @@index([technicianId, performedAt])
   @@index([serviceSlipStatus, confirmationStatus])
   @@map("maintenance_visits")
+}
+
+model MaintenanceAttempt {
+  id                 String        @id @default(uuid()) @db.Uuid
+  pointId            String        @db.Uuid @map("point_id")
+  point              Point         @relation(fields: [pointId], references: [id])
+  technicianId       String        @db.Uuid @map("technician_id")
+  technician         User          @relation(fields: [technicianId], references: [id])
+  reason             AttemptReason
+  note               String?
+  latitude           Decimal       @db.Decimal(9, 6)
+  longitude          Decimal       @db.Decimal(9, 6)
+  accuracyMeters     Decimal?      @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime      @map("location_captured_at")
+  attemptedAt        DateTime      @default(now()) @map("attempted_at")
+  idempotencyKey     String        @unique @map("idempotency_key")
+  createdAt          DateTime      @default(now()) @map("created_at")
+
+  @@index([pointId, attemptedAt])
+  @@index([technicianId, attemptedAt])
+  @@map("maintenance_attempts")
 }
