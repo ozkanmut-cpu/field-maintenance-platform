@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ChangeRegionTechnicianDto } from './dto/change-region-technician.dto';
 import { CreateRegionDto } from './dto/create-region.dto';
+import { UpdateRegionDto } from './dto/update-region.dto';
 import { RegionsService } from './regions.service';
 
 @Controller('regions')
@@ -31,7 +32,7 @@ export class RegionsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: CreateRegionDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateRegionDto) {
     return this.regions.update(id, dto);
   }
 
