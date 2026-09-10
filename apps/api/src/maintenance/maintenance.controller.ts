@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
@@ -8,7 +9,10 @@ import { MaintenanceService } from './maintenance.service';
 
 @Controller('maintenance')
 export class MaintenanceController {
-  constructor(private readonly maintenance: MaintenanceService) {}
+  constructor(
+    private readonly maintenance: MaintenanceService,
+    private readonly anomaly: MaintenanceAnomalyService,
+  ) {}
 
   @Get('due')
   due(@Query('asOf') asOf?: string) {
@@ -36,6 +40,11 @@ export class MaintenanceController {
     return this.maintenance.paperworkHistory(visitId);
   }
 
+  @Get('review-queue')
+  reviewQueue(@Query('limit') limit?: string) {
+    return this.anomaly.reviewQueue(limit ? Number(limit) : 100);
+  }
+
   @Post('complete')
   complete(@Body() dto: CompleteMaintenanceDto) {
     return this.maintenance.complete(dto);
@@ -59,5 +68,16 @@ export class MaintenanceController {
   @Post('paperwork/bulk')
   paperworkBulk(@Body() dto: BulkUpdatePaperworkDto) {
     return this.maintenance.bulkUpdatePaperwork(dto);
+  }
+
+  @Post('anomaly-scan')
+  anomalyScan(
+    @Query('technicianId') technicianId: string,
+    @Query('lookbackHours') lookbackHours?: string,
+  ) {
+    return this.anomaly.scanTechnician(
+      technicianId,
+      lookbackHours ? Number(lookbackHours) : 24,
+    );
   }
 }
