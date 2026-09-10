@@ -64,23 +64,31 @@ enum PointAssignmentKind {
   TEMPORARY
 }
 
+enum NonMaintenanceVisitPurpose {
+  CONTROL
+  CUSTOMER_REQUEST
+  PAPERWORK
+  OTHER
+}
+
 model User {
-  id                 String                        @id @default(uuid()) @db.Uuid
-  name               String
-  email              String                        @unique
-  role               UserRole
-  active             Boolean                       @default(true)
-  createdAt          DateTime                      @default(now()) @map("created_at")
-  updatedAt          DateTime                      @updatedAt @map("updated_at")
-  visits             MaintenanceVisit[]
-  attempts           MaintenanceAttempt[]
-  regions            Region[]                      @relation("RegionTechnician")
-  paperworkChanges   PaperworkStatusHistory[]      @relation("PaperworkChangedBy")
-  reviewResolutions  MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
-  pointAliases       PointAlias[]                   @relation("PointAliasCreatedBy")
-  pointAssignments   PointAssignment[]              @relation("PointAssignedTechnician")
-  assignmentsCreated PointAssignment[]              @relation("PointAssignmentCreatedBy")
-  auditEvents        AdminAuditLog[]                @relation("AuditActor")
+  id                    String                        @id @default(uuid()) @db.Uuid
+  name                  String
+  email                 String                        @unique
+  role                  UserRole
+  active                Boolean                       @default(true)
+  createdAt             DateTime                      @default(now()) @map("created_at")
+  updatedAt             DateTime                      @updatedAt @map("updated_at")
+  visits                MaintenanceVisit[]
+  attempts              MaintenanceAttempt[]
+  nonMaintenanceVisits  NonMaintenanceVisit[]
+  regions               Region[]                      @relation("RegionTechnician")
+  paperworkChanges      PaperworkStatusHistory[]      @relation("PaperworkChangedBy")
+  reviewResolutions     MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
+  pointAliases          PointAlias[]                   @relation("PointAliasCreatedBy")
+  pointAssignments      PointAssignment[]              @relation("PointAssignedTechnician")
+  assignmentsCreated    PointAssignment[]              @relation("PointAssignmentCreatedBy")
+  auditEvents           AdminAuditLog[]                @relation("AuditActor")
 
   @@map("users")
 }
@@ -120,6 +128,7 @@ model Point {
   obligations           MaintenanceObligation[]
   visits                MaintenanceVisit[]
   attempts              MaintenanceAttempt[]
+  nonMaintenanceVisits  NonMaintenanceVisit[]
   aliases               PointAlias[]
   assignments           PointAssignment[]
 
@@ -254,6 +263,28 @@ model MaintenanceAttempt {
   @@index([pointId, attemptedAt])
   @@index([technicianId, attemptedAt])
   @@map("maintenance_attempts")
+}
+
+model NonMaintenanceVisit {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  pointId            String                     @db.Uuid @map("point_id")
+  point              Point                      @relation(fields: [pointId], references: [id])
+  technicianId       String                     @db.Uuid @map("technician_id")
+  technician         User                       @relation(fields: [technicianId], references: [id])
+  purpose            NonMaintenanceVisitPurpose @default(OTHER)
+  note               String?
+  latitude           Decimal                    @db.Decimal(9, 6)
+  longitude          Decimal                    @db.Decimal(9, 6)
+  accuracyMeters     Decimal?                   @db.Decimal(8, 2) @map("accuracy_meters")
+  locationCapturedAt DateTime                   @map("location_captured_at")
+  visitedAt          DateTime                   @default(now()) @map("visited_at")
+  recordedAtServer   DateTime                   @default(now()) @map("recorded_at_server")
+  idempotencyKey     String                     @unique @map("idempotency_key")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+
+  @@index([pointId, visitedAt])
+  @@index([technicianId, visitedAt])
+  @@map("non_maintenance_visits")
 }
 
 model PaperworkStatusHistory {
