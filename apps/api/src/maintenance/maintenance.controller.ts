@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
+import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { MaintenanceService } from './maintenance.service';
 
 @Controller('maintenance')
@@ -21,6 +23,19 @@ export class MaintenanceController {
     return this.maintenance.technicianDashboard(technicianId, asOf);
   }
 
+  @Get('technician-history')
+  technicianHistory(
+    @Query('technicianId') technicianId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.maintenance.technicianHistory(technicianId, date);
+  }
+
+  @Get('paperwork-history')
+  paperworkHistory(@Query('visitId') visitId: string) {
+    return this.maintenance.paperworkHistory(visitId);
+  }
+
   @Post('complete')
   complete(@Body() dto: CompleteMaintenanceDto) {
     return this.maintenance.complete(dto);
@@ -34,5 +49,15 @@ export class MaintenanceController {
   @Post('attempt')
   attempt(@Body() dto: MaintenanceAttemptDto) {
     return this.maintenance.recordAttempt(dto);
+  }
+
+  @Post('paperwork')
+  paperwork(@Body() dto: UpdatePaperworkDto) {
+    return this.maintenance.updatePaperwork(dto);
+  }
+
+  @Post('paperwork/bulk')
+  paperworkBulk(@Body() dto: BulkUpdatePaperworkDto) {
+    return this.maintenance.bulkUpdatePaperwork(dto);
   }
 }
