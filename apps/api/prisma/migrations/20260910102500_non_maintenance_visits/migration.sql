@@ -1,10 +1,10 @@
-CREATE TYPE "NonMaintenanceVisitPurpose" AS ENUM ('CONTROL', 'CUSTOMER_REQUEST', 'PAPERWORK', 'OTHER');
+CREATE TYPE "NonMaintenanceVisitPurpose" AS ENUM ('BREAKDOWN', 'SURVEY', 'INSTALLATION', 'REMOVAL');
 
 CREATE TABLE "non_maintenance_visits" (
     "id" UUID NOT NULL,
     "point_id" UUID NOT NULL,
     "technician_id" UUID NOT NULL,
-    "purpose" "NonMaintenanceVisitPurpose" NOT NULL DEFAULT 'OTHER',
+    "purpose" "NonMaintenanceVisitPurpose" NOT NULL,
     "note" TEXT,
     "latitude" DECIMAL(9,6) NOT NULL,
     "longitude" DECIMAL(9,6) NOT NULL,
