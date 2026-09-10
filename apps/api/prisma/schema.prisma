@@ -59,6 +59,11 @@ enum ReviewDecision {
   NEEDS_FOLLOWUP
 }
 
+enum PointAssignmentKind {
+  POINT_OVERRIDE
+  TEMPORARY
+}
+
 model User {
   id                 String                        @id @default(uuid()) @db.Uuid
   name               String
@@ -73,6 +78,8 @@ model User {
   paperworkChanges   PaperworkStatusHistory[]      @relation("PaperworkChangedBy")
   reviewResolutions  MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
   pointAliases       PointAlias[]                   @relation("PointAliasCreatedBy")
+  pointAssignments   PointAssignment[]              @relation("PointAssignedTechnician")
+  assignmentsCreated PointAssignment[]              @relation("PointAssignmentCreatedBy")
 
   @@map("users")
 }
@@ -113,6 +120,7 @@ model Point {
   visits                MaintenanceVisit[]
   attempts              MaintenanceAttempt[]
   aliases               PointAlias[]
+  assignments           PointAssignment[]
 
   @@index([regionId, status])
   @@index([maintenanceType, maintenanceWeek])
@@ -132,6 +140,27 @@ model PointAlias {
   @@unique([pointId, normalized])
   @@index([normalized])
   @@map("point_aliases")
+}
+
+model PointAssignment {
+  id           String              @id @default(uuid()) @db.Uuid
+  pointId      String              @db.Uuid @map("point_id")
+  point        Point               @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  technicianId String              @db.Uuid @map("technician_id")
+  technician   User                @relation("PointAssignedTechnician", fields: [technicianId], references: [id])
+  kind         PointAssignmentKind
+  startsAt     DateTime            @map("starts_at")
+  endsAt       DateTime?           @map("ends_at")
+  active       Boolean             @default(true)
+  reason       String?
+  createdById  String              @db.Uuid @map("created_by_id")
+  createdBy    User                @relation("PointAssignmentCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime            @default(now()) @map("created_at")
+  deactivatedAt DateTime?          @map("deactivated_at")
+
+  @@index([pointId, active, startsAt, endsAt])
+  @@index([technicianId, active])
+  @@map("point_assignments")
 }
 
 model MaintenanceObligation {
