@@ -4,10 +4,12 @@ import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
+import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
 import { ResolveReviewDto } from './dto/resolve-review.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { MaintenanceService } from './maintenance.service';
+import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 
 @Controller('maintenance')
@@ -17,6 +19,7 @@ export class MaintenanceController {
     private readonly anomaly: MaintenanceAnomalyService,
     private readonly locationLearning: PointLocationLearningService,
     private readonly googlePlaces: GooglePlaceMatchService,
+    private readonly nonMaintenanceVisits: NonMaintenanceVisitService,
   ) {}
 
   @Get('due')
@@ -38,6 +41,14 @@ export class MaintenanceController {
     @Query('date') date?: string,
   ) {
     return this.maintenance.technicianHistory(technicianId, date);
+  }
+
+  @Get('non-maintenance-visits')
+  nonMaintenanceVisitHistory(
+    @Query('technicianId') technicianId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.nonMaintenanceVisits.technicianHistory(technicianId, date);
   }
 
   @Get('paperwork-history')
@@ -68,6 +79,11 @@ export class MaintenanceController {
   @Post('attempt')
   attempt(@Body() dto: MaintenanceAttemptDto) {
     return this.maintenance.recordAttempt(dto);
+  }
+
+  @Post('non-maintenance-visit')
+  nonMaintenanceVisit(@Body() dto: NonMaintenanceVisitDto) {
+    return this.nonMaintenanceVisits.create(dto);
   }
 
   @Post('paperwork')
