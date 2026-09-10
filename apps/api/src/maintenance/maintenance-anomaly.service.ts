@@ -85,9 +85,23 @@ export class MaintenanceAnomalyService {
       }
     }
 
+    let appliedFlags = 0;
     for (const [visitId, reasons] of flagged.entries()) {
       const visit = visits.find((item) => item.id === visitId);
       if (!visit) continue;
+
+      const latestResolution = await this.prisma.maintenanceReviewResolution.findFirst({
+        where: { visitId },
+        orderBy: { resolvedAt: 'desc' },
+        select: { decision: true },
+      });
+
+      if (
+        latestResolution &&
+        latestResolution.decision !== ReviewDecision.NEEDS_FOLLOWUP
+      ) {
+        continue;
+      }
 
       await this.prisma.maintenanceVisit.update({
         where: { id: visitId },
@@ -98,6 +112,7 @@ export class MaintenanceAnomalyService {
           locationLearningEligible: false,
         },
       });
+      appliedFlags += 1;
     }
 
     return {
@@ -105,7 +120,7 @@ export class MaintenanceAnomalyService {
       scannedFrom: since,
       scannedTo: now,
       scannedVisits: visits.length,
-      flaggedVisits: flagged.size,
+      flaggedVisits: appliedFlags,
       thresholds: { windowMinutes, stationaryMeters, maxSpeedKmh },
     };
   }
