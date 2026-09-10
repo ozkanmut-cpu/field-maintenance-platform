@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
@@ -14,6 +15,7 @@ export class MaintenanceController {
     private readonly maintenance: MaintenanceService,
     private readonly anomaly: MaintenanceAnomalyService,
     private readonly locationLearning: PointLocationLearningService,
+    private readonly googlePlaces: GooglePlaceMatchService,
   ) {}
 
   @Get('due')
@@ -91,5 +93,15 @@ export class MaintenanceController {
   @Post('location-refresh-all')
   locationRefreshAll(@Query('limit') limit?: string) {
     return this.locationLearning.refreshEligiblePoints(limit ? Number(limit) : 100);
+  }
+
+  @Post('google-place-match')
+  googlePlaceMatch(@Query('pointId') pointId: string) {
+    return this.googlePlaces.matchPoint(pointId);
+  }
+
+  @Post('google-place-match-all')
+  googlePlaceMatchAll(@Query('limit') limit?: string) {
+    return this.googlePlaces.matchEligiblePoints(limit ? Number(limit) : 50);
   }
 }
