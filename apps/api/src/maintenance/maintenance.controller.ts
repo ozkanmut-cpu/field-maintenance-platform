@@ -6,12 +6,14 @@ import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { MaintenanceService } from './maintenance.service';
+import { PointLocationLearningService } from './point-location-learning.service';
 
 @Controller('maintenance')
 export class MaintenanceController {
   constructor(
     private readonly maintenance: MaintenanceService,
     private readonly anomaly: MaintenanceAnomalyService,
+    private readonly locationLearning: PointLocationLearningService,
   ) {}
 
   @Get('due')
@@ -79,5 +81,15 @@ export class MaintenanceController {
       technicianId,
       lookbackHours ? Number(lookbackHours) : 24,
     );
+  }
+
+  @Post('location-refresh')
+  locationRefresh(@Query('pointId') pointId: string) {
+    return this.locationLearning.refreshPoint(pointId);
+  }
+
+  @Post('location-refresh-all')
+  locationRefreshAll(@Query('limit') limit?: string) {
+    return this.locationLearning.refreshEligiblePoints(limit ? Number(limit) : 100);
   }
 }
