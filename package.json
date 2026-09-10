@@ -1,0 +1,18 @@
+{
+  "name": "field-maintenance-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev -w @fmp/api",
+    "build:api": "npm run build -w @fmp/api",
+    "prisma:generate": "npm run prisma:generate -w @fmp/api",
+    "prisma:migrate": "npm run prisma:migrate -w @fmp/api"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
