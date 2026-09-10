@@ -21,6 +21,7 @@ enum NonMaintenanceVisitPurpose { BREAKDOWN SURVEY INSTALLATION REMOVAL }
 enum ProspectSource { GOOGLE_MAPS MANUAL EFESIM }
 enum ProspectStatus { CANDIDATE CONVERTED ARCHIVED }
 enum ProspectVisitPurpose { SURVEY INSTALLATION }
+enum MaintenanceObligationStatus { OPEN COMPLETED MISSED }
 
 model User {
   id String @id @default(uuid()) @db.Uuid
@@ -189,11 +190,15 @@ model MaintenanceObligation {
   cycleKey String @map("cycle_key")
   dueStart DateTime @db.Date @map("due_start")
   dueEnd DateTime @db.Date @map("due_end")
+  status MaintenanceObligationStatus @default(OPEN)
   completedAt DateTime? @map("completed_at")
+  resolvedAt DateTime? @map("resolved_at")
+  resolvedByVisitId String? @db.Uuid @map("resolved_by_visit_id")
   createdAt DateTime @default(now()) @map("created_at")
   visits MaintenanceVisit[]
   @@unique([pointId, cycleKey])
-  @@index([dueStart, dueEnd, completedAt])
+  @@index([status, dueStart, dueEnd])
+  @@index([resolvedByVisitId])
   @@map("maintenance_obligations")
 }
 
