@@ -1,8 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PointStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRegionDto } from './dto/create-region.dto';
 import { ChangeRegionTechnicianDto } from './dto/change-region-technician.dto';
+import { CreateRegionDto } from './dto/create-region.dto';
+import { UpdateRegionDto } from './dto/update-region.dto';
 
 @Injectable()
 export class RegionsService {
@@ -27,16 +28,33 @@ export class RegionsService {
     });
   }
 
-  async update(id: string, dto: CreateRegionDto) {
-    const exists = await this.prisma.region.findUnique({ where: { id }, select: { id: true } });
-    if (!exists) throw new NotFoundException('Bölge bulunamadı');
+  async update(id: string, dto: UpdateRegionDto) {
+    const [region, admin] = await Promise.all([
+      this.prisma.region.findUnique({ where: { id }, select: { id: true, name: true } }),
+      this.prisma.user.findFirst({
+        where: { id: dto.adminUserId, active: true, role: UserRole.ADMIN },
+        select: { id: true },
+      }),
+    ]);
+    if (!region) throw new NotFoundException('Bölge bulunamadı');
+    if (!admin) throw new ForbiddenException('Bölge bilgisini yalnızca admin değiştirebilir');
 
-    return this.prisma.region.update({
-      where: { id },
-      data: {
-        name: dto.name.trim(),
-        technicianId: dto.technicianId ?? null,
-      },
+    const nextName = dto.name?.trim();
+    if (!nextName || nextName === region.name) return region;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.region.update({ where: { id }, data: { name: nextName } });
+      await tx.adminAuditLog.create({
+        data: {
+          entityType: 'REGION',
+          entityId: id,
+          action: 'NAME_CHANGED',
+          actorId: admin.id,
+          oldValue: { name: region.name },
+          newValue: { name: nextName },
+        },
+      });
+      return updated;
     });
   }
 
@@ -116,9 +134,7 @@ export class RegionsService {
       technicianName: preview.newTechnician.name,
     };
 
-    if (preview.sameTechnician) {
-      return { changed: false, preview };
-    }
+    if (preview.sameTechnician) return { changed: false, preview };
 
     return this.prisma.$transaction(async (tx) => {
       const region = await tx.region.update({
