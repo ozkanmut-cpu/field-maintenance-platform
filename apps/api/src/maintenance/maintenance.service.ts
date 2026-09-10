@@ -15,6 +15,7 @@ import {
   UserRole,
   VisitStatus,
 } from '@prisma/client';
+import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
@@ -36,6 +37,7 @@ export class MaintenanceService {
     private readonly anomaly: MaintenanceAnomalyService,
     private readonly locationLearning: PointLocationLearningService,
     private readonly googlePlaces: GooglePlaceMatchService,
+    private readonly assignments: AssignmentsService,
   ) {}
 
   due(asOf?: string) {
@@ -198,6 +200,14 @@ export class MaintenanceService {
       throw new BadRequestException('Bakım tarihi gelecekte olamaz');
     }
 
+    const effectiveAssignment = await this.assignments.effectiveForPoint(point.id, performedAt);
+    if (!effectiveAssignment.technicianId) {
+      throw new BadRequestException('Bu nokta için atanmış aktif teknisyen bulunmuyor');
+    }
+    if (effectiveAssignment.technicianId !== dto.technicianId) {
+      throw new ForbiddenException('Bu bakım tarihinde nokta başka bir teknisyene atanmış');
+    }
+
     const enteredLate = this.dateKey(performedAt) < this.dateKey(now);
     if (enteredLate && !dto.lateEntryReason) {
       throw new BadRequestException('Geriye dönük bakım girişinde neden zorunludur');
@@ -326,6 +336,14 @@ export class MaintenanceService {
       throw new BadRequestException('Pasif veya iptal noktada bakım denemesi kaydedilemez');
     }
 
+    const effectiveAssignment = await this.assignments.effectiveForPoint(point.id, new Date());
+    if (!effectiveAssignment.technicianId) {
+      throw new BadRequestException('Bu nokta için atanmış aktif teknisyen bulunmuyor');
+    }
+    if (effectiveAssignment.technicianId !== dto.technicianId) {
+      throw new ForbiddenException('Bu nokta başka bir teknisyene atanmış');
+    }
+
     const locationCapturedAt = new Date(dto.locationCapturedAt);
     this.assertValidDate(locationCapturedAt, 'locationCapturedAt');
 
@@ -432,8 +450,6 @@ export class MaintenanceService {
       await this.locationLearning.refreshPoint(pointId);
       await this.googlePlaces.matchPoint(pointId);
     } catch (error) {
-      // The maintenance itself is already valid and must never be rolled back
-      // because a background quality/enrichment step failed.
       this.logger.warn(
         `Maintenance post-processing failed for point ${pointId}: ${
           error instanceof Error ? error.message : String(error)
