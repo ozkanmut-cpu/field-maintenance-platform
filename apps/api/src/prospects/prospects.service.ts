@@ -22,6 +22,7 @@ type EfesimVisionResult = {
   customerName?: string;
   sapNo?: string;
   confidence?: number;
+  layoutMatched?: boolean;
 };
 
 @Injectable()
@@ -50,12 +51,30 @@ export class ProspectsService {
       throw new BadRequestException('Google Maps adayında googlePlaceId zorunludur');
     }
 
+    const sapNo = dto.sapNo?.trim() || null;
+    if (sapNo && !/^\d{6,10}$/.test(sapNo)) {
+      throw new BadRequestException('SAP No 6-10 haneli sayısal değer olmalıdır');
+    }
+
+    if (sapNo) {
+      const existingPoint = await this.prisma.point.findFirst({
+        where: { code: sapNo, deletedAt: null },
+        select: { id: true, code: true, name: true, status: true },
+      });
+      if (existingPoint) {
+        throw new ConflictException({
+          message: 'Bu SAP No zaten kayıtlı bir noktaya ait',
+          existingPoint,
+        });
+      }
+    }
+
     const duplicate = await this.prisma.prospectCustomer.findFirst({
       where: {
         status: ProspectStatus.CANDIDATE,
         OR: [
           ...(dto.googlePlaceId ? [{ googlePlaceId: dto.googlePlaceId }] : []),
-          ...(dto.sapNo ? [{ sapNo: dto.sapNo.trim() }] : []),
+          ...(sapNo ? [{ sapNo }] : []),
         ],
       },
     });
@@ -64,7 +83,7 @@ export class ProspectsService {
     return this.prisma.prospectCustomer.create({
       data: {
         name,
-        sapNo: dto.sapNo?.trim() || null,
+        sapNo,
         source: dto.source,
         googlePlaceId: dto.googlePlaceId?.trim() || null,
         address: dto.address?.trim() || null,
@@ -138,8 +157,21 @@ export class ProspectsService {
       },
       body: JSON.stringify({
         imageBase64: dto.imageBase64,
-        task: 'EFESIM ekran görüntüsünden yalnız müşteri adı ve SAP numarasını çıkar',
-        output: { customerName: 'string', sapNo: 'string', confidence: '0..1' },
+        task: 'EFESIM_DETAIL_HEADER_V1',
+        instructions: [
+          'Görüntünün üst kısmında mavi EFESİM başlığını bul.',
+          'Başlığın hemen altındaki ilk beyaz müşteri kartını kullan.',
+          'Kartın ilk satırındaki 6-10 haneli yalnız rakamlardan oluşan değeri sapNo olarak çıkar.',
+          'Aynı kartın ikinci satırındaki işletme adını customerName olarak çıkar.',
+          'ADRES VE İLETİŞİM BİLGİLERİ ve altındaki menü metinlerini müşteri adı olarak kullanma.',
+          'Alanlardan emin değilsen uydurma; ilgili alanı null döndür.',
+        ],
+        output: {
+          customerName: 'string|null',
+          sapNo: '6-10 digit string|null',
+          confidence: '0..1',
+          layoutMatched: 'boolean',
+        },
       }),
     });
     if (!response.ok) {
@@ -147,32 +179,71 @@ export class ProspectsService {
     }
 
     const extracted = (await response.json()) as EfesimVisionResult;
-    const customerName = extracted.customerName?.trim();
-    const sapNo = extracted.sapNo?.trim();
+    const customerName = this.cleanCustomerName(extracted.customerName);
+    const sapNo = this.cleanSapNo(extracted.sapNo);
+
     if (!customerName && !sapNo) {
-      throw new BadRequestException('Ekran görüntüsünden müşteri adı veya SAP numarası okunamadı');
+      throw new BadRequestException('EFESIM müşteri kartından müşteri adı veya SAP No okunamadı');
     }
 
-    let prospect = null;
-    if (customerName && dto.latitude !== undefined && dto.longitude !== undefined) {
-      prospect = await this.create({
+    const [existingPoint, existingProspect] = await Promise.all([
+      sapNo
+        ? this.prisma.point.findFirst({
+            where: { code: sapNo, deletedAt: null },
+            select: { id: true, code: true, name: true, status: true },
+          })
+        : null,
+      sapNo
+        ? this.prisma.prospectCustomer.findFirst({
+            where: { sapNo, status: ProspectStatus.CANDIDATE },
+            select: { id: true, name: true, sapNo: true, status: true },
+          })
+        : null,
+    ]);
+
+    return {
+      customerName,
+      sapNo,
+      confidence: extracted.confidence ?? null,
+      layoutMatched: extracted.layoutMatched ?? null,
+      requiresConfirmation: true,
+      duplicate: existingPoint
+        ? { type: 'POINT' as const, item: existingPoint }
+        : existingProspect
+          ? { type: 'PROSPECT' as const, item: existingProspect }
+          : null,
+      suggestedCreatePayload: {
         technicianId: dto.technicianId,
         name: customerName,
         sapNo,
         source: ProspectSource.EFESIM,
-        address: dto.address,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-      });
-    }
-
-    return {
-      customerName: customerName ?? null,
-      sapNo: sapNo ?? null,
-      confidence: extracted.confidence ?? null,
-      prospectCreated: Boolean(prospect),
-      prospect,
+        address: dto.address ?? null,
+        latitude: dto.latitude ?? null,
+        longitude: dto.longitude ?? null,
+      },
     };
+  }
+
+  private cleanSapNo(value?: string) {
+    if (!value) return null;
+    const digits = value.replace(/\D/g, '');
+    return /^\d{6,10}$/.test(digits) ? digits : null;
+  }
+
+  private cleanCustomerName(value?: string) {
+    if (!value) return null;
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized || normalized.length < 2 || normalized.length > 160) return null;
+    const forbidden = [
+      'ADRES VE İLETİŞİM BİLGİLERİ',
+      'SOĞUTUCU EKİPMAN',
+      'FIÇI ŞİŞE KULE ENVANTER',
+      'PLANSIZ AKTİVİTE',
+      'TABELA TENTE ENVANTER',
+      'TABELA TENTE İŞLEMLERİ',
+    ];
+    if (forbidden.some((item) => normalized.toLocaleUpperCase('tr-TR').startsWith(item))) return null;
+    return normalized;
   }
 
   private async requireTechnician(id: string) {
