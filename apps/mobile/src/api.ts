@@ -1,12 +1,19 @@
+import * as SecureStore from 'expo-secure-store';
+
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'TECHNICIAN';
+  tokenVersion: number;
+};
+
 export type EfesimExtractResult = {
   customerName: string | null;
   sapNo: string | null;
   confidence: number | null;
   layoutMatched: boolean | null;
-  duplicate: null | {
-    type: 'POINT' | 'PROSPECT';
-    item: Record<string, unknown>;
-  };
+  duplicate: null | { type: 'POINT' | 'PROSPECT'; item: Record<string, unknown> };
   googleMatch: null | {
     attempted: boolean;
     matched: boolean;
@@ -40,58 +47,73 @@ export type ProspectRecord = {
   googlePlaceId?: string | null;
 };
 
-export type ConfirmEfesimPayload = {
+export type ProspectVisitPurpose = 'SURVEY' | 'INSTALLATION';
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.field-maintenance-prod.com/api';
+const TOKEN_KEY = 'fmp.access-token';
+let accessToken: string | null = null;
+
+export async function restoreSessionToken() {
+  accessToken = await SecureStore.getItemAsync(TOKEN_KEY);
+  return accessToken;
+}
+
+export async function clearSessionToken() {
+  accessToken = null;
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+}
+
+async function saveSessionToken(token: string) {
+  accessToken = token;
+  await SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = body?.message;
+    throw new Error(Array.isArray(message) ? message.join(', ') : typeof message === 'string' ? message : `HTTP ${response.status}`);
+  }
+  return body as T;
+}
+
+export async function login(email: string, password: string) {
+  const result = await jsonRequest<{ user: AuthUser; accessToken: string; tokenType: string; expiresIn: number }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  await saveSessionToken(result.accessToken);
+  return result;
+}
+
+export function me() {
+  return jsonRequest<AuthUser>('/auth/me');
+}
+
+export function extractEfesim(input: { technicianId: string; imageBase64: string; latitude: number; longitude: number }) {
+  return jsonRequest<EfesimExtractResult>('/prospects/efesim-extract', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function confirmEfesim(input: {
   technicianId: string;
   customerName: string;
   sapNo?: string | null;
   googlePlaceId?: string | null;
   latitude: number;
   longitude: number;
-};
-
-export type ProspectVisitPurpose = 'SURVEY' | 'INSTALLATION';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.0.2.2:3000/api';
-
-async function jsonRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = body?.message;
-    throw new Error(
-      Array.isArray(message) ? message.join(', ') : typeof message === 'string' ? message : `HTTP ${response.status}`,
-    );
-  }
-  return body as T;
-}
-
-export function extractEfesim(input: {
-  technicianId: string;
-  imageBase64: string;
-  latitude: number;
-  longitude: number;
 }) {
-  return jsonRequest<EfesimExtractResult>('/prospects/efesim-extract', {
+  return jsonRequest<{ prospect: ProspectRecord; confirmationMode: string; addressEditable: false }>('/prospects/efesim-confirm', {
     method: 'POST',
     body: JSON.stringify(input),
   });
-}
-
-export function confirmEfesim(payload: ConfirmEfesimPayload) {
-  return jsonRequest<{ prospect: ProspectRecord; confirmationMode: string; addressEditable: false }>(
-    '/prospects/efesim-confirm',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
 }
 
 export function createProspectVisit(input: {
@@ -105,8 +127,5 @@ export function createProspectVisit(input: {
   locationCapturedAt: string;
   idempotencyKey: string;
 }) {
-  return jsonRequest<Record<string, unknown>>('/prospects/visits', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+  return jsonRequest<Record<string, unknown>>('/prospects/visits', { method: 'POST', body: JSON.stringify(input) });
 }

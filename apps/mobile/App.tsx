@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,19 +14,26 @@ import {
   View,
 } from 'react-native';
 import {
+  AuthUser,
+  clearSessionToken,
   confirmEfesim,
   createProspectVisit,
   EfesimExtractResult,
   extractEfesim,
+  login,
+  me,
   ProspectRecord,
   ProspectVisitPurpose,
+  restoreSessionToken,
 } from './src/api';
 
 type Step = 'START' | 'RESULT' | 'SAVED' | 'VISIT_SAVED';
 
-const TECHNICIAN_ID = process.env.EXPO_PUBLIC_TECHNICIAN_ID ?? '';
-
 export default function App() {
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [step, setStep] = useState<Step>('START');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<EfesimExtractResult | null>(null);
@@ -39,30 +46,72 @@ export default function App() {
 
   const google = result?.googleMatch;
   const strongGoogleMatch = Boolean(google?.matched && google.placeId);
+  const technicianId = user?.id ?? '';
 
   const addressText = useMemo(() => {
     if (strongGoogleMatch && useGoogle) return google?.address || 'Google adres bilgisi yok';
     return 'Adres yok — manuel adres girişi kapalı';
   }, [google, strongGoogleMatch, useGoogle]);
 
+  useEffect(() => {
+    void restoreSession();
+  }, []);
+
+  async function restoreSession() {
+    try {
+      const token = await restoreSessionToken();
+      if (!token) return;
+      const current = await me();
+      if (current.role !== 'TECHNICIAN') {
+        await clearSessionToken();
+        return;
+      }
+      setUser(current);
+    } catch {
+      await clearSessionToken();
+    } finally {
+      setSessionLoading(false);
+    }
+  }
+
+  async function signIn() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || password.length < 8) {
+      Alert.alert('Giriş bilgileri eksik', 'E-posta ve şifreni kontrol et.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const session = await login(cleanEmail, password);
+      if (session.user.role !== 'TECHNICIAN') {
+        await clearSessionToken();
+        throw new Error('Bu mobil uygulama teknisyen hesabı gerektiriyor.');
+      }
+      setUser(session.user);
+      setPassword('');
+    } catch (error) {
+      Alert.alert('Giriş yapılamadı', error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signOut() {
+    await clearSessionToken();
+    setUser(null);
+    setPassword('');
+    reset();
+  }
+
   async function ensureLocation() {
-    const locationPermission = await Location.requestForegroundPermissionsAsync();
-    if (!locationPermission.granted) {
-      throw new Error('Konum izni gerekli.');
-    }
-    const servicesEnabled = await Location.hasServicesEnabledAsync();
-    if (!servicesEnabled) {
-      throw new Error('Telefonun konum servisini açmalısın.');
-    }
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) throw new Error('Konum izni gerekli.');
+    if (!(await Location.hasServicesEnabledAsync())) throw new Error('Telefonun konum servisini açmalısın.');
     return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
   }
 
   async function beginEfesimFlow() {
-    if (!TECHNICIAN_ID) {
-      Alert.alert('Kurulum gerekli', 'EXPO_PUBLIC_TECHNICIAN_ID tanımlı değil.');
-      return;
-    }
-
+    if (!technicianId) return;
     setBusy(true);
     try {
       const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -70,31 +119,14 @@ export default function App() {
         Alert.alert('İzin gerekli', 'EFESİM ekran görüntüsünü seçebilmek için fotoğraf izni gerekli.');
         return;
       }
-
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 0.9,
-        base64: true,
-      });
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.9, base64: true });
       if (picked.canceled) return;
-
       const asset = picked.assets[0];
       if (!asset.base64) throw new Error('Ekran görüntüsü okunamadı');
-
       const location = await ensureLocation();
-      const coords = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
+      const coords = { latitude: location.coords.latitude, longitude: location.coords.longitude };
       setFieldLocation(coords);
-
-      const extracted = await extractEfesim({
-        technicianId: TECHNICIAN_ID,
-        imageBase64: asset.base64,
-        ...coords,
-      });
-
+      const extracted = await extractEfesim({ technicianId, imageBase64: asset.base64, ...coords });
       setResult(extracted);
       setCustomerName(extracted.customerName ?? '');
       setSapNo(extracted.sapNo ?? '');
@@ -108,14 +140,9 @@ export default function App() {
   }
 
   async function saveProspect() {
-    if (!result || !fieldLocation) return;
+    if (!result || !fieldLocation || !technicianId) return;
     if (result.duplicate) {
-      Alert.alert(
-        'Zaten kayıtlı',
-        result.duplicate.type === 'POINT'
-          ? 'Bu SAP No kayıtlı bir noktaya ait.'
-          : 'Bu SAP No için zaten aday müşteri var.',
-      );
+      Alert.alert('Zaten kayıtlı', result.duplicate.type === 'POINT' ? 'Bu SAP No kayıtlı bir noktaya ait.' : 'Bu SAP No için zaten aday müşteri var.');
       return;
     }
     const cleanName = customerName.trim();
@@ -123,11 +150,10 @@ export default function App() {
       Alert.alert('Müşteri adı gerekli', 'Müşteri adını kontrol et.');
       return;
     }
-
     setBusy(true);
     try {
       const confirmed = await confirmEfesim({
-        technicianId: TECHNICIAN_ID,
+        technicianId,
         customerName: cleanName,
         sapNo: sapNo.trim() || null,
         googlePlaceId: strongGoogleMatch && useGoogle ? google?.placeId ?? null : null,
@@ -144,21 +170,19 @@ export default function App() {
   }
 
   async function saveVisit() {
-    if (!prospect) return;
+    if (!prospect || !technicianId) return;
     setBusy(true);
     try {
       const location = await ensureLocation();
       await createProspectVisit({
         prospectId: prospect.id,
-        technicianId: TECHNICIAN_ID,
+        technicianId,
         purpose: visitPurpose,
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         accuracyMeters: location.coords.accuracy ?? undefined,
         locationCapturedAt: new Date(location.timestamp).toISOString(),
-        idempotencyKey: `prospect-visit-${TECHNICIAN_ID}-${prospect.id}-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 10)}`,
+        idempotencyKey: `prospect-visit-${technicianId}-${prospect.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       });
       setStep('VISIT_SAVED');
     } catch (error) {
@@ -179,124 +203,69 @@ export default function App() {
     setVisitPurpose('SURVEY');
   }
 
+  if (sessionLoading) {
+    return <SafeAreaView style={styles.center}><ActivityIndicator size="large" /><Text>Oturum kontrol ediliyor...</Text></SafeAreaView>;
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="dark" />
+        <View style={styles.loginWrap}>
+          <Text style={styles.title}>Field Maintenance</Text>
+          <Text style={styles.subtitle}>Teknisyen girişi</Text>
+          <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" placeholder="E-posta" />
+          <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="password" placeholder="Şifre" onSubmitEditing={() => void signIn()} />
+          <PrimaryButton title="GİRİŞ YAP" onPress={() => void signIn()} disabled={busy} />
+          {busy && <ActivityIndicator size="large" />}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Kayıtlı Olmayan Nokta</Text>
-        <Text style={styles.subtitle}>Önce EFESİM</Text>
+        <View style={styles.headerRow}>
+          <View><Text style={styles.title}>Kayıtlı Olmayan Nokta</Text><Text style={styles.subtitle}>{user.name}</Text></View>
+          <TouchableOpacity onPress={() => void signOut()}><Text style={styles.logout}>ÇIKIŞ</Text></TouchableOpacity>
+        </View>
 
-        {step === 'START' && (
+        {step === 'START' && <View style={styles.card}>
+          <Text style={styles.cardTitle}>Önce EFESİM</Text>
+          <Text style={styles.help}>Ekran görüntüsünden müşteri adı ve SAP No okunur; GPS ile Google Maps eşleşmesi denenir.</Text>
+          <PrimaryButton title="EFESİM EKRAN GÖRÜNTÜSÜ SEÇ" onPress={() => void beginEfesimFlow()} disabled={busy} />
+        </View>}
+
+        {step === 'RESULT' && result && <>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>EFESİM ekran görüntüsünü seç</Text>
-            <Text style={styles.help}>
-              Sistem müşteri adı ve SAP No'yu okuyacak, bulunduğun konuma göre Google Maps eşleşmesini deneyecek.
-            </Text>
-            <PrimaryButton title="EFESİM EKRAN GÖRÜNTÜSÜ SEÇ" onPress={beginEfesimFlow} disabled={busy} />
+            <Text style={styles.sectionLabel}>EFESİM</Text>
+            <TextInput style={styles.input} value={sapNo} onChangeText={setSapNo} keyboardType="number-pad" placeholder="SAP No" maxLength={10} />
+            <TextInput style={styles.input} value={customerName} onChangeText={setCustomerName} placeholder="Müşteri adı" maxLength={180} />
           </View>
-        )}
+          {result.duplicate ? <View style={styles.warningCard}><Text style={styles.warningTitle}>Bu müşteri zaten sistemde</Text><Text style={styles.help}>{result.duplicate.type === 'POINT' ? 'SAP No kayıtlı bir noktaya ait.' : 'Aynı SAP No ile mevcut aday müşteri bulundu.'}</Text></View> : strongGoogleMatch ? <View style={styles.card}>
+            <Text style={styles.sectionLabel}>GOOGLE MAPS EŞLEŞMESİ</Text>
+            <Text style={styles.googleName}>{google?.name}</Text>
+            <Text style={styles.readOnlyAddress}>{google?.address || 'Adres bilgisi yok'}</Text>
+            {typeof google?.confidence === 'number' && <Text style={styles.help}>Eşleşme güveni: %{google.confidence}</Text>}
+            <View style={styles.row}><ChoiceButton title="BU İŞLETME" selected={useGoogle} onPress={() => setUseGoogle(true)} /><ChoiceButton title="EŞLEŞMEDİ" selected={!useGoogle} onPress={() => setUseGoogle(false)} /></View>
+          </View> : <View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS</Text><Text style={styles.help}>Güvenilir bir eşleşme bulunamadı. Manuel isim ile devam edebilirsin.</Text></View>}
+          {!result.duplicate && <View style={styles.card}><Text style={styles.sectionLabel}>ADRES</Text><Text style={styles.readOnlyAddress}>{addressText}</Text><Text style={styles.locked}>Adres düzenlenemez.</Text><PrimaryButton title="ADAY MÜŞTERİYİ OLUŞTUR" onPress={() => void saveProspect()} disabled={busy} /></View>}
+          <TouchableOpacity style={styles.secondaryButton} onPress={reset} disabled={busy}><Text style={styles.secondaryButtonText}>BAŞTAN BAŞLA</Text></TouchableOpacity>
+        </>}
 
-        {step === 'RESULT' && result && (
-          <>
-            <View style={styles.card}>
-              <Text style={styles.sectionLabel}>EFESİM</Text>
-              <TextInput
-                style={styles.input}
-                value={sapNo}
-                onChangeText={setSapNo}
-                keyboardType="number-pad"
-                placeholder="SAP No"
-                maxLength={10}
-              />
-              <TextInput
-                style={styles.input}
-                value={customerName}
-                onChangeText={setCustomerName}
-                placeholder="Müşteri adı"
-                maxLength={180}
-              />
-            </View>
+        {step === 'SAVED' && prospect && <View style={styles.card}>
+          <Text style={styles.success}>Aday müşteri hazır</Text><Text style={styles.googleName}>{prospect.name}</Text>
+          {prospect.sapNo ? <Text style={styles.help}>SAP No: {prospect.sapNo}</Text> : null}
+          <Text style={styles.sectionLabel}>ZİYARET AMACI</Text>
+          <View style={styles.row}><ChoiceButton title="KEŞİF" selected={visitPurpose === 'SURVEY'} onPress={() => setVisitPurpose('SURVEY')} /><ChoiceButton title="KURMA" selected={visitPurpose === 'INSTALLATION'} onPress={() => setVisitPurpose('INSTALLATION')} /></View>
+          <Text style={styles.help}>Ziyaret kaydedilirken güncel GPS yeniden alınacak.</Text>
+          <PrimaryButton title={visitPurpose === 'SURVEY' ? 'KEŞİF ZİYARETİNİ KAYDET' : 'KURMA ZİYARETİNİ KAYDET'} onPress={() => void saveVisit()} disabled={busy} />
+          <TouchableOpacity style={styles.secondaryButton} onPress={reset} disabled={busy}><Text style={styles.secondaryButtonText}>ZİYARET KAYDETMEDEN ÇIK</Text></TouchableOpacity>
+        </View>}
 
-            {result.duplicate ? (
-              <View style={styles.warningCard}>
-                <Text style={styles.warningTitle}>Bu müşteri zaten sistemde</Text>
-                <Text style={styles.help}>
-                  {result.duplicate.type === 'POINT'
-                    ? 'SAP No kayıtlı bir noktaya ait. Yeni aday oluşturulmayacak.'
-                    : 'Aynı SAP No ile mevcut bir aday müşteri bulundu.'}
-                </Text>
-              </View>
-            ) : strongGoogleMatch ? (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>GOOGLE MAPS EŞLEŞMESİ</Text>
-                <Text style={styles.googleName}>{google?.name}</Text>
-                <Text style={styles.readOnlyAddress}>{google?.address || 'Adres bilgisi yok'}</Text>
-                {typeof google?.confidence === 'number' && (
-                  <Text style={styles.help}>Eşleşme güveni: %{google.confidence}</Text>
-                )}
-                <View style={styles.row}>
-                  <ChoiceButton title="BU İŞLETME" selected={useGoogle} onPress={() => setUseGoogle(true)} />
-                  <ChoiceButton title="EŞLEŞMEDİ" selected={!useGoogle} onPress={() => setUseGoogle(false)} />
-                </View>
-              </View>
-            ) : (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>GOOGLE MAPS</Text>
-                <Text style={styles.help}>Güvenilir bir eşleşme bulunamadı. Manuel isim ile devam edebilirsin.</Text>
-              </View>
-            )}
-
-            {!result.duplicate && (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>ADRES</Text>
-                <Text style={styles.readOnlyAddress}>{addressText}</Text>
-                <Text style={styles.locked}>Adres düzenlenemez.</Text>
-                <PrimaryButton title="ADAY MÜŞTERİYİ OLUŞTUR" onPress={saveProspect} disabled={busy} />
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.secondaryButton} onPress={reset} disabled={busy}>
-              <Text style={styles.secondaryButtonText}>BAŞTAN BAŞLA</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {step === 'SAVED' && prospect && (
-          <View style={styles.card}>
-            <Text style={styles.success}>Aday müşteri hazır</Text>
-            <Text style={styles.googleName}>{prospect.name}</Text>
-            {prospect.sapNo ? <Text style={styles.help}>SAP No: {prospect.sapNo}</Text> : null}
-            <Text style={styles.sectionLabel}>ZİYARET AMACI</Text>
-            <View style={styles.row}>
-              <ChoiceButton title="KEŞİF" selected={visitPurpose === 'SURVEY'} onPress={() => setVisitPurpose('SURVEY')} />
-              <ChoiceButton
-                title="KURMA"
-                selected={visitPurpose === 'INSTALLATION'}
-                onPress={() => setVisitPurpose('INSTALLATION')}
-              />
-            </View>
-            <Text style={styles.help}>Ziyaret kaydedilirken güncel GPS yeniden alınacak.</Text>
-            <PrimaryButton
-              title={visitPurpose === 'SURVEY' ? 'KEŞİF ZİYARETİNİ KAYDET' : 'KURMA ZİYARETİNİ KAYDET'}
-              onPress={saveVisit}
-              disabled={busy}
-            />
-            <TouchableOpacity style={styles.secondaryButton} onPress={reset} disabled={busy}>
-              <Text style={styles.secondaryButtonText}>ZİYARET KAYDETMEDEN ÇIK</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {step === 'VISIT_SAVED' && prospect && (
-          <View style={styles.card}>
-            <Text style={styles.success}>
-              {visitPurpose === 'SURVEY' ? 'Keşif ziyareti kaydedildi' : 'Kurma ziyareti kaydedildi'}
-            </Text>
-            <Text style={styles.help}>{prospect.name} aday müşteri geçmişine eklendi.</Text>
-            <PrimaryButton title="YENİ İŞLEM" onPress={reset} disabled={busy} />
-          </View>
-        )}
-
+        {step === 'VISIT_SAVED' && prospect && <View style={styles.card}><Text style={styles.success}>{visitPurpose === 'SURVEY' ? 'Keşif ziyareti kaydedildi' : 'Kurma ziyareti kaydedildi'}</Text><Text style={styles.help}>{prospect.name} aday müşteri geçmişine eklendi.</Text><PrimaryButton title="YENİ İŞLEM" onPress={reset} disabled={busy} /></View>}
         {busy && <ActivityIndicator size="large" style={styles.loader} />}
       </ScrollView>
     </SafeAreaView>
@@ -304,70 +273,37 @@ export default function App() {
 }
 
 function PrimaryButton(props: { title: string; onPress: () => void; disabled?: boolean }) {
-  return (
-    <TouchableOpacity
-      style={[styles.primaryButton, props.disabled && styles.disabled]}
-      onPress={props.onPress}
-      disabled={props.disabled}
-    >
-      <Text style={styles.primaryButtonText}>{props.title}</Text>
-    </TouchableOpacity>
-  );
+  return <TouchableOpacity style={[styles.primaryButton, props.disabled && styles.disabled]} onPress={props.onPress} disabled={props.disabled}><Text style={styles.primaryButtonText}>{props.title}</Text></TouchableOpacity>;
 }
-
 function ChoiceButton(props: { title: string; selected: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      style={[styles.choice, props.selected && styles.choiceSelected]}
-      onPress={props.onPress}
-    >
-      <Text style={[styles.choiceText, props.selected && styles.choiceTextSelected]}>{props.title}</Text>
-    </TouchableOpacity>
-  );
+  return <TouchableOpacity style={[styles.choice, props.selected && styles.choiceSelected]} onPress={props.onPress}><Text style={[styles.choiceText, props.selected && styles.choiceTextSelected]}>{props.title}</Text></TouchableOpacity>;
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f5f5f5' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#f5f5f5' },
+  loginWrap: { flex: 1, justifyContent: 'center', padding: 24, gap: 14 },
   container: { padding: 18, gap: 14 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 26, fontWeight: '800' },
-  subtitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
+  subtitle: { fontSize: 16, fontWeight: '700', marginTop: 4 },
+  logout: { fontSize: 13, fontWeight: '900' },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 12 },
   warningCard: { backgroundColor: '#fff3cd', borderRadius: 14, padding: 16, gap: 8 },
   warningTitle: { fontSize: 17, fontWeight: '800' },
   cardTitle: { fontSize: 19, fontWeight: '800' },
   sectionLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 0.7 },
   help: { fontSize: 14, lineHeight: 20 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d7d7d7',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 17,
-  },
+  input: { borderWidth: 1, borderColor: '#d7d7d7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 17 },
   googleName: { fontSize: 19, fontWeight: '800' },
   readOnlyAddress: { fontSize: 15, lineHeight: 21 },
   locked: { fontSize: 12, fontWeight: '700', opacity: 0.55 },
   row: { flexDirection: 'row', gap: 10 },
-  choice: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#b7b7b7',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
+  choice: { flex: 1, borderWidth: 1, borderColor: '#b7b7b7', borderRadius: 10, padding: 12, alignItems: 'center' },
   choiceSelected: { backgroundColor: '#111', borderColor: '#111' },
   choiceText: { fontWeight: '800' },
   choiceTextSelected: { color: '#fff' },
-  primaryButton: {
-    backgroundColor: '#111',
-    borderRadius: 12,
-    paddingVertical: 15,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
+  primaryButton: { backgroundColor: '#111', borderRadius: 12, paddingVertical: 15, paddingHorizontal: 12, alignItems: 'center', marginTop: 4 },
   primaryButtonText: { color: '#fff', fontWeight: '900', fontSize: 15 },
   secondaryButton: { padding: 13, alignItems: 'center' },
   secondaryButtonText: { fontWeight: '800' },
