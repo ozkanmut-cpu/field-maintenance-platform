@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AssignmentsModule } from '../assignments/assignments.module';
 import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceController } from './maintenance.controller';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
@@ -7,6 +8,7 @@ import { MaintenanceService } from './maintenance.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 
 @Module({
+  imports: [AssignmentsModule],
   controllers: [MaintenanceController],
   providers: [
     MaintenanceEngineService,
