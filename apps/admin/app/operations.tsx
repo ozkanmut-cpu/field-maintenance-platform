@@ -36,9 +36,10 @@ type AttemptHistoryItem = AttemptReviewItem & {
   reviewStatus: 'APPROVED' | 'REJECTED'; reviewedAt?: string | null; reviewNote?: string | null;
   closedDueDate?: string | null; reviewedBy?: { id: string; name: string; username: string } | null;
 };
-type Props = { users: Technician[] };
+type Section = 'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'users' | 'new-user';
+type Props = { users: Technician[]; activeSection: Section; onNavigate: (section: Section) => void };
 
-export default function Operations({ users }: Props) {
+export default function Operations({ users, activeSection, onNavigate }: Props) {
   const [regions, setRegions] = useState<Region[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
   const [setupPending, setSetupPending] = useState<SetupPendingItem[]>([]);
@@ -225,7 +226,13 @@ export default function Operations({ users }: Props) {
   return (
     <>
       {error ? <div className="error banner">{error}</div> : null}
-      <section className="panel" id="regions">
+      {activeSection === 'dashboard' ? <section className="dashboardGrid">
+        <button className="dashboardCard" onClick={() => onNavigate('setup-pending')}><span>Ayar bekleyen</span><strong>{setupPending.length}</strong><small>Eksik ayarları tamamla</small></button>
+        <button className="dashboardCard" onClick={() => onNavigate('approvals')}><span>Bekleyen onay</span><strong>{attemptQueue.length}</strong><small>Yapılamadı kayıtlarını incele</small></button>
+        <button className="dashboardCard" onClick={() => onNavigate('points')}><span>Noktalar</span><strong>{points.length}</strong><small>Nokta listesini yönet</small></button>
+        <button className="dashboardCard" onClick={() => onNavigate('regions')}><span>Bölgeler</span><strong>{regions.length}</strong><small>Bölge ve sorumluları yönet</small></button>
+      </section> : null}
+      {activeSection === 'regions' ? <section className="panel" id="regions">
         <div className="panelHeader">
           <div><h2>Bölgeler</h2><p>Bölge sorumlularını ve nokta dağılımını yönet.</p></div>
           <button className="ghost" onClick={() => void load()} disabled={busy}>Yenile</button>
@@ -257,10 +264,9 @@ export default function Operations({ users }: Props) {
           </select>
           <button disabled={busy} type="submit">BÖLGE EKLE</button>
         </form>
-      </section>
+      </section> : null}
 
-
-      <section className="panel priorityPanel" id="setup-pending">
+      {activeSection === 'setup-pending' ? <section className="panel priorityPanel" id="setup-pending">
         <div className="panelHeader">
           <div><h2>Ayar Bekleyen Noktalar</h2><p>Eksik veya geçici ayarı olan aktif noktalar otomatik olarak burada görünür. Düzeltildiğinde listeden kendiliğinden çıkar.</p></div>
           <span className="pill">{setupPending.length} bekliyor</span>
@@ -282,8 +288,9 @@ export default function Operations({ users }: Props) {
             </tbody>
           </table>
         </div>
-      </section>
+      </section> : null}
 
+      {activeSection === 'approvals' ? <>
       <section className="panel priorityPanel" id="approvals">
         <div className="panelHeader">
           <div><h2>Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
@@ -322,8 +329,9 @@ export default function Operations({ users }: Props) {
           ))}</tbody>
         </table></div>
       </section>
+      </> : null}
 
-      <section className="panel" id="points">
+      {activeSection === 'points' ? <section className="panel" id="points">
         <div className="panelHeader"><div><h2>Noktalar</h2><p>Aktif, pasif ve iptal noktaları buradan yönet.</p></div></div>
         <div className="tableWrap">
           <table>
@@ -361,7 +369,7 @@ export default function Operations({ users }: Props) {
           )}
           <button disabled={busy || regions.length === 0} type="submit">NOKTA EKLE</button>
         </form>
-      </section>
+      </section> : null}
     </>
   );
 }
