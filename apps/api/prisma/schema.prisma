@@ -80,6 +80,7 @@ model User {
   pointAliases       PointAlias[]                   @relation("PointAliasCreatedBy")
   pointAssignments   PointAssignment[]              @relation("PointAssignedTechnician")
   assignmentsCreated PointAssignment[]              @relation("PointAssignmentCreatedBy")
+  auditEvents        AdminAuditLog[]                @relation("AuditActor")
 
   @@map("users")
 }
@@ -143,24 +144,41 @@ model PointAlias {
 }
 
 model PointAssignment {
-  id           String              @id @default(uuid()) @db.Uuid
-  pointId      String              @db.Uuid @map("point_id")
-  point        Point               @relation(fields: [pointId], references: [id], onDelete: Cascade)
-  technicianId String              @db.Uuid @map("technician_id")
-  technician   User                @relation("PointAssignedTechnician", fields: [technicianId], references: [id])
-  kind         PointAssignmentKind
-  startsAt     DateTime            @map("starts_at")
-  endsAt       DateTime?           @map("ends_at")
-  active       Boolean             @default(true)
-  reason       String?
-  createdById  String              @db.Uuid @map("created_by_id")
-  createdBy    User                @relation("PointAssignmentCreatedBy", fields: [createdById], references: [id])
-  createdAt    DateTime            @default(now()) @map("created_at")
-  deactivatedAt DateTime?          @map("deactivated_at")
+  id            String              @id @default(uuid()) @db.Uuid
+  pointId       String              @db.Uuid @map("point_id")
+  point         Point               @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  technicianId  String              @db.Uuid @map("technician_id")
+  technician    User                @relation("PointAssignedTechnician", fields: [technicianId], references: [id])
+  kind          PointAssignmentKind
+  startsAt      DateTime            @map("starts_at")
+  endsAt        DateTime?           @map("ends_at")
+  active        Boolean             @default(true)
+  reason        String?
+  createdById   String              @db.Uuid @map("created_by_id")
+  createdBy     User                @relation("PointAssignmentCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime            @default(now()) @map("created_at")
+  deactivatedAt DateTime?           @map("deactivated_at")
 
   @@index([pointId, active, startsAt, endsAt])
   @@index([technicianId, active])
   @@map("point_assignments")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  actorId    String   @db.Uuid @map("actor_id")
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("admin_audit_logs")
 }
 
 model MaintenanceObligation {
