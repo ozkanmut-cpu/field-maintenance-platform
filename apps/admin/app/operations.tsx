@@ -48,7 +48,6 @@ export default function Operations({ users }: Props) {
   const [error, setError] = useState('');
   const [regionName, setRegionName] = useState('');
   const [regionTechnicianId, setRegionTechnicianId] = useState('');
-  const [importResult, setImportResult] = useState('');
   const [pointForm, setPointForm] = useState({
     code: '', name: '', regionId: '', status: 'ACTIVE',
     maintenanceType: 'STANDARD', maintenanceWeek: '1', smartcleanReferenceAt: '',
@@ -112,37 +111,6 @@ export default function Operations({ users }: Props) {
       await api(`/api/backend/regions/${region.id}/technician`, {
         method: 'PATCH', body: JSON.stringify({ technicianId }),
       });
-      await load();
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  }
-  async function importWorkbook(file: File) {
-    setBusy(true); setError(''); setImportResult('');
-    try {
-      const ExcelJS = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await file.arrayBuffer());
-      const worksheet = workbook.worksheets[0];
-      if (!worksheet) throw new Error('Excel dosyasında çalışma sayfası bulunamadı.');
-      const headers = new Map<string, number>();
-      worksheet.getRow(1).eachCell((cell, col) => headers.set(String(cell.text).trim(), col));
-      const required = ['Teknisyen', 'Bölge', 'Rut Haftası', 'Müşteri No', 'Müşteri Adı', 'Durum', 'SmartClean'];
-      const missing = required.filter((name) => !headers.has(name));
-      if (missing.length) throw new Error(`Eksik Excel sütunu: ${missing.join(', ')}`);
-      const rows: Record<string, unknown>[] = [];
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        const get = (name: string) => row.getCell(headers.get(name)!).text.trim();
-        if (!get('Müşteri Adı')) return;
-        rows.push({
-          technician: get('Teknisyen'), region: get('Bölge'),
-          maintenanceWeek: get('Rut Haftası') ? Number(get('Rut Haftası')) : null,
-          customerNo: get('Müşteri No'), customerName: get('Müşteri Adı'),
-          status: get('Durum'), smartClean: get('SmartClean'),
-        });
-      });
-      const result = await api<{ imported: number; skippedPassiveMissingCode: number; skippedExisting: number; temporaryCodes: number }>('/api/backend/points/import', { method: 'POST', body: JSON.stringify({ rows }) });
-      setImportResult(`${result.imported} nokta aktarıldı · ${result.skippedExisting} zaten mevcut · ${result.temporaryCodes} geçici no · ${result.skippedPassiveMissingCode} pasif/no eksik atlandı`);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -291,15 +259,6 @@ export default function Operations({ users }: Props) {
         </form>
       </section>
 
-      <section className="panel" id="point-import">
-        <div className="panelHeader">
-          <div><h2>Excel Nokta Aktarımı</h2><p>Temiz liste XLSX dosyasını yükle. Hatalı/eksik ayarlar otomatik olarak Ayar Bekleyen Noktalar'a düşer.</p></div>
-        </div>
-        <div className="compactForm">
-          <input type="file" accept=".xlsx" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void importWorkbook(file); e.currentTarget.value = ''; }} />
-          {importResult ? <span className="pill active">{importResult}</span> : null}
-        </div>
-      </section>
 
       <section className="panel priorityPanel" id="setup-pending">
         <div className="panelHeader">
