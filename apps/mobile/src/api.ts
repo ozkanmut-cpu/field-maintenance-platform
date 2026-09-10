@@ -32,6 +32,14 @@ export type EfesimExtractResult = {
   addressPolicy: 'GOOGLE_ONLY';
 };
 
+export type ProspectRecord = {
+  id: string;
+  name: string;
+  sapNo?: string | null;
+  address?: string | null;
+  googlePlaceId?: string | null;
+};
+
 export type ConfirmEfesimPayload = {
   technicianId: string;
   customerName: string;
@@ -40,6 +48,8 @@ export type ConfirmEfesimPayload = {
   latitude: number;
   longitude: number;
 };
+
+export type ProspectVisitPurpose = 'SURVEY' | 'INSTALLATION';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.0.2.2:3000/api';
 
@@ -75,11 +85,28 @@ export function extractEfesim(input: {
 }
 
 export function confirmEfesim(payload: ConfirmEfesimPayload) {
-  return jsonRequest<{ prospect: Record<string, unknown>; confirmationMode: string; addressEditable: false }>(
+  return jsonRequest<{ prospect: ProspectRecord; confirmationMode: string; addressEditable: false }>(
     '/prospects/efesim-confirm',
     {
       method: 'POST',
       body: JSON.stringify(payload),
     },
   );
+}
+
+export function createProspectVisit(input: {
+  prospectId: string;
+  technicianId: string;
+  purpose: ProspectVisitPurpose;
+  note?: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  locationCapturedAt: string;
+  idempotencyKey: string;
+}) {
+  return jsonRequest<Record<string, unknown>>('/prospects/visits', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
