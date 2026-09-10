@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, VisitStatus } from '@prisma/client';
+import { Prisma, ReviewDecision, UserRole, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResolveReviewDto } from './dto/resolve-review.dto';
 
 type VisitSample = {
   id: string;
@@ -94,8 +95,6 @@ export class MaintenanceAnomalyService {
           suspiciousBatch: true,
           reviewRecommended: true,
           reviewReason: reasons.join(' | '),
-          // Geriye dönük giriş zaten uygun değildir; şüpheli ardışık giriş de
-          // hiçbir koşulda nokta konumu öğrenme kanıtı olamaz.
           locationLearningEligible: false,
         },
       });
@@ -134,6 +133,76 @@ export class MaintenanceAnomalyService {
       orderBy: { recordedAtServer: 'desc' },
       take: Math.min(Math.max(limit, 1), 500),
     });
+  }
+
+  async resolveReview(dto: ResolveReviewDto) {
+    const [visit, admin] = await Promise.all([
+      this.prisma.maintenanceVisit.findUnique({ where: { id: dto.visitId } }),
+      this.prisma.user.findFirst({ where: { id: dto.adminUserId, active: true } }),
+    ]);
+
+    if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
+    if (!admin || admin.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Kontrol kararını yalnızca admin verebilir');
+    }
+
+    const keepOpen = dto.decision === ReviewDecision.NEEDS_FOLLOWUP;
+    const clearAnomaly = dto.decision === ReviewDecision.NO_ISSUE;
+    const locationEligible =
+      clearAnomaly && visit.status === VisitStatus.VALID && !visit.enteredLate;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.maintenanceVisit.update({
+        where: { id: visit.id },
+        data: {
+          reviewRecommended: keepOpen,
+          suspiciousBatch: clearAnomaly ? false : visit.suspiciousBatch,
+          locationLearningEligible:
+            dto.decision === ReviewDecision.KEEP_LOCATION_EXCLUDED
+              ? false
+              : keepOpen
+                ? visit.locationLearningEligible
+                : locationEligible,
+        },
+      });
+
+      const resolution = await tx.maintenanceReviewResolution.create({
+        data: {
+          visitId: visit.id,
+          decision: dto.decision,
+          previousReason: visit.reviewReason,
+          resolvedById: admin.id,
+          note: dto.note?.trim() || null,
+        },
+      });
+
+      return { visit: updated, resolution, queueClosed: !keepOpen };
+    });
+  }
+
+  async reviewHistory(visitId: string) {
+    const visit = await this.prisma.maintenanceVisit.findUnique({
+      where: { id: visitId },
+      select: {
+        id: true,
+        reviewRecommended: true,
+        reviewReason: true,
+        suspiciousBatch: true,
+        locationLearningEligible: true,
+        status: true,
+        point: { select: { id: true, code: true, name: true } },
+        technician: { select: { id: true, name: true } },
+      },
+    });
+    if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
+
+    const history = await this.prisma.maintenanceReviewResolution.findMany({
+      where: { visitId },
+      include: { resolvedBy: { select: { id: true, name: true } } },
+      orderBy: { resolvedAt: 'asc' },
+    });
+
+    return { visit, history };
   }
 
   private numberConfig(name: string, fallback: number) {
