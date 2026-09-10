@@ -22,7 +22,10 @@ export class ProspectConversionService {
   async convert(prospectId: string, dto: ConvertProspectDto) {
     const [admin, prospect, region] = await Promise.all([
       this.prisma.user.findFirst({ where: { id: dto.adminUserId, active: true } }),
-      this.prisma.prospectCustomer.findUnique({ where: { id: prospectId } }),
+      this.prisma.prospectCustomer.findUnique({
+        where: { id: prospectId },
+        include: { _count: { select: { visits: true } } },
+      }),
       this.prisma.region.findUnique({ where: { id: dto.regionId } }),
     ]);
 
@@ -31,8 +34,8 @@ export class ProspectConversionService {
     }
     if (!prospect) throw new NotFoundException('Aday müşteri bulunamadı');
     if (!region) throw new NotFoundException('Bölge bulunamadı');
-    if (prospect.status !== ProspectStatus.CANDIDATE) {
-      throw new BadRequestException('Yalnızca aktif aday müşteri gerçek noktaya dönüştürülebilir');
+    if (prospect.status !== ProspectStatus.CANDIDATE || prospect.convertedPointId) {
+      throw new BadRequestException('Yalnızca dönüştürülmemiş aktif aday müşteri gerçek noktaya dönüştürülebilir');
     }
 
     const code = (dto.pointCode?.trim() || prospect.sapNo?.trim() || '').trim();
@@ -90,11 +93,13 @@ export class ProspectConversionService {
         },
       });
 
+      const convertedAt = new Date();
       const converted = await tx.prospectCustomer.update({
         where: { id: prospect.id },
         data: {
           status: ProspectStatus.CONVERTED,
-          convertedAt: new Date(),
+          convertedAt,
+          convertedPointId: point.id,
         },
       });
 
@@ -109,9 +114,11 @@ export class ProspectConversionService {
             name: prospect.name,
             sapNo: prospect.sapNo,
             googlePlaceId: prospect.googlePlaceId,
+            visitCount: prospect._count.visits,
           },
           newValue: {
             status: ProspectStatus.CONVERTED,
+            convertedAt: convertedAt.toISOString(),
             pointId: point.id,
             pointCode: point.code,
             regionId: point.regionId,
@@ -126,12 +133,33 @@ export class ProspectConversionService {
         prospect: converted,
         point,
         linkedHistory: true,
-        historyLink: {
-          type: 'ADMIN_AUDIT',
-          prospectId: prospect.id,
-          pointId: point.id,
-        },
+        prospectVisitCount: prospect._count.visits,
       };
     });
+  }
+
+  async history(prospectId: string) {
+    const prospect = await this.prisma.prospectCustomer.findUnique({
+      where: { id: prospectId },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        convertedPoint: {
+          select: { id: true, code: true, name: true, status: true, regionId: true },
+        },
+        visits: {
+          include: { technician: { select: { id: true, name: true } } },
+          orderBy: { visitedAt: 'asc' },
+        },
+      },
+    });
+    if (!prospect) throw new NotFoundException('Aday müşteri bulunamadı');
+
+    const conversionAudit = await this.prisma.adminAuditLog.findMany({
+      where: { entityType: 'PROSPECT_CUSTOMER', entityId: prospectId },
+      include: { actor: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return { prospect, audit: conversionAudit };
   }
 }
