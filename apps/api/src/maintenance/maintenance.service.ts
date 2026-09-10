@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -20,13 +21,19 @@ import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
+import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { MaintenanceEngineService } from './maintenance-engine.service';
+import { PointLocationLearningService } from './point-location-learning.service';
 
 @Injectable()
 export class MaintenanceService {
+  private readonly logger = new Logger(MaintenanceService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly engine: MaintenanceEngineService,
+    private readonly anomaly: MaintenanceAnomalyService,
+    private readonly locationLearning: PointLocationLearningService,
   ) {}
 
   due(asOf?: string) {
@@ -217,8 +224,8 @@ export class MaintenanceService {
       : null;
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const visit = await tx.maintenanceVisit.create({
+      const visit = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.maintenanceVisit.create({
           data: {
             pointId: point.id,
             technicianId: dto.technicianId,
@@ -249,8 +256,14 @@ export class MaintenanceService {
           });
         }
 
-        return visit;
+        return created;
       });
+
+      await this.runPostProcessing(dto.technicianId, point.id);
+
+      return (
+        (await this.prisma.maintenanceVisit.findUnique({ where: { id: visit.id } })) ?? visit
+      );
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Bu bakım kaydı zaten işlendi');
@@ -409,6 +422,21 @@ export class MaintenanceService {
     });
 
     return { visit, history };
+  }
+
+  private async runPostProcessing(technicianId: string, pointId: string) {
+    try {
+      await this.anomaly.scanTechnician(technicianId, 24);
+      await this.locationLearning.refreshPoint(pointId);
+    } catch (error) {
+      // The maintenance itself is already valid and must never be rolled back
+      // because a background quality/enrichment step failed.
+      this.logger.warn(
+        `Maintenance post-processing failed for point ${pointId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private async requireTechnician(technicianId: string) {
