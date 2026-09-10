@@ -5,6 +5,7 @@ import { MaintenanceController } from './maintenance.controller';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { MaintenanceEngineService } from './maintenance-engine.service';
 import { MaintenanceService } from './maintenance.service';
+import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 
 @Module({
@@ -15,6 +16,7 @@ import { PointLocationLearningService } from './point-location-learning.service'
     MaintenanceAnomalyService,
     PointLocationLearningService,
     GooglePlaceMatchService,
+    NonMaintenanceVisitService,
     MaintenanceService,
   ],
   exports: [
@@ -22,6 +24,7 @@ import { PointLocationLearningService } from './point-location-learning.service'
     MaintenanceAnomalyService,
     PointLocationLearningService,
     GooglePlaceMatchService,
+    NonMaintenanceVisitService,
     MaintenanceService,
   ],
 })
