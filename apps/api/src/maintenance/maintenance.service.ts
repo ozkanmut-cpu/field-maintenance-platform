@@ -114,7 +114,7 @@ export class MaintenanceService {
     this.assertValidDate(date, 'date');
     const { start, end } = businessDayRange(date);
 
-    const [visits, attempts] = await Promise.all([
+    const [visits, attempts, nonMaintenanceVisits, prospectVisits] = await Promise.all([
       this.prisma.maintenanceVisit.findMany({
         where: {
           technicianId,
@@ -145,17 +145,47 @@ export class MaintenanceService {
         },
         orderBy: { attemptedAt: 'asc' },
       }),
+      this.prisma.nonMaintenanceVisit.findMany({
+        where: { technicianId, visitedAt: { gte: start, lt: end } },
+        select: {
+          id: true,
+          visitedAt: true,
+          purpose: true,
+          note: true,
+          point: { select: { id: true, code: true, name: true } },
+        },
+        orderBy: { visitedAt: 'asc' },
+      }),
+      this.prisma.prospectVisit.findMany({
+        where: { technicianId, visitedAt: { gte: start, lt: end } },
+        select: {
+          id: true,
+          visitedAt: true,
+          purpose: true,
+          note: true,
+          prospect: { select: { id: true, name: true, sapNo: true, status: true, convertedPointId: true } },
+        },
+        orderBy: { visitedAt: 'asc' },
+      }),
     ]);
 
     const items = [
       ...visits.map((visit) => ({ type: 'MAINTENANCE' as const, at: visit.performedAt, ...visit })),
       ...attempts.map((attempt) => ({ type: 'ATTEMPT' as const, at: attempt.attemptedAt, ...attempt })),
+      ...nonMaintenanceVisits.map((visit) => ({
+        type: 'NON_MAINTENANCE_VISIT' as const,
+        at: visit.visitedAt,
+        ...visit,
+      })),
+      ...prospectVisits.map((visit) => ({ type: 'PROSPECT_VISIT' as const, at: visit.visitedAt, ...visit })),
     ].sort((a, b) => a.at.getTime() - b.at.getTime());
 
     return {
       date: this.dateKey(date),
       maintenanceCount: visits.length,
       attemptCount: attempts.length,
+      nonMaintenanceVisitCount: nonMaintenanceVisits.length,
+      prospectVisitCount: prospectVisits.length,
       totalOperations: items.length,
       items,
     };
