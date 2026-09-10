@@ -72,6 +72,7 @@ model User {
   regions            Region[]                      @relation("RegionTechnician")
   paperworkChanges   PaperworkStatusHistory[]      @relation("PaperworkChangedBy")
   reviewResolutions  MaintenanceReviewResolution[] @relation("ReviewResolvedBy")
+  pointAliases       PointAlias[]                   @relation("PointAliasCreatedBy")
 
   @@map("users")
 }
@@ -111,10 +112,26 @@ model Point {
   obligations           MaintenanceObligation[]
   visits                MaintenanceVisit[]
   attempts              MaintenanceAttempt[]
+  aliases               PointAlias[]
 
   @@index([regionId, status])
   @@index([maintenanceType, maintenanceWeek])
   @@map("points")
+}
+
+model PointAlias {
+  id          String   @id @default(uuid()) @db.Uuid
+  pointId     String   @db.Uuid @map("point_id")
+  point       Point    @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  alias       String
+  normalized  String
+  createdById String   @db.Uuid @map("created_by_id")
+  createdBy   User     @relation("PointAliasCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([pointId, normalized])
+  @@index([normalized])
+  @@map("point_aliases")
 }
 
 model MaintenanceObligation {
@@ -210,15 +227,15 @@ model PaperworkStatusHistory {
 }
 
 model MaintenanceReviewResolution {
-  id            String           @id @default(uuid()) @db.Uuid
-  visitId       String           @db.Uuid @map("visit_id")
-  visit         MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  decision      ReviewDecision
-  previousReason String?         @map("previous_reason")
-  resolvedById  String           @db.Uuid @map("resolved_by_id")
-  resolvedBy    User             @relation("ReviewResolvedBy", fields: [resolvedById], references: [id])
-  resolvedAt    DateTime         @default(now()) @map("resolved_at")
-  note          String?
+  id             String           @id @default(uuid()) @db.Uuid
+  visitId        String           @db.Uuid @map("visit_id")
+  visit          MaintenanceVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  decision       ReviewDecision
+  previousReason String?          @map("previous_reason")
+  resolvedById   String           @db.Uuid @map("resolved_by_id")
+  resolvedBy     User             @relation("ReviewResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt     DateTime         @default(now()) @map("resolved_at")
+  note           String?
 
   @@index([visitId, resolvedAt])
   @@index([resolvedById, resolvedAt])
