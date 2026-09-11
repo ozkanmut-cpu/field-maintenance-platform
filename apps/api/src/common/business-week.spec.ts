@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { strict as assert } from 'node:assert';
+import { test } from 'node:test';
 import { businessWeek, businessWeekKey, sameBusinessWeek } from './business-week';
 
 test('uses Monday-Sunday business week in Europe/Istanbul', () => {
