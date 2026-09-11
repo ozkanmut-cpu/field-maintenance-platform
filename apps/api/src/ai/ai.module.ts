@@ -3,10 +3,11 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ColdStartService } from './cold-start.service';
 import { DataMaturityService } from './data-maturity.service';
 import { FeatureStoreService } from './feature-store.service';
+import { EffectiveWorkloadService } from './effective-workload.service';
 
 @Module({
   imports: [PrismaModule],
-  providers: [FeatureStoreService, DataMaturityService, ColdStartService],
-  exports: [FeatureStoreService, DataMaturityService, ColdStartService],
+  providers: [EffectiveWorkloadService, FeatureStoreService, DataMaturityService, ColdStartService],
+  exports: [EffectiveWorkloadService, FeatureStoreService, DataMaturityService, ColdStartService],
 })
 export class AiModule {}
