@@ -25,7 +25,7 @@ export class FeatureStoreService {
       this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, updatedAt: true }, orderBy: { id: 'asc' } }),
-      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true }, orderBy: { id: 'asc' } }),
+      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceAttempt.findMany({ where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceObligation.findMany({ where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } }, select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true }, orderBy: { id: 'asc' } }),
     ]);
@@ -73,6 +73,9 @@ export class FeatureStoreService {
       const technicianVisits = visits.filter((v) => v.technicianId === technician.id);
       const technicianAttempts = attempts.filter((a) => a.technicianId === technician.id);
       const technicianGeo = this.geography.summarize(technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
+      const orderedGeoVisits = technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).sort((a, b) => a.performedAt.getTime() - b.performedAt.getTime());
+      const fieldRouteDistanceMeters = orderedGeoVisits.slice(1).reduce((sum, visit, index) => sum + this.geography.distanceMeters({ latitude: Number(orderedGeoVisits[index].latitude), longitude: Number(orderedGeoVisits[index].longitude) }, { latitude: Number(visit.latitude), longitude: Number(visit.longitude) }), 0);
+      const equipmentCompleteVisits = technicianVisits.filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null));
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
         completedVisitCount: technicianVisits.length,
@@ -86,6 +89,13 @@ export class FeatureStoreService {
         fieldCenterLatitude: technicianGeo.centerLatitude,
         fieldCenterLongitude: technicianGeo.centerLongitude,
         fieldP90RadiusMeters: technicianGeo.p90RadiusMeters,
+        fieldRouteDistanceMeters: orderedGeoVisits.length >= 2 ? fieldRouteDistanceMeters : null,
+        equipmentSnapshotCompleteVisitCount: equipmentCompleteVisits.length,
+        equipmentSnapshotCoverage: technicianVisits.length ? equipmentCompleteVisits.length / technicianVisits.length : 0,
+        servicedCoolerCount: equipmentCompleteVisits.reduce((sum, v) => sum + Number(v.coolerCount), 0),
+        servicedTowerCount: equipmentCompleteVisits.reduce((sum, v) => sum + Number(v.towerCount), 0),
+        servicedTapCount: equipmentCompleteVisits.reduce((sum, v) => sum + Number(v.tapCount), 0),
+        servicedSmarttapCount: equipmentCompleteVisits.reduce((sum, v) => sum + Number(v.smarttapCount), 0),
       }});
     }
 
