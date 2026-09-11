@@ -21,6 +21,7 @@ export class EffectiveWorkloadService {
   async smartcleanForWeek(asOf = new Date()): Promise<EffectiveSmartcleanWorkloadItem[]> {
     const week = businessWeek(asOf);
     const anchor = this.week1Anchor();
+    if (!anchor) return [];
     const points = await this.prisma.point.findMany({
       where: { status: PointStatus.ACTIVE, deletedAt: null, maintenanceType: MaintenanceType.SMARTCLEAN },
       select: {
@@ -62,9 +63,15 @@ export class EffectiveWorkloadService {
     });
   }
 
+  smartcleanScheduleConfigured() {
+    return Boolean(this.week1Anchor());
+  }
+
   private week1Anchor() {
     const value = this.config.get<string>('STANDARD_WEEK1_ANCHOR');
-    if (!value) throw new Error('STANDARD_WEEK1_ANCHOR is required');
-    return dateOnlyForBusinessDate(new Date(value));
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return dateOnlyForBusinessDate(parsed);
   }
 }
