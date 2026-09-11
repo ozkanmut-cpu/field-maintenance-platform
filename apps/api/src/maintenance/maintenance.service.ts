@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   AttemptReviewStatus,
   MaintenanceObligationStatus,
@@ -19,6 +20,7 @@ import {
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { businessDateKey, businessDayRange, dateOnlyForBusinessDate } from '../common/business-time';
+import { nextSmartcleanDueDate } from '../common/smartclean-schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
@@ -37,6 +39,7 @@ export class MaintenanceService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
     private readonly engine: MaintenanceEngineService,
     private readonly anomaly: MaintenanceAnomalyService,
     private readonly locationLearning: PointLocationLearningService,
@@ -291,6 +294,18 @@ export class MaintenanceService {
       ? Math.max(1, Math.floor((now.getTime() - performedAt.getTime()) / 60_000))
       : null;
 
+    if (dto.equipmentConfirmed !== true) throw new BadRequestException('Nokta ekipman bilgisi doğrulanmalıdır');
+    const equipment = {
+      coolerCount: dto.coolerCount ?? point.coolerCount,
+      towerCount: dto.towerCount ?? point.towerCount,
+      tapCount: dto.tapCount ?? point.tapCount,
+      smarttapCount: dto.smarttapCount ?? point.smarttapCount,
+    };
+    if (Object.values(equipment).some((value) => value === null || value === undefined || !Number.isInteger(value) || value < 0)) {
+      throw new BadRequestException('Soğutucu, kule, musluk ve SmartTap adetlerinin tamamı girilmelidir');
+    }
+    const equipmentChanged = point.coolerCount !== equipment.coolerCount || point.towerCount !== equipment.towerCount || point.tapCount !== equipment.tapCount || point.smarttapCount !== equipment.smarttapCount;
+
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const created = await tx.maintenanceVisit.create({
@@ -313,10 +328,29 @@ export class MaintenanceService {
             suspiciousBatch: false,
             reviewRecommended: enteredLate,
             reviewReason: enteredLate ? 'GERİYE DÖNÜK GİRİŞ' : null,
+            coolerCount: equipment.coolerCount!,
+            towerCount: equipment.towerCount!,
+            tapCount: equipment.tapCount!,
+            smarttapCount: equipment.smarttapCount!,
+            equipmentConfirmed: true,
             status: VisitStatus.VALID,
             idempotencyKey: dto.idempotencyKey,
           },
         });
+
+        await tx.point.update({
+          where: { id: point.id },
+          data: { ...equipment, equipmentVerifiedAt: performedAt, equipmentVerifiedById: dto.technicianId },
+        });
+        if (equipmentChanged) {
+          await tx.adminAuditLog.create({
+            data: {
+              actorId: dto.technicianId, entityType: 'POINT_EQUIPMENT', entityId: point.id, action: 'MAINTENANCE_VERIFIED_CHANGED',
+              oldValue: { coolerCount: point.coolerCount, towerCount: point.towerCount, tapCount: point.tapCount, smarttapCount: point.smarttapCount },
+              newValue: equipment, note: 'Bakım sırasında ekipman bilgisi doğrulandı ve güncellendi',
+            },
+          });
+        }
 
         if (backlogToMiss.length) {
           await tx.maintenanceObligation.updateMany({
@@ -528,10 +562,10 @@ export class MaintenanceService {
         }
       } else {
         const base = attempt.point.visits[0]?.performedAt ?? attempt.point.smartcleanReferenceAt;
-        if (base) {
-          let due = this.addCalendarMonths(this.dateOnly(base), 2);
+        if (base && [1, 2].includes(attempt.point.maintenanceWeek ?? 0)) {
           const attemptedDate = this.dateOnly(attempt.attemptedAt);
-          while (due <= attemptedDate) { closedDueDate = due; due = this.addCalendarMonths(due, 2); }
+          let due = nextSmartcleanDueDate(this.dateOnly(base), attempt.point.maintenanceWeek!, this.week1Anchor());
+          while (due <= attemptedDate) { closedDueDate = due; due = this.addDays(due, 14); }
         }
       }
 
@@ -639,13 +673,14 @@ export class MaintenanceService {
     if (Number.isNaN(value.getTime())) throw new BadRequestException(`${field} geçersiz`);
   }
 
-  private addCalendarMonths(date: Date, months: number) {
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
-    const day = date.getUTCDate();
-    const first = new Date(Date.UTC(year, month + months, 1));
-    const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-    return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, lastDay)));
+  private week1Anchor() {
+    const value = this.config.get<string>('STANDARD_WEEK1_ANCHOR');
+    if (!value) throw new Error('STANDARD_WEEK1_ANCHOR is required');
+    return this.dateOnly(new Date(value));
+  }
+
+  private addDays(date: Date, days: number) {
+    const copy = new Date(date); copy.setUTCDate(copy.getUTCDate() + days); return copy;
   }
 
   private dateOnly(date: Date) {

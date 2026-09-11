@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 export class CompleteMaintenanceDto {
   @IsUUID()
@@ -37,6 +37,12 @@ export class CompleteMaintenanceDto {
   @IsString()
   @MaxLength(120)
   lateEntryReason?: string;
+
+  @IsOptional() @IsInt() @Min(0) coolerCount?: number;
+  @IsOptional() @IsInt() @Min(0) towerCount?: number;
+  @IsOptional() @IsInt() @Min(0) tapCount?: number;
+  @IsOptional() @IsInt() @Min(0) smarttapCount?: number;
+  @IsBoolean() equipmentConfirmed!: boolean;
 
   @IsString()
   @MaxLength(160)

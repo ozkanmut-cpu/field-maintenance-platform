@@ -130,12 +130,29 @@ export function createProspectVisit(input: {
   return jsonRequest<Record<string, unknown>>('/prospects/visits', { method: 'POST', body: JSON.stringify(input) });
 }
 
+
+export type EquipmentProfile = { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null };
+export type MyCustomer = EquipmentProfile & {
+  id: string; code: string; name: string; address?: string | null; region?: { id: string; name: string } | null;
+  canonicalLatitude?: number | null; canonicalLongitude?: number | null; locationSource?: string; locationConfidence?: number;
+  equipmentComplete: boolean; equipmentVerifiedAt?: string | null; assignmentSource: string;
+};
+
+export function myCustomers() {
+  return jsonRequest<MyCustomer[]>('/points/my-customers');
+}
+
+export function updateCustomerEquipment(pointId: string, input: { coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number }) {
+  return jsonRequest<MyCustomer>(`/points/${encodeURIComponent(pointId)}/equipment`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
 export type HelpTarget = { id: string; name: string; username: string };
 export type DueTask = {
   pointId: string; pointCode: string; pointName: string; regionName: string;
   maintenanceType: 'STANDARD' | 'SMARTCLEAN'; priority: 'OVERDUE' | 'CURRENT';
   overduePeriods: number; dueStart: string; dueEnd: string;
   address?: string | null; latitude?: number | null; longitude?: number | null;
+  coolerCount?: number | null; towerCount?: number | null; tapCount?: number | null; smarttapCount?: number | null;
 };
 export type TechnicianDashboard = { technician: HelpTarget; overdue: number; current: number; due: DueTask[] };
 
@@ -156,6 +173,7 @@ export function completeMaintenance(input: {
   accuracyMeters?: number;
   locationCapturedAt: string;
   deviceRecordedAt?: string;
+  coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
   idempotencyKey: string;
 }) {
   return jsonRequest<Record<string, unknown>>('/maintenance/complete', {

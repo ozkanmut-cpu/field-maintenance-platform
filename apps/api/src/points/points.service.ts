@@ -6,14 +6,16 @@ import {
 } from '@nestjs/common';
 import { MaintenanceType, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AssignmentsService } from '../assignments/assignments.service';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
+import { UpdatePointEquipmentDto } from './dto/update-point-equipment.dto';
 
 @Injectable()
 export class PointsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly assignments: AssignmentsService) {}
 
   list() {
     return this.prisma.point.findMany({
@@ -280,6 +282,51 @@ export class PointsService {
       items: suggestions.slice(0, Math.min(Math.max(limit, 1), 500)),
       autoMerged: 0,
     };
+  }
+
+  async myCustomers(technicianId: string) {
+    await this.requireTechnician(technicianId);
+    const points = await this.prisma.point.findMany({
+      where: { deletedAt: null, status: 'ACTIVE' },
+      select: {
+        id: true, code: true, name: true, address: true, regionId: true,
+        canonicalLatitude: true, canonicalLongitude: true, locationSource: true, locationConfidence: true,
+        coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true,
+        equipmentVerifiedAt: true, equipmentVerifiedById: true,
+        region: { select: { id: true, name: true } },
+      },
+      orderBy: [{ name: 'asc' }],
+    });
+    const resolved = await this.assignments.resolveMany(points.map((point) => point.id), new Date());
+    return points.filter((point) => resolved.get(point.id)?.technicianId === technicianId).map((point) => ({
+      ...point,
+      canonicalLatitude: point.canonicalLatitude === null ? null : Number(point.canonicalLatitude),
+      canonicalLongitude: point.canonicalLongitude === null ? null : Number(point.canonicalLongitude),
+      equipmentComplete: [point.coolerCount, point.towerCount, point.tapCount, point.smarttapCount].every((value) => value !== null),
+      assignmentSource: resolved.get(point.id)?.source ?? 'REGION',
+    }));
+  }
+
+  async updateEquipment(technicianId: string, pointId: string, dto: UpdatePointEquipmentDto) {
+    await this.requireTechnician(technicianId);
+    const point = await this.prisma.point.findFirst({ where: { id: pointId, deletedAt: null, status: 'ACTIVE' } });
+    if (!point) throw new NotFoundException('Nokta bulunamadı');
+    const assignment = await this.assignments.effectiveForPoint(pointId, new Date());
+    if (assignment.technicianId !== technicianId) throw new ForbiddenException('Bu müşteri sana atanmış değil');
+    const oldValue = { coolerCount: point.coolerCount, towerCount: point.towerCount, tapCount: point.tapCount, smarttapCount: point.smarttapCount };
+    const newValue = { coolerCount: dto.coolerCount, towerCount: dto.towerCount, tapCount: dto.tapCount, smarttapCount: dto.smarttapCount };
+    const updated = await this.prisma.point.update({
+      where: { id: pointId },
+      data: { ...newValue, equipmentVerifiedAt: new Date(), equipmentVerifiedById: technicianId },
+    });
+    await this.prisma.adminAuditLog.create({ data: { actorId: technicianId, entityType: 'POINT_EQUIPMENT', entityId: pointId, action: 'TECHNICIAN_VERIFIED', oldValue, newValue } });
+    return updated;
+  }
+
+  private async requireTechnician(userId: string) {
+    const technician = await this.prisma.user.findFirst({ where: { id: userId, active: true, role: UserRole.TECHNICIAN }, select: { id: true } });
+    if (!technician) throw new ForbiddenException('Aktif teknisyen hesabı gerekli');
+    return technician;
   }
 
   private async requireAdmin(userId: string) {

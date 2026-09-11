@@ -175,6 +175,12 @@ model Point {
   locationConfidence    Int                     @default(0) @map("location_confidence")
   googlePlaceId         String?                 @map("google_place_id")
   googleBusinessName    String?                 @map("google_business_name")
+  coolerCount           Int?                    @map("cooler_count")
+  towerCount            Int?                    @map("tower_count")
+  tapCount              Int?                    @map("tap_count")
+  smarttapCount         Int?                    @map("smarttap_count")
+  equipmentVerifiedAt   DateTime?               @map("equipment_verified_at")
+  equipmentVerifiedById String?                 @map("equipment_verified_by_id") @db.Uuid
   createdAt             DateTime                @default(now()) @map("created_at")
   updatedAt             DateTime                @updatedAt @map("updated_at")
   deletedAt             DateTime?               @map("deleted_at")
@@ -342,6 +348,11 @@ model MaintenanceVisit {
   reversedByUserId         String?                       @map("reversed_by_user_id") @db.Uuid
   serviceSlipStatus        PaperworkStatus               @default(PENDING) @map("service_slip_status")
   confirmationStatus       PaperworkStatus               @default(PENDING) @map("confirmation_status")
+  coolerCount              Int?                          @map("cooler_count")
+  towerCount               Int?                          @map("tower_count")
+  tapCount                 Int?                          @map("tap_count")
+  smarttapCount            Int?                          @map("smarttap_count")
+  equipmentConfirmed       Boolean                       @default(false) @map("equipment_confirmed")
   idempotencyKey           String                        @unique @map("idempotency_key")
   createdAt                DateTime                      @default(now()) @map("created_at")
   paperworkHistory         PaperworkStatusHistory[]

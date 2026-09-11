@@ -7,6 +7,7 @@ import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
+import { UpdatePointEquipmentDto } from './dto/update-point-equipment.dto';
 import { PointsService } from './points.service';
 
 @Controller('points')
@@ -34,6 +35,18 @@ export class PointsController {
   @Post('import')
   importPoints(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportPointsDto) {
     return this.points.importPoints(user.id, dto);
+  }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Get('my-customers')
+  myCustomers(@CurrentUser() user: AuthenticatedUser) {
+    return this.points.myCustomers(user.id);
+  }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Patch(':id/equipment')
+  updateEquipment(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdatePointEquipmentDto) {
+    return this.points.updateEquipment(user.id, id, dto);
   }
 
   @Get(':id')
