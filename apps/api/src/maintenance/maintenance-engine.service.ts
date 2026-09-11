@@ -9,6 +9,8 @@ import {
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { businessDateKey, dateOnlyForBusinessDate } from '../common/business-time';
+import { rutWeekSlot } from '../common/rut-schedule';
+import { nextSmartcleanDueDate } from '../common/smartclean-schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
 type Priority = 'OVERDUE' | 'CURRENT';
@@ -96,12 +98,13 @@ export class MaintenanceEngineService {
         const base = point.visits[0]?.performedAt ?? point.smartcleanReferenceAt;
         if (!base) return null;
         if (![1, 2].includes(point.maintenanceWeek ?? 0)) return null;
-        const eightWeeksLater = this.addDays(this.toDateOnly(base), 56);
-        let dueDate = this.firstAssignedWindowAfter(eightWeeksLater, point.maintenanceWeek!).start;
         const closedDueDate = point.attempts[0]?.closedDueDate ?? null;
-        while (closedDueDate && dueDate <= closedDueDate) {
-          dueDate = this.addDays(dueDate, 14);
-        }
+        const dueDate = nextSmartcleanDueDate(
+          this.toDateOnly(base),
+          point.maintenanceWeek!,
+          this.week1Anchor(),
+          closedDueDate,
+        );
         if (dueDate > asOf) return null;
         return {
           pointId: point.id,
@@ -184,20 +187,14 @@ export class MaintenanceEngineService {
     return { start, end: this.addDays(start, 6) };
   }
 
-  private firstAssignedWindowAfter(date: Date, maintenanceWeek: number) {
-    let start = this.startOfWeek(date);
-    if (start <= date) start = this.addDays(start, 7);
-    if (this.slotForWeek(start) !== maintenanceWeek) start = this.addDays(start, 7);
-    return { start, end: this.addDays(start, 6) };
+  private slotForWeek(monday: Date) {
+    return rutWeekSlot(monday, this.week1Anchor());
   }
 
-  private slotForWeek(monday: Date) {
+  private week1Anchor() {
     const anchorValue = this.config.get<string>('STANDARD_WEEK1_ANCHOR');
     if (!anchorValue) throw new Error('STANDARD_WEEK1_ANCHOR is required');
-    const anchor = this.startOfWeek(this.toDateOnly(new Date(anchorValue)));
-    const diffWeeks = Math.floor((monday.getTime() - anchor.getTime()) / 604800000);
-    const parity = ((diffWeeks % 2) + 2) % 2;
-    return parity === 0 ? 1 : 2;
+    return this.toDateOnly(new Date(anchorValue));
   }
 
   private startOfWeek(date: Date) {
