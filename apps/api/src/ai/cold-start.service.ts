@@ -11,6 +11,18 @@ export class ColdStartService {
     const latest = this.latestRecord(history, 'POINT', pointId);
     const regionId = this.string(latest?.features.regionId);
     const maintenanceType = this.string(latest?.features.maintenanceType);
+    const maintenanceWeek = this.number(latest?.features.maintenanceWeek);
+
+    if (maintenanceType === 'SMARTCLEAN' && regionId && maintenanceWeek !== null) {
+      const cohort = this.pointCohort(history, pointId, metric, (r) =>
+        this.string(r.features.regionId) === regionId &&
+        this.string(r.features.maintenanceType) === maintenanceType &&
+        this.number(r.features.maintenanceWeek) === maintenanceWeek,
+      );
+      if (cohort.samples.length >= 4 && cohort.entities >= 2) {
+        return this.result('POINT', pointId, metric, cohort.samples, 'REGION_TYPE_WEEK_COHORT', cohort.entities, 'Aynı bölge, bakım tipi ve rut haftasındaki noktalardan tahmin');
+      }
+    }
 
     if (regionId && maintenanceType) {
       const cohort = this.pointCohort(history, pointId, metric, (r) =>
@@ -18,6 +30,16 @@ export class ColdStartService {
       );
       if (cohort.samples.length >= 4 && cohort.entities >= 2) {
         return this.result('POINT', pointId, metric, cohort.samples, 'REGION_TYPE_COHORT', cohort.entities, 'Aynı bölge ve bakım tipindeki noktalardan tahmin');
+      }
+    }
+
+    if (maintenanceType === 'SMARTCLEAN' && maintenanceWeek !== null) {
+      const cohort = this.pointCohort(history, pointId, metric, (r) =>
+        this.string(r.features.maintenanceType) === maintenanceType &&
+        this.number(r.features.maintenanceWeek) === maintenanceWeek,
+      );
+      if (cohort.samples.length >= 6 && cohort.entities >= 3) {
+        return this.result('POINT', pointId, metric, cohort.samples, 'TYPE_WEEK_COHORT', cohort.entities, 'Aynı SmartClean rut haftasındaki şirket noktalarından tahmin');
       }
     }
 
@@ -120,7 +142,7 @@ export class ColdStartService {
   private result(entityType: 'POINT' | 'TECHNICIAN' | 'REGION', entityId: string, metric: string, samples: number[], source: ColdStartSource, entityCount: number, reason: string): ColdStartEstimate {
     const weeksUsed = samples.length;
     const value = this.median(samples);
-    const confidence = source === 'ENTITY_HISTORY' ? (samples.length >= 6 ? 'HIGH' : 'MEDIUM') : source === 'REGION_TYPE_COHORT' || source === 'SIMILAR_REGION_COHORT' ? 'MEDIUM' : 'LOW';
+    const confidence = source === 'ENTITY_HISTORY' ? (samples.length >= 6 ? 'HIGH' : 'MEDIUM') : source === 'REGION_TYPE_WEEK_COHORT' || source === 'REGION_TYPE_COHORT' || source === 'SIMILAR_REGION_COHORT' ? 'MEDIUM' : 'LOW';
     return { entityType, entityId, metric, value, source, confidence, sampleSize: samples.length, entityCount, weeksUsed, reasons: [reason] };
   }
 
