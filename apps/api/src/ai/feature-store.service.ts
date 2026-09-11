@@ -4,13 +4,18 @@ import { PointStatus, UserRole, VisitStatus } from '@prisma/client';
 import { businessWeek } from '../common/business-week';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
+import { EffectiveWorkloadService } from './effective-workload.service';
 
 @Injectable()
 export class FeatureStoreService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly effectiveWorkload: EffectiveWorkloadService,
+  ) {}
 
   async buildWeeklySnapshot(asOf = new Date()): Promise<FeatureSnapshot> {
     const week = businessWeek(asOf);
+    const smartcleanWorkload = await this.effectiveWorkload.smartcleanForWeek(asOf);
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
       this.prisma.user.findMany({
         where: { role: UserRole.TECHNICIAN, active: true },
@@ -65,6 +70,8 @@ export class FeatureStoreService {
         visitCount: visits.length,
         attemptCount: attempts.length,
         obligationCount: obligations.length,
+        smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CURRENT').length,
+        smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CARRYOVER').length,
       },
     });
 
@@ -93,6 +100,8 @@ export class FeatureStoreService {
         locatedPointCount: points.filter((p) => p.regionId === region.id && p.canonicalLatitude && p.canonicalLongitude).length,
         visitCount: visits.filter((v) => regionPointIds.has(v.pointId)).length,
         attemptCount: attempts.filter((a) => regionPointIds.has(a.pointId)).length,
+        smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CURRENT').length,
+        smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CARRYOVER').length,
       }});
     }
 
@@ -113,10 +122,12 @@ export class FeatureStoreService {
         obligationCount: pointObligations.length,
         completedObligationCount: pointObligations.filter((o) => o.status === 'COMPLETED').length,
         missedObligationCount: pointObligations.filter((o) => o.status === 'MISSED').length,
+        smartcleanDueThisWeek: smartcleanWorkload.some((x) => x.pointId === point.id && x.state === 'CURRENT'),
+        smartcleanCarryover: smartcleanWorkload.some((x) => x.pointId === point.id && x.state === 'CARRYOVER'),
       }});
     }
 
-    const sourcePayload = { technicians, regions, points, visits, attempts, obligations };
+    const sourcePayload = { technicians, regions, points, visits, attempts, obligations, smartcleanWorkload };
     const sourceHash = createHash('sha256').update(this.stableStringify(sourcePayload)).digest('hex');
     const timestamps = [
       ...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt),
