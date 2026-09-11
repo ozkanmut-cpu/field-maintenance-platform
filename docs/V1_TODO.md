@@ -54,6 +54,10 @@
 - [ ] CSV/Excel point import with validation report
 - [ ] Bulk region/status/week/SmartClean operations
 - [ ] Bulk paperwork status operations
+- [x] Point equipment profile: cooler/tower/tap/SmartTap counts
+- [x] Technician `Müşterilerim` equipment entry before maintenance
+- [x] Maintenance-time equipment verification/correction
+- [x] Immutable visit-level equipment snapshot and audit trail
 - [ ] Offline point cache
 - [ ] Offline maintenance queue
 - [ ] Auto-sync / conflict handling
@@ -64,6 +68,22 @@
 - [ ] AI Planning Engine
 - [ ] AI Location Engine
 - [ ] AI Data Quality Engine
+- [ ] Point Difficulty Score using equipment profile as learned features
+- [ ] Learn equipment-type workload impact from observed outcomes; do not hard-code arbitrary weights
+- [ ] Equipment-profile confidence: completeness, verification age and verification history
+- [ ] Equipment-profile stability/change-rate feature per point
+- [ ] Equipment-change anomaly detection for implausible or repeated count swings
+- [ ] Equipment data-quality brake for difficulty/capacity/risk/recommendation engines
+- [ ] Historical point-difficulty reconstruction from visit-level equipment snapshots
+- [ ] Cold-start cohorts incorporating maintenance type + equipment profile when sample size is sufficient
+- [ ] Technician capacity model adjusted for equipment mix, not only point count
+- [ ] Weekly workload engine using equipment-weighted point difficulty
+- [ ] Risk prediction using workload mix + equipment difficulty + geography + past performance
+- [ ] Recommendation ranking aware of equipment-heavy clusters and technician capacity
+- [ ] Similar Week matching using equipment-mix similarity
+- [ ] What-if simulator inputs for equipment-count changes and resulting workload/risk delta
+- [ ] Outcome validation: measure whether equipment-aware models outperform point-count-only baselines
+- [ ] AI maturity gating based on equipment-profile coverage and verified-history depth
 - [ ] Period-end delay risk
 - [ ] Technician workload/capacity analysis
 - [ ] Region health indicators
@@ -78,8 +98,8 @@
 
 ## Explicitly out of V1
 
-- Equipment inventory/tracking
-- Serpentine/cooler/tower/SmartTap asset hierarchy
+- Per-asset equipment inventory/tracking beyond point-level counts
+- Serpentine/cooler/tower/SmartTap individual asset hierarchy
 - Barcode workflow
 - Asset movement / depot stock
 - Fault tickets
