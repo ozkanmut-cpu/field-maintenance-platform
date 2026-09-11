@@ -55,9 +55,7 @@ export class FeatureStoreService {
       }),
     ]);
 
-    const pointById = new Map(points.map((item) => [item.id, item]));
     const records: FeatureRecord[] = [];
-
     records.push({
       entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
         activeTechnicianCount: technicians.length,
@@ -89,6 +87,7 @@ export class FeatureStoreService {
     for (const region of regions) {
       const regionPointIds = new Set(points.filter((p) => p.regionId === region.id).map((p) => p.id));
       records.push({ entityType: 'REGION', entityId: region.id, features: {
+        assignedTechnicianId: region.technicianId,
         technicianAssigned: Boolean(region.technicianId),
         pointCount: regionPointIds.size,
         locatedPointCount: points.filter((p) => p.regionId === region.id && p.canonicalLatitude && p.canonicalLongitude).length,
@@ -102,6 +101,7 @@ export class FeatureStoreService {
       const pointAttempts = attempts.filter((a) => a.pointId === point.id);
       const pointObligations = obligations.filter((o) => o.pointId === point.id);
       records.push({ entityType: 'POINT', entityId: point.id, features: {
+        regionId: point.regionId,
         hasRegion: Boolean(point.regionId),
         hasCanonicalLocation: Boolean(point.canonicalLatitude && point.canonicalLongitude),
         locationConfidence: point.locationConfidence,
