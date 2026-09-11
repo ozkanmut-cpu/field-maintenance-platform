@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "test:business-week": "node --test --require ts-node/register src/common/business-week.spec.ts",
     "test:data-maturity": "node --test --require ts-node/register src/ai/data-maturity.service.spec.ts",
+    "test:cold-start": "node --test --require ts-node/register src/ai/cold-start.service.spec.ts",
     "prisma:validate": "cd ../.. && prisma validate --schema apps/api/prisma/schema.prisma"
   },
   "dependencies": {
