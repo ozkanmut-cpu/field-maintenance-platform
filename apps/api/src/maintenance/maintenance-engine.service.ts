@@ -95,9 +95,13 @@ export class MaintenanceEngineService {
         if (!point.region) return null;
         const base = point.visits[0]?.performedAt ?? point.smartcleanReferenceAt;
         if (!base) return null;
-        let dueDate = this.addCalendarMonths(this.toDateOnly(base), 2);
+        if (![1, 2].includes(point.maintenanceWeek ?? 0)) return null;
+        const eightWeeksLater = this.addDays(this.toDateOnly(base), 56);
+        let dueDate = this.firstAssignedWindowAfter(eightWeeksLater, point.maintenanceWeek!).start;
         const closedDueDate = point.attempts[0]?.closedDueDate ?? null;
-        while (closedDueDate && dueDate <= closedDueDate) dueDate = this.addCalendarMonths(dueDate, 2);
+        while (closedDueDate && dueDate <= closedDueDate) {
+          dueDate = this.addDays(dueDate, 14);
+        }
         if (dueDate > asOf) return null;
         return {
           pointId: point.id,
@@ -109,7 +113,7 @@ export class MaintenanceEngineService {
           latitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
           longitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
           maintenanceType: point.maintenanceType,
-          maintenanceWeek: null,
+          maintenanceWeek: point.maintenanceWeek,
           dueStart: dueDate,
           dueEnd: dueDate,
           priority: dueDate < asOf ? ('OVERDUE' as Priority) : ('CURRENT' as Priority),
@@ -180,6 +184,13 @@ export class MaintenanceEngineService {
     return { start, end: this.addDays(start, 6) };
   }
 
+  private firstAssignedWindowAfter(date: Date, maintenanceWeek: number) {
+    let start = this.startOfWeek(date);
+    if (start <= date) start = this.addDays(start, 7);
+    if (this.slotForWeek(start) !== maintenanceWeek) start = this.addDays(start, 7);
+    return { start, end: this.addDays(start, 6) };
+  }
+
   private slotForWeek(monday: Date) {
     const anchorValue = this.config.get<string>('STANDARD_WEEK1_ANCHOR');
     if (!anchorValue) throw new Error('STANDARD_WEEK1_ANCHOR is required');
@@ -187,15 +198,6 @@ export class MaintenanceEngineService {
     const diffWeeks = Math.floor((monday.getTime() - anchor.getTime()) / 604800000);
     const parity = ((diffWeeks % 2) + 2) % 2;
     return parity === 0 ? 1 : 2;
-  }
-
-  private addCalendarMonths(date: Date, months: number) {
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth();
-    const day = date.getUTCDate();
-    const firstOfTarget = new Date(Date.UTC(year, month + months, 1));
-    const lastDay = new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0)).getUTCDate();
-    return new Date(Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth(), Math.min(day, lastDay)));
   }
 
   private startOfWeek(date: Date) {
