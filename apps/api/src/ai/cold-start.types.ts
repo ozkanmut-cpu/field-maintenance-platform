@@ -2,7 +2,9 @@ import { FeatureEntityType, FeatureSnapshot } from './feature-store.types';
 
 export type ColdStartSource =
   | 'ENTITY_HISTORY'
+  | 'REGION_TYPE_WEEK_COHORT'
   | 'REGION_TYPE_COHORT'
+  | 'TYPE_WEEK_COHORT'
   | 'SIMILAR_REGION_COHORT'
   | 'TYPE_COHORT'
   | 'COMPANY_COHORT'
