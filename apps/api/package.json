@@ -18,6 +18,7 @@
     "test:data-maturity": "node --test --require ts-node/register src/ai/data-maturity.service.spec.ts",
     "test:cold-start": "node --test --require ts-node/register src/ai/cold-start.service.spec.ts",
     "test:point-difficulty": "node --test --require ts-node/register src/ai/point-difficulty.service.spec.ts",
+    "test:technician-baseline": "node --test --require ts-node/register src/ai/technician-baseline.service.spec.ts",
     "prisma:validate": "cd ../.. && prisma validate --schema apps/api/prisma/schema.prisma"
   },
   "dependencies": {
