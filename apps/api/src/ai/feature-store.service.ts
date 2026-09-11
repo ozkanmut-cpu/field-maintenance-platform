@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService } from './geography.service';
+import { GeographyClusteringService } from './geography-clustering.service';
 
 @Injectable()
 export class FeatureStoreService {
@@ -13,6 +14,7 @@ export class FeatureStoreService {
     private readonly prisma: PrismaService,
     private readonly effectiveWorkload: EffectiveWorkloadService,
     private readonly geography: GeographyService,
+    private readonly clustering: GeographyClusteringService,
   ) {}
 
   async buildWeeklySnapshot(asOf = new Date()): Promise<FeatureSnapshot> {
@@ -20,71 +22,49 @@ export class FeatureStoreService {
     const smartcleanScheduleConfigured = this.effectiveWorkload.smartcleanScheduleConfigured();
     const smartcleanWorkload = await this.effectiveWorkload.smartcleanForWeek(asOf);
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
-      this.prisma.user.findMany({
-        where: { role: UserRole.TECHNICIAN, active: true },
-        select: { id: true, name: true, createdAt: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-      this.prisma.region.findMany({
-        select: { id: true, name: true, technicianId: true, updatedAt: true },
-        orderBy: { id: 'asc' },
-      }),
-      this.prisma.point.findMany({
-        where: { status: PointStatus.ACTIVE, deletedAt: null },
-        select: {
-          id: true, regionId: true, maintenanceType: true, maintenanceWeek: true,
-          canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true,
-          locationSource: true, updatedAt: true,
-        },
-        orderBy: { id: 'asc' },
-      }),
-      this.prisma.maintenanceVisit.findMany({
-        where: {
-          status: VisitStatus.VALID,
-          performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant },
-        },
-        select: {
-          id: true, pointId: true, technicianId: true, assistedForTechnicianId: true,
-          performedAt: true, recordedAtServer: true, enteredLate: true,
-          suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true,
-          accuracyMeters: true,
-        },
-        orderBy: { id: 'asc' },
-      }),
-      this.prisma.maintenanceAttempt.findMany({
-        where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } },
-        select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true },
-        orderBy: { id: 'asc' },
-      }),
-      this.prisma.maintenanceObligation.findMany({
-        where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } },
-        select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true },
-        orderBy: { id: 'asc' },
-      }),
+      this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
+      this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
+      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, updatedAt: true }, orderBy: { id: 'asc' } }),
+      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true }, orderBy: { id: 'asc' } }),
+      this.prisma.maintenanceAttempt.findMany({ where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true }, orderBy: { id: 'asc' } }),
+      this.prisma.maintenanceObligation.findMany({ where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } }, select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true }, orderBy: { id: 'asc' } }),
     ]);
 
+    const locatedPoints = points.filter((p) => p.canonicalLatitude !== null && p.canonicalLongitude !== null).map((p) => ({ id: p.id, latitude: Number(p.canonicalLatitude), longitude: Number(p.canonicalLongitude) }));
+    const systemClusters = this.clustering.clusterAdaptive(locatedPoints);
+    const regionClusters = new Map(regions.map((region) => {
+      const regionLocated = locatedPoints.filter((p) => points.find((source) => source.id === p.id)?.regionId === region.id);
+      return [region.id, this.clustering.clusterAdaptive(regionLocated)] as const;
+    }));
+    const pointClusterMembership = new Map<string, { clusterId: string | null; isolated: boolean }>();
+    for (const [regionId, result] of regionClusters) {
+      for (const cluster of result.clusters) for (const pointId of cluster.pointIds) pointClusterMembership.set(pointId, { clusterId: `${regionId}:${cluster.id}`, isolated: false });
+      for (const pointId of result.isolatedPointIds) pointClusterMembership.set(pointId, { clusterId: null, isolated: true });
+    }
+
     const records: FeatureRecord[] = [];
-    records.push({
-      entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
-        activeTechnicianCount: technicians.length,
-        regionCount: regions.length,
-        activePointCount: points.length,
-        locatedPointCount: points.filter((p) => p.canonicalLatitude !== null && p.canonicalLongitude !== null).length,
-        visitCount: visits.length,
-        attemptCount: attempts.length,
-        obligationCount: obligations.length,
-        smartcleanScheduleConfigured,
-        smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CURRENT').length,
-        smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CARRYOVER').length,
-      },
-    });
+    records.push({ entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
+      activeTechnicianCount: technicians.length,
+      regionCount: regions.length,
+      activePointCount: points.length,
+      locatedPointCount: locatedPoints.length,
+      visitCount: visits.length,
+      attemptCount: attempts.length,
+      obligationCount: obligations.length,
+      smartcleanScheduleConfigured,
+      smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CURRENT').length,
+      smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CARRYOVER').length,
+      geographicClusterCount: systemClusters.clusterCount,
+      geographicIsolatedPointCount: systemClusters.isolatedPointCount,
+      geographicLargestClusterShare: systemClusters.largestClusterShare,
+      geographicFragmentationRatio: systemClusters.fragmentationRatio,
+      geographicAdaptiveLinkMeters: systemClusters.adaptiveLinkMeters,
+    }});
 
     for (const technician of technicians) {
       const technicianVisits = visits.filter((v) => v.technicianId === technician.id);
       const technicianAttempts = attempts.filter((a) => a.technicianId === technician.id);
-      const technicianGeo = this.geography.summarize(technicianVisits
-        .filter((v) => v.latitude !== null && v.longitude !== null)
-        .map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
+      const technicianGeo = this.geography.summarize(technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
         completedVisitCount: technicianVisits.length,
@@ -104,9 +84,8 @@ export class FeatureStoreService {
     for (const region of regions) {
       const regionPoints = points.filter((p) => p.regionId === region.id);
       const regionPointIds = new Set(regionPoints.map((p) => p.id));
-      const regionGeo = this.geography.summarize(regionPoints
-        .filter((p) => p.canonicalLatitude !== null && p.canonicalLongitude !== null)
-        .map((p) => ({ latitude: Number(p.canonicalLatitude), longitude: Number(p.canonicalLongitude) })));
+      const regionGeo = this.geography.summarize(regionPoints.filter((p) => p.canonicalLatitude !== null && p.canonicalLongitude !== null).map((p) => ({ latitude: Number(p.canonicalLatitude), longitude: Number(p.canonicalLongitude) })));
+      const regionCluster = regionClusters.get(region.id)!;
       records.push({ entityType: 'REGION', entityId: region.id, features: {
         assignedTechnicianId: region.technicianId,
         technicianAssigned: Boolean(region.technicianId),
@@ -117,6 +96,13 @@ export class FeatureStoreService {
         centerLongitude: regionGeo.centerLongitude,
         p90RadiusMeters: regionGeo.p90RadiusMeters,
         maxRadiusMeters: regionGeo.maxRadiusMeters,
+        geographicClusterCount: regionCluster.clusterCount,
+        geographicIsolatedPointCount: regionCluster.isolatedPointCount,
+        geographicLargestClusterShare: regionCluster.largestClusterShare,
+        geographicFragmentationRatio: regionCluster.fragmentationRatio,
+        geographicAdaptiveLinkMeters: regionCluster.adaptiveLinkMeters,
+        nearestNeighborP50Meters: regionCluster.nearestNeighborP50Meters,
+        nearestNeighborP90Meters: regionCluster.nearestNeighborP90Meters,
         visitCount: visits.filter((v) => regionPointIds.has(v.pointId)).length,
         attemptCount: attempts.filter((a) => regionPointIds.has(a.pointId)).length,
         smartcleanScheduleConfigured,
@@ -129,12 +115,15 @@ export class FeatureStoreService {
       const pointVisits = visits.filter((v) => v.pointId === point.id);
       const pointAttempts = attempts.filter((a) => a.pointId === point.id);
       const pointObligations = obligations.filter((o) => o.pointId === point.id);
+      const clusterMembership = pointClusterMembership.get(point.id);
       records.push({ entityType: 'POINT', entityId: point.id, features: {
         regionId: point.regionId,
         hasRegion: Boolean(point.regionId),
         hasCanonicalLocation: point.canonicalLatitude !== null && point.canonicalLongitude !== null,
         canonicalLatitude: point.canonicalLatitude === null ? null : Number(point.canonicalLatitude),
         canonicalLongitude: point.canonicalLongitude === null ? null : Number(point.canonicalLongitude),
+        geographicClusterId: clusterMembership?.clusterId ?? null,
+        geographicIsolated: clusterMembership?.isolated ?? false,
         locationConfidence: point.locationConfidence,
         locationSource: point.locationSource,
         maintenanceType: point.maintenanceType,
@@ -151,23 +140,10 @@ export class FeatureStoreService {
 
     const sourcePayload = { technicians, regions, points, visits, attempts, obligations, smartcleanScheduleConfigured, smartcleanWorkload };
     const sourceHash = createHash('sha256').update(this.stableStringify(sourcePayload)).digest('hex');
-    const timestamps = [
-      ...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt),
-      ...visits.map((x) => x.recordedAtServer), ...attempts.map((x) => x.attemptedAt), ...obligations.map((x) => x.createdAt),
-    ];
-    const sourceDataThrough = timestamps.length
-      ? new Date(Math.max(...timestamps.map((d) => d.getTime()))).toISOString()
-      : null;
-
+    const timestamps = [...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt), ...visits.map((x) => x.recordedAtServer), ...attempts.map((x) => x.attemptedAt), ...obligations.map((x) => x.createdAt)];
+    const sourceDataThrough = timestamps.length ? new Date(Math.max(...timestamps.map((d) => d.getTime()))).toISOString() : null;
     records.sort((a, b) => `${a.entityType}:${a.entityId}`.localeCompare(`${b.entityType}:${b.entityId}`));
-    return {
-      weekKey: week.key, isoYear: week.isoYear, isoWeek: week.isoWeek,
-      weekStart: week.weekStart.toISOString().slice(0, 10),
-      weekEnd: week.weekEnd.toISOString().slice(0, 10),
-      startInstant: week.startInstant.toISOString(),
-      endExclusiveInstant: week.endExclusiveInstant.toISOString(),
-      sourceDataThrough, sourceHash, generatedAt: new Date().toISOString(), records,
-    };
+    return { weekKey: week.key, isoYear: week.isoYear, isoWeek: week.isoWeek, weekStart: week.weekStart.toISOString().slice(0, 10), weekEnd: week.weekEnd.toISOString().slice(0, 10), startInstant: week.startInstant.toISOString(), endExclusiveInstant: week.endExclusiveInstant.toISOString(), sourceDataThrough, sourceHash, generatedAt: new Date().toISOString(), records };
   }
 
   private stableStringify(value: unknown): string {
