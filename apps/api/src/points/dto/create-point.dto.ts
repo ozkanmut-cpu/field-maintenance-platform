@@ -23,7 +23,6 @@ export class CreatePointDto {
   @IsEnum(MaintenanceType)
   maintenanceType!: MaintenanceType;
 
-  @ValidateIf((o) => o.maintenanceType === MaintenanceType.STANDARD)
   @IsInt()
   @Min(1)
   @Max(2)
