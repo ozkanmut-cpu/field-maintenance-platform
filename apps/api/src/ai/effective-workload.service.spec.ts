@@ -24,3 +24,11 @@ test('keeps an uncompleted earlier SmartClean due as carryover', async () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].state, 'CARRYOVER');
 });
+
+test('missing rut anchor brakes SmartClean AI workload without inventing schedule', async () => {
+  const prisma = { point: { findMany: async () => { throw new Error('should not query'); } } } as any;
+  const config = { get: () => undefined } as any;
+  const sut = new EffectiveWorkloadService(prisma, config);
+  assert.equal(sut.smartcleanScheduleConfigured(), false);
+  assert.deepEqual(await sut.smartcleanForWeek(new Date('2026-09-02T12:00:00Z')), []);
+});
