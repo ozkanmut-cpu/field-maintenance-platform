@@ -15,6 +15,7 @@ export class FeatureStoreService {
 
   async buildWeeklySnapshot(asOf = new Date()): Promise<FeatureSnapshot> {
     const week = businessWeek(asOf);
+    const smartcleanScheduleConfigured = this.effectiveWorkload.smartcleanScheduleConfigured();
     const smartcleanWorkload = await this.effectiveWorkload.smartcleanForWeek(asOf);
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
       this.prisma.user.findMany({
@@ -70,6 +71,7 @@ export class FeatureStoreService {
         visitCount: visits.length,
         attemptCount: attempts.length,
         obligationCount: obligations.length,
+        smartcleanScheduleConfigured,
         smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CURRENT').length,
         smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.state === 'CARRYOVER').length,
       },
@@ -100,6 +102,7 @@ export class FeatureStoreService {
         locatedPointCount: points.filter((p) => p.regionId === region.id && p.canonicalLatitude && p.canonicalLongitude).length,
         visitCount: visits.filter((v) => regionPointIds.has(v.pointId)).length,
         attemptCount: attempts.filter((a) => regionPointIds.has(a.pointId)).length,
+        smartcleanScheduleConfigured,
         smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CURRENT').length,
         smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CARRYOVER').length,
       }});
@@ -127,7 +130,7 @@ export class FeatureStoreService {
       }});
     }
 
-    const sourcePayload = { technicians, regions, points, visits, attempts, obligations, smartcleanWorkload };
+    const sourcePayload = { technicians, regions, points, visits, attempts, obligations, smartcleanScheduleConfigured, smartcleanWorkload };
     const sourceHash = createHash('sha256').update(this.stableStringify(sourcePayload)).digest('hex');
     const timestamps = [
       ...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt),
