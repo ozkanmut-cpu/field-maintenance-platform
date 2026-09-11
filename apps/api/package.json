@@ -10,6 +10,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "lint": "tsc --noEmit",
+    "test:business-week": "node --test --require ts-node/register src/common/business-week.spec.ts",
     "prisma:validate": "cd ../.. && prisma validate --schema apps/api/prisma/schema.prisma"
   },
   "dependencies": {
