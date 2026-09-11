@@ -41,6 +41,12 @@ export class FeatureStoreService {
       for (const cluster of result.clusters) for (const pointId of cluster.pointIds) pointClusterMembership.set(pointId, { clusterId: `${regionId}:${cluster.id}`, isolated: false });
       for (const pointId of result.isolatedPointIds) pointClusterMembership.set(pointId, { clusterId: null, isolated: true });
     }
+    const nearestNeighborMeters = new Map<string, number | null>();
+    for (const point of locatedPoints) {
+      const regionId = points.find((source) => source.id === point.id)?.regionId ?? null;
+      const peers = locatedPoints.filter((candidate) => candidate.id !== point.id && (points.find((source) => source.id === candidate.id)?.regionId ?? null) === regionId);
+      nearestNeighborMeters.set(point.id, peers.length ? Math.min(...peers.map((peer) => this.geography.distanceMeters(point, peer))) : null);
+    }
 
     const records: FeatureRecord[] = [];
     records.push({ entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
@@ -126,6 +132,7 @@ export class FeatureStoreService {
         canonicalLongitude: point.canonicalLongitude === null ? null : Number(point.canonicalLongitude),
         geographicClusterId: clusterMembership?.clusterId ?? null,
         geographicIsolated: clusterMembership?.isolated ?? false,
+        nearestNeighborMeters: nearestNeighborMeters.get(point.id) ?? null,
         locationConfidence: point.locationConfidence,
         locationSource: point.locationSource,
         maintenanceType: point.maintenanceType,
