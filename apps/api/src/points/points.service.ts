@@ -55,7 +55,7 @@ export class PointsService {
         regionId: dto.regionId,
         status: dto.status,
         maintenanceType: dto.maintenanceType,
-        maintenanceWeek: dto.maintenanceType === MaintenanceType.STANDARD ? dto.maintenanceWeek : null,
+        maintenanceWeek: dto.maintenanceWeek,
         smartcleanReferenceAt:
           dto.maintenanceType === MaintenanceType.SMARTCLEAN && dto.smartcleanReferenceAt
             ? this.validDate(dto.smartcleanReferenceAt, 'smartcleanReferenceAt')
@@ -90,7 +90,7 @@ export class PointsService {
       ...(scheduleTouched
         ? {
             maintenanceType,
-            maintenanceWeek: maintenanceType === MaintenanceType.STANDARD ? maintenanceWeek : null,
+            maintenanceWeek,
             smartcleanReferenceAt:
               maintenanceType === MaintenanceType.SMARTCLEAN && smartcleanReferenceAt
                 ? this.validDate(smartcleanReferenceAt, 'smartcleanReferenceAt')
@@ -119,6 +119,7 @@ export class PointsService {
       if (!point.region) reasons.push('REGION_MISSING');
       else if (!point.region.technician || !point.region.technician.active) reasons.push('TECHNICIAN_MISSING');
       if (point.maintenanceType === MaintenanceType.STANDARD && ![1, 2].includes(point.maintenanceWeek ?? 0)) reasons.push('STANDARD_WEEK_MISSING');
+      if (point.maintenanceType === MaintenanceType.SMARTCLEAN && ![1, 2].includes(point.maintenanceWeek ?? 0)) reasons.push('SMARTCLEAN_WEEK_MISSING');
       if (point.maintenanceType === MaintenanceType.SMARTCLEAN && !point.smartcleanReferenceAt) reasons.push('SMARTCLEAN_REFERENCE_MISSING');
       if ((codeCounts.get(point.code.trim()) ?? 0) > 1) reasons.push('DUPLICATE_CODE');
       return reasons.length ? [{ ...point, setupReasons: reasons }] : [];
@@ -151,7 +152,7 @@ export class PointsService {
       const smart = smartRaw === true || /^(VAR|VAR 1|EVET|YES|TRUE|1)$/i.test(String(smartRaw ?? '').trim());
       const weekRaw = row.maintenanceWeek ?? row['Rut Haftası'];
       const week = Number(weekRaw);
-      const maintenanceWeek = !smart && [1,2].includes(week) ? week : null;
+      const maintenanceWeek = [1,2].includes(week) ? week : null;
       const maintenanceType = smart ? MaintenanceType.SMARTCLEAN : MaintenanceType.STANDARD;
       const existingExact = await this.prisma.point.findFirst({
         where: { code, name, regionId, status, maintenanceType, maintenanceWeek, deletedAt: null },
@@ -403,6 +404,10 @@ export class PointsService {
   private validateSchedule(type: MaintenanceType, week?: number, smartcleanReferenceAt?: string) {
     if (type === MaintenanceType.STANDARD && ![1, 2].includes(week ?? 0)) {
       throw new BadRequestException('Standard nokta için maintenanceWeek 1 veya 2 olmalıdır');
+    }
+
+    if (type === MaintenanceType.SMARTCLEAN && ![1, 2].includes(week ?? 0)) {
+      throw new BadRequestException('SmartClean nokta için maintenanceWeek 1 veya 2 olmalıdır');
     }
 
     if (type === MaintenanceType.SMARTCLEAN && !smartcleanReferenceAt) {
