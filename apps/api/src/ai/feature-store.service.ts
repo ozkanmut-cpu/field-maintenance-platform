@@ -5,12 +5,14 @@ import { businessWeek } from '../common/business-week';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
 import { EffectiveWorkloadService } from './effective-workload.service';
+import { GeographyService } from './geography.service';
 
 @Injectable()
 export class FeatureStoreService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly effectiveWorkload: EffectiveWorkloadService,
+    private readonly geography: GeographyService,
   ) {}
 
   async buildWeeklySnapshot(asOf = new Date()): Promise<FeatureSnapshot> {
@@ -67,7 +69,7 @@ export class FeatureStoreService {
         activeTechnicianCount: technicians.length,
         regionCount: regions.length,
         activePointCount: points.length,
-        locatedPointCount: points.filter((p) => p.canonicalLatitude && p.canonicalLongitude).length,
+        locatedPointCount: points.filter((p) => p.canonicalLatitude !== null && p.canonicalLongitude !== null).length,
         visitCount: visits.length,
         attemptCount: attempts.length,
         obligationCount: obligations.length,
@@ -80,6 +82,9 @@ export class FeatureStoreService {
     for (const technician of technicians) {
       const technicianVisits = visits.filter((v) => v.technicianId === technician.id);
       const technicianAttempts = attempts.filter((a) => a.technicianId === technician.id);
+      const technicianGeo = this.geography.summarize(technicianVisits
+        .filter((v) => v.latitude !== null && v.longitude !== null)
+        .map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
         completedVisitCount: technicianVisits.length,
@@ -89,17 +94,29 @@ export class FeatureStoreService {
         lateEntryCount: technicianVisits.filter((v) => v.enteredLate).length,
         suspiciousVisitCount: technicianVisits.filter((v) => v.suspiciousBatch).length,
         reviewRecommendedCount: technicianVisits.filter((v) => v.reviewRecommended).length,
-        gpsSampleCount: technicianVisits.filter((v) => v.latitude && v.longitude).length,
+        gpsSampleCount: technicianGeo.sampleCount,
+        fieldCenterLatitude: technicianGeo.centerLatitude,
+        fieldCenterLongitude: technicianGeo.centerLongitude,
+        fieldP90RadiusMeters: technicianGeo.p90RadiusMeters,
       }});
     }
 
     for (const region of regions) {
-      const regionPointIds = new Set(points.filter((p) => p.regionId === region.id).map((p) => p.id));
+      const regionPoints = points.filter((p) => p.regionId === region.id);
+      const regionPointIds = new Set(regionPoints.map((p) => p.id));
+      const regionGeo = this.geography.summarize(regionPoints
+        .filter((p) => p.canonicalLatitude !== null && p.canonicalLongitude !== null)
+        .map((p) => ({ latitude: Number(p.canonicalLatitude), longitude: Number(p.canonicalLongitude) })));
       records.push({ entityType: 'REGION', entityId: region.id, features: {
         assignedTechnicianId: region.technicianId,
         technicianAssigned: Boolean(region.technicianId),
         pointCount: regionPointIds.size,
-        locatedPointCount: points.filter((p) => p.regionId === region.id && p.canonicalLatitude && p.canonicalLongitude).length,
+        locatedPointCount: regionGeo.sampleCount,
+        locationCoverage: regionPoints.length ? regionGeo.sampleCount / regionPoints.length : 0,
+        centerLatitude: regionGeo.centerLatitude,
+        centerLongitude: regionGeo.centerLongitude,
+        p90RadiusMeters: regionGeo.p90RadiusMeters,
+        maxRadiusMeters: regionGeo.maxRadiusMeters,
         visitCount: visits.filter((v) => regionPointIds.has(v.pointId)).length,
         attemptCount: attempts.filter((a) => regionPointIds.has(a.pointId)).length,
         smartcleanScheduleConfigured,
@@ -115,7 +132,9 @@ export class FeatureStoreService {
       records.push({ entityType: 'POINT', entityId: point.id, features: {
         regionId: point.regionId,
         hasRegion: Boolean(point.regionId),
-        hasCanonicalLocation: Boolean(point.canonicalLatitude && point.canonicalLongitude),
+        hasCanonicalLocation: point.canonicalLatitude !== null && point.canonicalLongitude !== null,
+        canonicalLatitude: point.canonicalLatitude === null ? null : Number(point.canonicalLatitude),
+        canonicalLongitude: point.canonicalLongitude === null ? null : Number(point.canonicalLongitude),
         locationConfidence: point.locationConfidence,
         locationSource: point.locationSource,
         maintenanceType: point.maintenanceType,
