@@ -10,6 +10,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "lint": "tsc --noEmit",
+    "test:rut-schedule": "node --test --require ts-node/register src/common/rut-schedule.spec.ts src/common/smartclean-schedule.spec.ts",
+    "test:effective-workload": "node --test --require ts-node/register src/ai/effective-workload.service.spec.ts",
     "test:business-week": "node --test --require ts-node/register src/common/business-week.spec.ts",
     "test:data-maturity": "node --test --require ts-node/register src/ai/data-maturity.service.spec.ts",
     "test:cold-start": "node --test --require ts-node/register src/ai/cold-start.service.spec.ts",
