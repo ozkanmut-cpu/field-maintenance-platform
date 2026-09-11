@@ -15,8 +15,10 @@ function snapshot(weekKey: string, records: FeatureRecord[]): FeatureSnapshot {
   };
 }
 
-function point(id: string, regionId: string, maintenanceType: string, visitCount: number): FeatureRecord {
-  return { entityType: 'POINT', entityId: id, features: { regionId, maintenanceType, visitCount } };
+function point(id: string, regionId: string, maintenanceType: string, arg4: number, arg5?: number): FeatureRecord {
+  const maintenanceWeek = arg5 === undefined ? null : arg4;
+  const visitCount = arg5 === undefined ? arg4 : arg5;
+  return { entityType: 'POINT', entityId: id, features: { regionId, maintenanceType, maintenanceWeek, visitCount } };
 }
 
 test('prefers entity history once enough own samples exist', () => {
@@ -65,4 +67,26 @@ test('returns insufficient rather than inventing a baseline', () => {
   assert.equal(result.source, 'INSUFFICIENT');
   assert.equal(result.value, null);
   assert.equal(result.confidence, 'UNKNOWN');
+});
+
+test('SmartClean prefers same region, type and rut-week cohort', () => {
+  const history = [
+    snapshot('2026-W35', [
+      point('target', 'r1', 'SMARTCLEAN', 1, 0),
+      point('same1', 'r1', 'SMARTCLEAN', 1, 10),
+      point('same2', 'r1', 'SMARTCLEAN', 1, 12),
+      point('other1', 'r1', 'SMARTCLEAN', 2, 100),
+      point('other2', 'r1', 'SMARTCLEAN', 2, 120),
+    ]),
+    snapshot('2026-W36', [
+      point('target', 'r1', 'SMARTCLEAN', 1, 0),
+      point('same1', 'r1', 'SMARTCLEAN', 1, 14),
+      point('same2', 'r1', 'SMARTCLEAN', 1, 16),
+      point('other1', 'r1', 'SMARTCLEAN', 2, 140),
+      point('other2', 'r1', 'SMARTCLEAN', 2, 160),
+    ]),
+  ];
+  const result = service.estimatePoint(history, 'target', 'visitCount');
+  assert.equal(result.source, 'REGION_TYPE_WEEK_COHORT');
+  assert.equal(result.value, 13);
 });
