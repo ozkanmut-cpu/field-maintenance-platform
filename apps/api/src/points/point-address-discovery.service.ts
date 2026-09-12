@@ -4,10 +4,10 @@ import { LocationSource } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 type GoogleCandidate = {
-  place_id?: string;
-  name?: string;
-  formatted_address?: string;
-  geometry?: { location?: { lat?: number; lng?: number } };
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
 };
 
 @Injectable()
@@ -36,16 +36,18 @@ export class PointAddressDiscoveryService {
     if (!point) return { status: 'NOT_FOUND' as const };
 
     const query = [point.name, point.region?.name, 'Türkiye'].filter(Boolean).join(' ');
-    const url = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
-    url.searchParams.set('query', query);
-    url.searchParams.set('language', 'tr');
-    url.searchParams.set('region', 'tr');
-    url.searchParams.set('key', key);
-
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Google Places HTTP ${response.status}`);
-    const body = (await response.json()) as { status?: string; results?: GoogleCandidate[] };
-    const candidates = body.results ?? [];
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location',
+      },
+      body: JSON.stringify({ textQuery: query, languageCode: 'tr', regionCode: 'TR', pageSize: 10 }),
+    });
+    if (!response.ok) throw new Error(`Google Places New HTTP ${response.status}`);
+    const body = (await response.json()) as { places?: GoogleCandidate[] };
+    const candidates = body.places ?? [];
     if (!candidates.length) return { status: 'NO_MATCH' as const };
 
     const ranked = candidates.map((candidate) => ({ candidate, score: this.score(point.name, point.region?.name, candidate) }))
@@ -56,20 +58,20 @@ export class PointAddressDiscoveryService {
       return { status: 'AMBIGUOUS' as const, confidence: best?.score ?? 0 };
     }
 
-    const lat = best.candidate.geometry?.location?.lat;
-    const lng = best.candidate.geometry?.location?.lng;
+    const lat = best.candidate.location?.latitude;
+    const lng = best.candidate.location?.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_COORDINATES' as const };
 
     await this.prisma.point.update({
       where: { id: point.id },
       data: {
-        address: best.candidate.formatted_address ?? point.address,
+        address: best.candidate.formattedAddress ?? point.address,
         canonicalLatitude: lat,
         canonicalLongitude: lng,
         locationSource: LocationSource.GOOGLE_MATCH,
         locationConfidence: best.score,
-        googlePlaceId: best.candidate.place_id ?? null,
-        googleBusinessName: best.candidate.name ?? null,
+        googlePlaceId: best.candidate.id ?? null,
+        googleBusinessName: best.candidate.displayName?.text ?? null,
       },
     });
     return { status: 'AUTO_DISCOVERED' as const, confidence: best.score };
@@ -90,8 +92,8 @@ export class PointAddressDiscoveryService {
 
   private score(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
     const expected = this.normalize(pointName);
-    const actual = this.normalize(candidate.name ?? '');
-    const address = this.normalize(candidate.formatted_address ?? '');
+    const actual = this.normalize(candidate.displayName?.text ?? '');
+    const address = this.normalize(candidate.formattedAddress ?? '');
     let score = 0;
     if (expected === actual) score += 70;
     else {
