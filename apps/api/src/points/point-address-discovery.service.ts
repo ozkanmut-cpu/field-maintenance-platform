@@ -75,10 +75,7 @@ export class PointAddressDiscoveryService {
   }
 
   private buildQueries(name: string, regionName?: string) {
-    const variants = new Set<string>([name.trim()]);
-    for (const match of name.matchAll(/\(([^)]+)\)/g)) if (match[1]?.trim()) variants.add(match[1].trim());
-    const withoutParentheses = name.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
-    if (withoutParentheses) variants.add(withoutParentheses);
+    const variants = this.nameVariants(name, regionName);
     const areas = new Set<string>();
     if (regionName) areas.add(regionName);
     const fallback = regionName ? this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] : undefined;
@@ -89,8 +86,29 @@ export class PointAddressDiscoveryService {
     return [...queries];
   }
 
+  private nameVariants(name: string, regionName?: string) {
+    const variants = new Set<string>([name.trim()]);
+    for (const match of name.matchAll(/\(([^)]+)\)/g)) if (match[1]?.trim()) variants.add(match[1].trim());
+    const withoutParentheses = name.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+    if (withoutParentheses) variants.add(withoutParentheses);
+
+    if (regionName && withoutParentheses) {
+      const nameTokens = withoutParentheses.split(/\s+/);
+      const regionTokenCount = regionName.trim().split(/\s+/).length;
+      if (nameTokens.length > regionTokenCount) {
+        const trailing = nameTokens.slice(-regionTokenCount).join(' ');
+        if (this.normalize(trailing) === this.normalize(regionName)) {
+          const withoutTrailingRegion = nameTokens.slice(0, -regionTokenCount).join(' ').trim();
+          if (withoutTrailingRegion) variants.add(withoutTrailingRegion);
+        }
+      }
+    }
+
+    return [...variants];
+  }
+
   private score(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
-    const expectedVariants = [pointName, ...[...pointName.matchAll(/\(([^)]+)\)/g)].map((m) => m[1]), pointName.replace(/\([^)]*\)/g, ' ')].map((x) => this.normalize(x)).filter(Boolean);
+    const expectedVariants = this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean);
     const actual = this.normalize(candidate.displayName?.text ?? ''), address = this.normalize(candidate.formattedAddress ?? '');
     const nameScore = Math.max(...expectedVariants.map((expected) => this.nameScore(expected, actual)));
     const region = regionName ? this.normalize(regionName) : '';
