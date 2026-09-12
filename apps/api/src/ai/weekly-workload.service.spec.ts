@@ -1,9 +1,27 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { WeeklyWorkloadService } from './weekly-workload.service';
+import { TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.service';
 import { TechnicianWeeklyBaseline } from './technician-baseline.types';
+import { WeeklyWorkloadService } from './weekly-workload.service';
 
 const service = new WeeklyWorkloadService();
+
+function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): TechnicianAssignedWeeklyWorkload {
+  return {
+    technicianId: 't1',
+    standardCurrent: 0,
+    standardCarryover: 0,
+    smartcleanCurrent: 0,
+    smartcleanCarryover: 0,
+    equipmentKnownPointCount: 0,
+    equipmentUnknownPointCount: 0,
+    assignedCoolerCount: 0,
+    assignedTowerCount: 0,
+    assignedTapCount: 0,
+    assignedSmarttapCount: 0,
+    ...overrides,
+  };
+}
 
 function baseline(state: 'WARMING_UP' | 'ACTIVE'): TechnicianWeeklyBaseline {
   return {
@@ -31,7 +49,7 @@ function baseline(state: 'WARMING_UP' | 'ACTIVE'): TechnicianWeeklyBaseline {
 
 test('marks assessment ready when technician baseline is active', () => {
   const result = service.assess(
-    { technicianId: 't1', standardCurrent: 3, standardCarryover: 1, smartcleanCurrent: 2, smartcleanCarryover: 1 },
+    assigned({ standardCurrent: 3, standardCarryover: 1, smartcleanCurrent: 2, smartcleanCarryover: 1 }),
     baseline('ACTIVE'),
   );
 
@@ -52,7 +70,7 @@ test('marks assessment ready when technician baseline is active', () => {
 
 test('keeps assessment insufficient while baseline is warming up', () => {
   const result = service.assess(
-    { technicianId: 't1', standardCurrent: 1, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0 },
+    assigned({ standardCurrent: 1 }),
     baseline('WARMING_UP'),
   );
 
