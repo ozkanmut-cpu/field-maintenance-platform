@@ -127,6 +127,24 @@ export class PointAddressDiscoveryService {
     return [...variants];
   }
 
+  private primaryNameVariants(name: string, regionName?: string) {
+    const withoutParentheses = name.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+    const variants = new Set<string>();
+    if (withoutParentheses) variants.add(withoutParentheses);
+    if (regionName && withoutParentheses) {
+      const nameTokens = withoutParentheses.split(/\s+/);
+      const regionTokenCount = regionName.trim().split(/\s+/).length;
+      if (nameTokens.length > regionTokenCount) {
+        const trailing = nameTokens.slice(-regionTokenCount).join(' ');
+        if (this.normalize(trailing) === this.normalize(regionName)) {
+          const stripped = nameTokens.slice(0, -regionTokenCount).join(' ').trim();
+          if (stripped) variants.add(stripped);
+        }
+      }
+    }
+    return [...variants];
+  }
+
   private cleanParenthetical(value: string) {
     let cleaned = value.trim();
     const suffixes = [
@@ -143,9 +161,12 @@ export class PointAddressDiscoveryService {
   }
 
   private score(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
-    const expectedVariants = this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean);
+    const allVariants = this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean);
+    const primaryVariants = new Set(this.primaryNameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean));
     const actual = this.normalize(candidate.displayName?.text ?? ''), address = this.normalize(candidate.formattedAddress ?? '');
-    const nameScore = Math.max(...expectedVariants.map((expected) => this.nameScore(expected, actual)));
+    const primaryScores = allVariants.filter((expected) => primaryVariants.has(expected)).map((expected) => this.nameScore(expected, actual));
+    const alternateScores = allVariants.filter((expected) => !primaryVariants.has(expected)).map((expected) => Math.min(35, this.nameScore(expected, actual)));
+    const nameScore = Math.max(0, ...primaryScores, ...alternateScores);
     const region = regionName ? this.normalize(regionName) : '';
     const fallback = regionName ? this.normalize(this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] ?? '') : '';
     const exactRegionMatch = !!region && address.includes(region), fallbackMatch = !!fallback && address.includes(fallback);
@@ -159,7 +180,7 @@ export class PointAddressDiscoveryService {
 
   private hasExactExpectedName(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
     const actual = this.normalize(candidate.displayName?.text ?? '');
-    return this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean).some((expected) => this.canonicalName(expected) === this.canonicalName(actual));
+    return this.primaryNameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean).some((expected) => this.canonicalName(expected) === this.canonicalName(actual));
   }
 
   private isSamePhysicalPlace(a: GoogleCandidate, b: GoogleCandidate) {
@@ -184,10 +205,43 @@ export class PointAddressDiscoveryService {
   private nameScore(expected: string, actual: string) {
     const canonicalExpected = this.canonicalName(expected), canonicalActual = this.canonicalName(actual);
     if (canonicalExpected === canonicalActual) return 65;
-    if (canonicalExpected && canonicalActual && (canonicalActual.startsWith(`${canonicalExpected} `) || canonicalExpected.startsWith(`${canonicalActual} `))) return 60;
-    const expectedTokens = new Set(canonicalExpected.split(' ').filter(Boolean)), actualTokens = new Set(canonicalActual.split(' ').filter(Boolean));
-    const overlap = [...expectedTokens].filter((x) => actualTokens.has(x)).length;
-    return Math.min(60, Math.round((overlap / Math.max(expectedTokens.size, 1)) * 60));
+    const expectedTokens = canonicalExpected.split(' ').filter(Boolean);
+    const actualTokens = canonicalActual.split(' ').filter(Boolean);
+    if (!expectedTokens.length || !actualTokens.length) return 0;
+    const matchedActual = new Set<number>();
+    let overlap = 0;
+    for (const expectedToken of expectedTokens) {
+      const index = actualTokens.findIndex((actualToken, i) => !matchedActual.has(i) && this.tokensEquivalent(expectedToken, actualToken));
+      if (index >= 0) { overlap += 1; matchedActual.add(index); }
+    }
+    const recall = overlap / expectedTokens.length;
+    const precision = overlap / actualTokens.length;
+    if (!recall || !precision) return 0;
+    const f1 = 2 * precision * recall / (precision + recall);
+    return Math.min(60, Math.round(f1 * 60));
+  }
+
+  private tokensEquivalent(a: string, b: string) {
+    if (a === b) return true;
+    if ((`${a}s` === b || `${b}s` === a) && Math.min(a.length, b.length) >= 3) return true;
+    if (Math.min(a.length, b.length) >= 4 && Math.abs(a.length - b.length) <= 1) return this.editDistanceAtMostOne(a, b);
+    return false;
+  }
+
+  private editDistanceAtMostOne(a: string, b: string) {
+    if (a === b) return true;
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, edits = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i += 1; j += 1; continue; }
+      edits += 1;
+      if (edits > 1) return false;
+      if (a.length > b.length) i += 1;
+      else if (b.length > a.length) j += 1;
+      else { i += 1; j += 1; }
+    }
+    if (i < a.length || j < b.length) edits += 1;
+    return edits <= 1;
   }
 
   private canonicalName(value: string) {
