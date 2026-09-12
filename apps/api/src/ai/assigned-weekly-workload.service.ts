@@ -11,6 +11,12 @@ export type TechnicianAssignedWeeklyWorkload = {
   standardCarryover: number;
   smartcleanCurrent: number;
   smartcleanCarryover: number;
+  equipmentKnownPointCount: number;
+  equipmentUnknownPointCount: number;
+  assignedCoolerCount: number;
+  assignedTowerCount: number;
+  assignedTapCount: number;
+  assignedSmarttapCount: number;
 };
 
 @Injectable()
@@ -37,16 +43,55 @@ export class AssignedWeeklyWorkloadService {
     ]);
 
     const pointIds = [...new Set([...standard.map((x) => x.pointId), ...smartclean.map((x) => x.pointId)])];
-    const effective = await this.assignments.resolveMany(pointIds, asOf);
+    const [effective, pointProfiles] = await Promise.all([
+      this.assignments.resolveMany(pointIds, asOf),
+      pointIds.length
+        ? this.prisma.point.findMany({
+            where: { id: { in: pointIds } },
+            select: { id: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true },
+          })
+        : [],
+    ]);
+    const profileByPoint = new Map(pointProfiles.map((point) => [point.id, point]));
     const rows = new Map<string, TechnicianAssignedWeeklyWorkload>();
     const unassigned = { standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0 };
+    const seenEquipment = new Set<string>();
+
+    const rowFor = (technicianId: string) => {
+      const existing = rows.get(technicianId);
+      if (existing) return existing;
+      const row: TechnicianAssignedWeeklyWorkload = {
+        technicianId,
+        standardCurrent: 0,
+        standardCarryover: 0,
+        smartcleanCurrent: 0,
+        smartcleanCarryover: 0,
+        equipmentKnownPointCount: 0,
+        equipmentUnknownPointCount: 0,
+        assignedCoolerCount: 0,
+        assignedTowerCount: 0,
+        assignedTapCount: 0,
+        assignedSmarttapCount: 0,
+      };
+      rows.set(technicianId, row);
+      return row;
+    };
 
     const add = (pointId: string, key: keyof typeof unassigned) => {
       const technicianId = effective.get(pointId)?.technicianId ?? null;
       if (!technicianId) return void (unassigned[key] += 1);
-      const row = rows.get(technicianId) ?? { technicianId, standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0 };
+      const row = rowFor(technicianId);
       row[key] += 1;
-      rows.set(technicianId, row);
+      if (seenEquipment.has(pointId)) return;
+      seenEquipment.add(pointId);
+      const profile = profileByPoint.get(pointId);
+      const complete = profile && [profile.coolerCount, profile.towerCount, profile.tapCount, profile.smarttapCount].every((value) => value !== null);
+      if (!complete || !profile) return void (row.equipmentUnknownPointCount += 1);
+      row.equipmentKnownPointCount += 1;
+      row.assignedCoolerCount += profile.coolerCount ?? 0;
+      row.assignedTowerCount += profile.towerCount ?? 0;
+      row.assignedTapCount += profile.tapCount ?? 0;
+      row.assignedSmarttapCount += profile.smarttapCount ?? 0;
     };
 
     for (const item of standard) add(item.pointId, item.dueEnd < week.weekStart ? 'standardCarryover' : 'standardCurrent');
