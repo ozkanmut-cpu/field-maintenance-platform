@@ -20,6 +20,9 @@ export class PointAddressDiscoveryService {
     EŞREFPAŞA: 'Konak', İNCİRALTI: 'Balçova', SAHİLEVLERİ: 'Narlıdere', MAVİŞEHİR: 'Karşıyaka',
     BOSTANLI: 'Karşıyaka', ÇAMDİBİ: 'Bornova', MYVIA: 'Bornova', HATAY: 'Konak',
   };
+  private readonly annotationOnly = new Set([
+    'lokasyon', 'seyyar', 'yeni adi', 'eski adi', 'yeni ismi', 'eski ismi', 'sube', 'sanal', 'gecici',
+  ]);
 
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
 
@@ -87,8 +90,18 @@ export class PointAddressDiscoveryService {
   }
 
   private nameVariants(name: string, regionName?: string) {
-    const variants = new Set<string>([name.trim()]);
-    for (const match of name.matchAll(/\(([^)]+)\)/g)) if (match[1]?.trim()) variants.add(match[1].trim());
+    const variants = new Set<string>();
+    const baseName = name.replace(/\(([^)]+)\)/g, (_whole, raw: string) => {
+      const cleaned = this.cleanParenthetical(raw);
+      return cleaned ? `(${cleaned})` : ' ';
+    }).replace(/\s+/g, ' ').trim();
+    if (baseName) variants.add(baseName);
+
+    for (const match of name.matchAll(/\(([^)]+)\)/g)) {
+      const cleaned = this.cleanParenthetical(match[1] ?? '');
+      if (cleaned) variants.add(cleaned);
+    }
+
     const withoutParentheses = name.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
     if (withoutParentheses) variants.add(withoutParentheses);
 
@@ -105,6 +118,21 @@ export class PointAddressDiscoveryService {
     }
 
     return [...variants];
+  }
+
+  private cleanParenthetical(value: string) {
+    let cleaned = value.trim();
+    const suffixes = [
+      /\byeni\s+ad[ıi]\b/gi, /\beski\s+ad[ıi]\b/gi,
+      /\byeni\s+ismi\b/gi, /\beski\s+ismi\b/gi,
+      /\blokasyon\b/gi, /\bseyyar\b/gi, /\bşube\b/gi, /\bsube\b/gi,
+      /\bsanal\b/gi, /\bgeçici\b/gi, /\bgecici\b/gi,
+    ];
+    for (const pattern of suffixes) cleaned = cleaned.replace(pattern, ' ');
+    cleaned = cleaned.replace(/[\-–—,:;]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return '';
+    if (this.annotationOnly.has(this.normalize(cleaned))) return '';
+    return cleaned;
   }
 
   private score(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
