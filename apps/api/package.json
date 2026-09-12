@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "test:rut-schedule": "node --test --require ts-node/register src/common/rut-schedule.spec.ts src/common/smartclean-schedule.spec.ts",
     "test:effective-workload": "node --test --require ts-node/register src/ai/effective-workload.service.spec.ts",
+    "test:assigned-workload": "node --test --require ts-node/register src/ai/assigned-weekly-workload.service.spec.ts",
     "test:geography": "node --test --require ts-node/register src/ai/geography.service.spec.ts",
     "test:geography-clustering": "node --test --require ts-node/register src/ai/geography-clustering.service.spec.ts",
     "test:business-week": "node --test --require ts-node/register src/common/business-week.spec.ts",
