@@ -4,6 +4,7 @@ import { PointStatus, UserRole, VisitStatus } from '@prisma/client';
 import { businessWeek } from '../common/business-week';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
+import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService } from './geography.service';
 import { GeographyClusteringService } from './geography-clustering.service';
@@ -12,6 +13,7 @@ import { GeographyClusteringService } from './geography-clustering.service';
 export class FeatureStoreService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly assignedWeeklyWorkload: AssignedWeeklyWorkloadService,
     private readonly effectiveWorkload: EffectiveWorkloadService,
     private readonly geography: GeographyService,
     private readonly clustering: GeographyClusteringService,
@@ -21,6 +23,8 @@ export class FeatureStoreService {
     const week = businessWeek(asOf);
     const smartcleanScheduleConfigured = this.effectiveWorkload.smartcleanScheduleConfigured();
     const smartcleanWorkload = await this.effectiveWorkload.smartcleanForWeek(asOf);
+    const assignedWorkload = await this.assignedWeeklyWorkload.forWeek(asOf);
+    const assignedWorkloadByTechnician = new Map(assignedWorkload.technicians.map((row) => [row.technicianId, row]));
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
       this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
@@ -70,6 +74,7 @@ export class FeatureStoreService {
     }});
 
     for (const technician of technicians) {
+      const assigned = assignedWorkloadByTechnician.get(technician.id);
       const technicianVisits = visits.filter((v) => v.technicianId === technician.id);
       const technicianAttempts = attempts.filter((a) => a.technicianId === technician.id);
       const technicianGeo = this.geography.summarize(technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
@@ -78,6 +83,12 @@ export class FeatureStoreService {
       const equipmentCompleteVisits = technicianVisits.filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null));
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
+        assignedStandardCurrentCount: assigned?.standardCurrent ?? 0,
+        assignedStandardCarryoverCount: assigned?.standardCarryover ?? 0,
+        assignedSmartcleanCurrentCount: assigned?.smartcleanCurrent ?? 0,
+        assignedSmartcleanCarryoverCount: assigned?.smartcleanCarryover ?? 0,
+        assignedCurrentWorkloadCount: (assigned?.standardCurrent ?? 0) + (assigned?.smartcleanCurrent ?? 0),
+        assignedCarryoverWorkloadCount: (assigned?.standardCarryover ?? 0) + (assigned?.smartcleanCarryover ?? 0),
         completedVisitCount: technicianVisits.length,
         attemptedVisitCount: technicianAttempts.length,
         uniqueVisitedPointCount: new Set(technicianVisits.map((v) => v.pointId)).size,
@@ -162,7 +173,7 @@ export class FeatureStoreService {
       }});
     }
 
-    const sourcePayload = { technicians, regions, points, visits, attempts, obligations, smartcleanScheduleConfigured, smartcleanWorkload };
+    const sourcePayload = { technicians, regions, points, visits, attempts, obligations, smartcleanScheduleConfigured, smartcleanWorkload, assignedWorkload };
     const sourceHash = createHash('sha256').update(this.stableStringify(sourcePayload)).digest('hex');
     const timestamps = [...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt), ...visits.map((x) => x.recordedAtServer), ...attempts.map((x) => x.attemptedAt), ...obligations.map((x) => x.createdAt)];
     const sourceDataThrough = timestamps.length ? new Date(Math.max(...timestamps.map((d) => d.getTime()))).toISOString() : null;
