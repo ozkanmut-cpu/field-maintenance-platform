@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
+import { PointAddressDiscoveryService } from './point-address-discovery.service';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
@@ -12,12 +13,10 @@ import { PointsService } from './points.service';
 
 @Controller('points')
 export class PointsController {
-  constructor(private readonly points: PointsService) {}
+  constructor(private readonly points: PointsService, private readonly addressDiscovery: PointAddressDiscoveryService) {}
 
   @Get()
-  list() {
-    return this.points.list();
-  }
+  list() { return this.points.list(); }
 
   @Roles(UserRole.ADMIN)
   @Get('duplicate-suggestions')
@@ -27,8 +26,12 @@ export class PointsController {
 
   @Roles(UserRole.ADMIN)
   @Get('setup-pending')
-  setupPending() {
-    return this.points.setupPending();
+  setupPending() { return this.points.setupPending(); }
+
+  @Roles(UserRole.ADMIN)
+  @Post('address-discovery/run')
+  discoverMissing(@Query('limit') limit?: string) {
+    return this.addressDiscovery.discoverMissing(limit ? Number(limit) : 25);
   }
 
   @Roles(UserRole.ADMIN)
@@ -39,9 +42,7 @@ export class PointsController {
 
   @Roles(UserRole.TECHNICIAN)
   @Get('my-customers')
-  myCustomers(@CurrentUser() user: AuthenticatedUser) {
-    return this.points.myCustomers(user.id);
-  }
+  myCustomers(@CurrentUser() user: AuthenticatedUser) { return this.points.myCustomers(user.id); }
 
   @Roles(UserRole.TECHNICIAN)
   @Patch(':id/equipment')
@@ -49,20 +50,22 @@ export class PointsController {
     return this.points.updateEquipment(user.id, id, dto);
   }
 
+  @Roles(UserRole.ADMIN)
+  @Post(':id/address-discovery')
+  discoverAddress(@Param('id') id: string) { return this.addressDiscovery.discover(id); }
+
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.points.get(id);
-  }
+  get(@Param('id') id: string) { return this.points.get(id); }
 
   @Get(':id/aliases')
-  aliases(@Param('id') id: string) {
-    return this.points.aliases(id);
-  }
+  aliases(@Param('id') id: string) { return this.points.aliases(id); }
 
   @Roles(UserRole.ADMIN)
   @Post()
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePointDto) {
-    return this.points.create(user.id, dto);
+  async create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePointDto) {
+    const point = await this.points.create(user.id, dto);
+    this.addressDiscovery.enqueue(point.id);
+    return point;
   }
 
   @Roles(UserRole.ADMIN)
@@ -73,7 +76,9 @@ export class PointsController {
 
   @Roles(UserRole.ADMIN)
   @Patch(':id')
-  update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdatePointDto) {
-    return this.points.update(user.id, id, dto);
+  async update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdatePointDto) {
+    const point = await this.points.update(user.id, id, dto);
+    if (dto.name !== undefined || dto.regionId !== undefined) this.addressDiscovery.enqueue(id);
+    return point;
   }
 }
