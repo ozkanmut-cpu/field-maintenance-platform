@@ -36,8 +36,10 @@ export class PointsController {
 
   @Roles(UserRole.ADMIN)
   @Post('import')
-  importPoints(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportPointsDto) {
-    return this.points.importPoints(user.id, dto);
+  async importPoints(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportPointsDto) {
+    const result = await this.points.importPoints(user.id, dto);
+    for (const pointId of result.createdIds) this.addressDiscovery.enqueue(pointId);
+    return result;
   }
 
   @Roles(UserRole.TECHNICIAN)
