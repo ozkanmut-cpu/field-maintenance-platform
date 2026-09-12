@@ -46,7 +46,10 @@ export class PointAddressDiscoveryService {
 
     const deduped = [...new Map(all.sort((a, b) => b.score - a.score).map((item) => [item.candidate.id ?? `${item.candidate.displayName?.text}|${item.candidate.formattedAddress}`, item])).values()].sort((a, b) => b.score - a.score);
     const best = deduped[0], second = deduped[1];
-    if (!best || best.score < 70 || (second && best.score - second.score < 10)) return { status: 'AMBIGUOUS' as const, confidence: best?.score ?? 0 };
+    const closeCompetitor = !!second && best.score - second.score < 10;
+    const samePhysicalPlace = !!second && this.isSamePhysicalPlace(best.candidate, second.candidate);
+    const exactNameAdvantage = !!second && best.score >= 90 && this.hasExactExpectedName(point.name, point.region?.name, best.candidate) && !this.hasExactExpectedName(point.name, point.region?.name, second.candidate);
+    if (!best || best.score < 70 || (closeCompetitor && !samePhysicalPlace && !exactNameAdvantage)) return { status: 'AMBIGUOUS' as const, confidence: best?.score ?? 0 };
     const lat = best.candidate.location?.latitude, lng = best.candidate.location?.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_COORDINATES' as const };
 
@@ -148,6 +151,30 @@ export class PointAddressDiscoveryService {
     else if (region) score -= 35;
     if (address.includes('izmir')) score += 5;
     return Math.max(0, Math.min(score, 100));
+  }
+
+  private hasExactExpectedName(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
+    const actual = this.normalize(candidate.displayName?.text ?? '');
+    return this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean).includes(actual);
+  }
+
+  private isSamePhysicalPlace(a: GoogleCandidate, b: GoogleCandidate) {
+    const aLat = a.location?.latitude, aLng = a.location?.longitude, bLat = b.location?.latitude, bLng = b.location?.longitude;
+    if (![aLat, aLng, bLat, bLng].every(Number.isFinite)) return false;
+    const distance = this.distanceMeters(aLat as number, aLng as number, bLat as number, bLng as number);
+    if (distance > 120) return false;
+    const aAddress = this.normalize(a.formattedAddress ?? ''), bAddress = this.normalize(b.formattedAddress ?? '');
+    const aTokens = new Set(aAddress.split(' ').filter((x) => x.length > 2));
+    const bTokens = new Set(bAddress.split(' ').filter((x) => x.length > 2));
+    const overlap = [...aTokens].filter((x) => bTokens.has(x)).length;
+    return overlap >= 3;
+  }
+
+  private distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+    const r = 6371000, toRad = (value: number) => value * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   private nameScore(expected: string, actual: string) {
