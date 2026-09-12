@@ -19,9 +19,13 @@ export class PointAddressDiscoveryService {
     'KÜÇÜKPARK': 'Bornova', ALSANCAK: 'Konak', ÇANKAYA: 'Konak', KEMERALTI: 'Konak',
     EŞREFPAŞA: 'Konak', İNCİRALTI: 'Balçova', SAHİLEVLERİ: 'Narlıdere', MAVİŞEHİR: 'Karşıyaka',
     BOSTANLI: 'Karşıyaka', ÇAMDİBİ: 'Bornova', MYVIA: 'Bornova', HATAY: 'Konak',
+    MORDOĞAN: 'Karaburun',
   };
   private readonly annotationOnly = new Set([
     'lokasyon', 'seyyar', 'yeni adi', 'eski adi', 'yeni ismi', 'eski ismi', 'sube', 'sanal', 'gecici',
+  ]);
+  private readonly businessTypeTokens = new Set([
+    'bar', 'pub', 'cafe', 'kafe', 'rest', 'restaurant', 'restoran', 'otel', 'hotel', 'butik', 'club', 'kulubu', 'kulup',
   ]);
 
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
@@ -155,7 +159,7 @@ export class PointAddressDiscoveryService {
 
   private hasExactExpectedName(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
     const actual = this.normalize(candidate.displayName?.text ?? '');
-    return this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean).includes(actual);
+    return this.nameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean).some((expected) => this.canonicalName(expected) === this.canonicalName(actual));
   }
 
   private isSamePhysicalPlace(a: GoogleCandidate, b: GoogleCandidate) {
@@ -178,13 +182,27 @@ export class PointAddressDiscoveryService {
   }
 
   private nameScore(expected: string, actual: string) {
-    if (expected === actual) return 65;
-    const expectedTokens = new Set(expected.split(' ').filter((x) => x.length > 2)), actualTokens = new Set(actual.split(' ').filter((x) => x.length > 2));
+    const canonicalExpected = this.canonicalName(expected), canonicalActual = this.canonicalName(actual);
+    if (canonicalExpected === canonicalActual) return 65;
+    if (canonicalExpected && canonicalActual && (canonicalActual.startsWith(`${canonicalExpected} `) || canonicalExpected.startsWith(`${canonicalActual} `))) return 60;
+    const expectedTokens = new Set(canonicalExpected.split(' ').filter(Boolean)), actualTokens = new Set(canonicalActual.split(' ').filter(Boolean));
     const overlap = [...expectedTokens].filter((x) => actualTokens.has(x)).length;
     return Math.min(60, Math.round((overlap / Math.max(expectedTokens.size, 1)) * 60));
   }
 
+  private canonicalName(value: string) {
+    const tokens = this.normalize(value).split(' ').filter(Boolean).map((token) => {
+      if (token === 'rest' || token === 'restaurant' || token === 'restoran') return 'restaurant';
+      if (token === 'kafe') return 'cafe';
+      if (token === 'hotel') return 'otel';
+      if (token === 'kulubu' || token === 'kulup') return 'club';
+      return token;
+    });
+    while (tokens.length > 1 && this.businessTypeTokens.has(tokens[tokens.length - 1])) tokens.pop();
+    return tokens.join(' ');
+  }
+
   private normalize(value: string) {
-    return value.toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9çğıöşü]+/gi, ' ').trim();
+    return value.toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/([0-9])\s*[:.]\s*([0-9])/g, '$1$2').replace(/[^a-z0-9çğıöşü]+/gi, ' ').trim();
   }
 }
