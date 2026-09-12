@@ -10,10 +10,11 @@ import { GeographyClusteringService } from './geography-clustering.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { PointDifficultyService } from './point-difficulty.service';
 import { TechnicianBaselineService } from './technician-baseline.service';
+import { WeeklyWorkloadService } from './weekly-workload.service';
 
 @Module({
   imports: [PrismaModule, AssignmentsModule],
-  providers: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, DataMaturityService, ColdStartService, PointDifficultyService, TechnicianBaselineService],
-  exports: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, DataMaturityService, ColdStartService, PointDifficultyService, TechnicianBaselineService],
+  providers: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, DataMaturityService, ColdStartService, PointDifficultyService, TechnicianBaselineService, WeeklyWorkloadService],
+  exports: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, DataMaturityService, ColdStartService, PointDifficultyService, TechnicianBaselineService, WeeklyWorkloadService],
 })
 export class AiModule {}
