@@ -162,6 +162,7 @@ model Point {
   id                    String                  @id @default(uuid()) @db.Uuid
   code                  String
   name                  String
+  sapName               String?                 @map("sap_name")
   address               String?
   regionId              String?                 @map("region_id") @db.Uuid
   region                Region?                 @relation(fields: [regionId], references: [id])
@@ -298,19 +299,19 @@ model AdminAuditLog {
 }
 
 model MaintenanceObligation {
-  id                String                      @id @default(uuid()) @db.Uuid
-  pointId           String                      @map("point_id") @db.Uuid
-  point             Point                       @relation(fields: [pointId], references: [id])
-  cycleKey          String                      @map("cycle_key")
-  dueStart          DateTime                    @map("due_start") @db.Date
-  dueEnd            DateTime                    @map("due_end") @db.Date
-  status            MaintenanceObligationStatus @default(OPEN)
-  completedAt       DateTime?                   @map("completed_at")
-  resolvedAt        DateTime?                   @map("resolved_at")
-  resolvedByVisitId String?                     @map("resolved_by_visit_id") @db.Uuid
-  resolvedByAttemptId String?                   @map("resolved_by_attempt_id") @db.Uuid
-  createdAt         DateTime                    @default(now()) @map("created_at")
-  visits            MaintenanceVisit[]
+  id                  String                      @id @default(uuid()) @db.Uuid
+  pointId             String                      @map("point_id") @db.Uuid
+  point               Point                       @relation(fields: [pointId], references: [id])
+  cycleKey            String                      @map("cycle_key")
+  dueStart            DateTime                    @map("due_start") @db.Date
+  dueEnd              DateTime                    @map("due_end") @db.Date
+  status              MaintenanceObligationStatus @default(OPEN)
+  completedAt         DateTime?                   @map("completed_at")
+  resolvedAt          DateTime?                   @map("resolved_at")
+  resolvedByVisitId   String?                     @map("resolved_by_visit_id") @db.Uuid
+  resolvedByAttemptId String?                     @map("resolved_by_attempt_id") @db.Uuid
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  visits              MaintenanceVisit[]
 
   @@unique([pointId, cycleKey])
   @@index([status, dueStart, dueEnd])
@@ -366,28 +367,28 @@ model MaintenanceVisit {
 }
 
 model MaintenanceAttempt {
-  id                      String        @id @default(uuid()) @db.Uuid
-  pointId                 String        @map("point_id") @db.Uuid
-  point                   Point         @relation(fields: [pointId], references: [id])
-  technicianId            String        @map("technician_id") @db.Uuid
-  technician              User          @relation(fields: [technicianId], references: [id])
-  assistedForTechnicianId String?       @map("assisted_for_technician_id") @db.Uuid
-  assistedForTechnician   User?         @relation("AssistedAttemptForTechnician", fields: [assistedForTechnicianId], references: [id])
+  id                      String              @id @default(uuid()) @db.Uuid
+  pointId                 String              @map("point_id") @db.Uuid
+  point                   Point               @relation(fields: [pointId], references: [id])
+  technicianId            String              @map("technician_id") @db.Uuid
+  technician              User                @relation(fields: [technicianId], references: [id])
+  assistedForTechnicianId String?             @map("assisted_for_technician_id") @db.Uuid
+  assistedForTechnician   User?               @relation("AssistedAttemptForTechnician", fields: [assistedForTechnicianId], references: [id])
   reason                  AttemptReason
   note                    String?
-  latitude                Decimal       @db.Decimal(9, 6)
-  longitude               Decimal       @db.Decimal(9, 6)
-  accuracyMeters          Decimal?      @map("accuracy_meters") @db.Decimal(8, 2)
-  locationCapturedAt      DateTime      @map("location_captured_at")
-  attemptedAt             DateTime      @default(now()) @map("attempted_at")
-  idempotencyKey          String        @unique @map("idempotency_key")
-  createdAt               DateTime      @default(now()) @map("created_at")
+  latitude                Decimal             @db.Decimal(9, 6)
+  longitude               Decimal             @db.Decimal(9, 6)
+  accuracyMeters          Decimal?            @map("accuracy_meters") @db.Decimal(8, 2)
+  locationCapturedAt      DateTime            @map("location_captured_at")
+  attemptedAt             DateTime            @default(now()) @map("attempted_at")
+  idempotencyKey          String              @unique @map("idempotency_key")
+  createdAt               DateTime            @default(now()) @map("created_at")
   reviewStatus            AttemptReviewStatus @default(PENDING) @map("review_status")
-  reviewedAt              DateTime?     @map("reviewed_at")
-  reviewedById            String?       @map("reviewed_by_id") @db.Uuid
-  reviewedBy               User?         @relation("AttemptReviewedBy", fields: [reviewedById], references: [id])
-  reviewNote              String?       @map("review_note")
-  closedDueDate           DateTime?     @map("closed_due_date") @db.Date
+  reviewedAt              DateTime?           @map("reviewed_at")
+  reviewedById            String?             @map("reviewed_by_id") @db.Uuid
+  reviewedBy              User?               @relation("AttemptReviewedBy", fields: [reviewedById], references: [id])
+  reviewNote              String?             @map("review_note")
+  closedDueDate           DateTime?            @map("closed_due_date") @db.Date
 
   @@index([pointId, attemptedAt])
   @@index([technicianId, attemptedAt])
