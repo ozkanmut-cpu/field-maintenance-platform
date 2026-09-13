@@ -42,6 +42,9 @@ export class PointAddressDiscoveryService {
     if (!key) { this.logger.warn('GOOGLE_MAPS_API_KEY tanımlı değil; otomatik adres keşfi atlandı'); return { status: 'DISABLED' as const }; }
     const point = await this.prisma.point.findFirst({ where: { id: pointId, deletedAt: null }, include: { region: true } });
     if (!point) return { status: 'NOT_FOUND' as const };
+    if (point.locationSource === LocationSource.GOOGLE_MATCH && point.googlePlaceId) {
+      return { status: 'PRESERVED' as const, confidence: point.locationConfidence ?? 0 };
+    }
 
     const regionAnchors: GeoAnchor[] = point.regionId ? (await this.prisma.point.findMany({
       where: {
@@ -57,6 +60,7 @@ export class PointAddressDiscoveryService {
     const queries = new Set(pointNames.flatMap((name) => this.buildQueries(name, point.region?.name)));
     for (const query of queries) {
       for (const candidate of await this.searchGoogle(key, query)) {
+        if (!this.isPlausibleRegionCandidate(point.region?.name, candidate, regionAnchors)) continue;
         const score = this.combinedScore(point.name, point.sapName, point.region?.name, candidate, regionAnchors);
         all.push({ candidate, score, query });
       }
@@ -186,6 +190,29 @@ export class PointAddressDiscoveryService {
     if (!cleaned) return '';
     if (this.annotationOnly.has(this.normalize(cleaned))) return '';
     return cleaned;
+  }
+
+  private isPlausibleRegionCandidate(regionName: string | undefined, candidate: GoogleCandidate, regionAnchors: GeoAnchor[] = []) {
+    if (!regionName) return true;
+    const address = this.normalize(candidate.formattedAddress ?? '');
+    const region = this.normalize(regionName);
+    const fallback = this.normalize(this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] ?? '');
+    const lat = candidate.location?.latitude, lng = candidate.location?.longitude;
+    const nearestAnchorMeters = Number.isFinite(lat) && Number.isFinite(lng) && regionAnchors.length >= 3
+      ? Math.min(...regionAnchors.map((anchor) => this.distanceMeters(lat as number, lng as number, anchor.latitude, anchor.longitude)))
+      : Number.POSITIVE_INFINITY;
+
+    // Curated neighborhood aliases (e.g. HATAY -> Konak) must not be satisfied by a
+    // same-named distant city/province. Either the expected parent district is present
+    // in the address or the candidate must sit near already verified points in the region.
+    if (fallback) return address.includes(fallback) || nearestAnchorMeters <= 40_000;
+
+    // For other regions, an explicit region name is sufficient. Otherwise require a
+    // geographic cluster when we have enough trusted anchors; with no anchors we keep
+    // the candidate for conservative scoring rather than guessing a hard boundary.
+    if (address.includes(region)) return true;
+    if (regionAnchors.length >= 3) return nearestAnchorMeters <= 40_000;
+    return true;
   }
 
   private score(pointName: string, regionName: string | undefined, candidate: GoogleCandidate, regionAnchors: GeoAnchor[] = []) {
