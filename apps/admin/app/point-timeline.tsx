@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type Point = { id: string; code: string; name: string; maintenanceType: string; region?: { id: string; name: string } | null };
 type TimelineItem = { id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'OBLIGATION' | 'ASSIGNMENT'; at: string; data: Record<string, any> };
@@ -66,7 +67,7 @@ export default function PointTimeline() {
 
   return <>
     <section className="panel">
-      <div className="panelHeader"><div><h2>Nokta Timeline</h2><p>Bir noktanın bakım, deneme, ziyaret, yükümlülük ve görevlendirme geçmişini tek kronolojide incele.</p></div><button className="ghost" disabled={busy} onClick={() => void loadTimeline(pointId)}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Nokta Timeline</h2><p>Bir noktanın bakım, deneme, ziyaret, yükümlülük ve görevlendirme geçmişini tek kronolojide incele.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadTimeline(pointId)}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       <div className="compactForm">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / nokta / bölge ara" />
@@ -87,7 +88,7 @@ export default function PointTimeline() {
       <section className="panel">
         <div className="panelHeader"><div><h2>{timeline.point.name}</h2><p>{timeline.point.code} · {timeline.point.region?.name || 'Bölge yok'} · {timeline.point.maintenanceType}</p></div><span className="pill">{items.length} olay</span></div>
         <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Tür</th><th>Özet</th><th>Detay</th></tr></thead><tbody>
-          {items.length === 0 ? <tr><td colSpan={4}>Kayıt yok.</td></tr> : items.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleString('tr-TR')}</td><td><span className="pill">{labels[item.type]}</span></td><td>{summary(item)}</td><td><details><summary>JSON</summary><pre>{JSON.stringify(item.data, null, 2)}</pre></details></td></tr>)}
+          {busy && !timeline ? <tr><td colSpan={4}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Timeline yükleniyor</strong><span>Noktanın kronolojik geçmişi hazırlanıyor.</span></div></td></tr> : items.length === 0 ? <tr><td colSpan={4}><div className="emptyState compact"><AdminIcon name="history" /><strong>Kayıt yok</strong><span>Seçili olay türünde timeline kaydı bulunmuyor.</span></div></td></tr> : items.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleString('tr-TR')}</td><td><span className="pill">{labels[item.type]}</span></td><td>{summary(item)}</td><td><details><summary>JSON</summary><pre>{JSON.stringify(item.data, null, 2)}</pre></details></td></tr>)}
         </tbody></table></div>
       </section>
     </> : null}
