@@ -33,6 +33,8 @@ export default function AssignmentManagement() {
   const [effective, setEffective] = useState<Effective | null>(null);
   const [audit, setAudit] = useState<AuditHistory | null>(null);
   const [search, setSearch] = useState('');
+  const [historyFilter, setHistoryFilter] = useState<'ALL' | 'ACTIVE' | 'CLOSED' | 'POINT_OVERRIDE' | 'TEMPORARY'>('ALL');
+  const [historySearch, setHistorySearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -78,12 +80,18 @@ export default function AssignmentManagement() {
   async function createAssignment(event: FormEvent) {
     event.preventDefault();
     if (!pointId || !technicianId || !startsAt) { setError('Nokta, teknisyen ve başlangıç tarihi zorunludur.'); return; }
-    if (kind === 'TEMPORARY' && !endsAt) { setError('Geçici görevlendirmede bitiş tarihi zorunludur.'); return; }
+    const startDate = new Date(startsAt);
+    const endDate = endsAt ? new Date(endsAt) : null;
+    if (Number.isNaN(startDate.getTime())) { setError('Başlangıç tarihi geçersiz.'); return; }
+    if (kind === 'TEMPORARY' && !endDate) { setError('Geçici görevlendirmede bitiş tarihi zorunludur.'); return; }
+    if (endDate && endDate <= startDate) { setError('Bitiş tarihi başlangıç tarihinden sonra olmalıdır.'); return; }
+    const conflictingActive = history?.assignments.find((a) => a.active && (!a.endsAt || new Date(a.endsAt) > startDate));
+    if (conflictingActive && !window.confirm(`Bu noktada halen aktif bir ${conflictingActive.kind === 'POINT_OVERRIDE' ? 'kalıcı override' : 'geçici görevlendirme'} var (${conflictingActive.technician.name}). Yeni kaydı yine de oluşturmak istiyor musunuz?`)) return;
     setBusy(true); setError(''); setNotice('');
     try {
       await api('/api/backend/assignments', {
         method: 'POST',
-        body: JSON.stringify({ pointId, technicianId, kind, startsAt: new Date(startsAt).toISOString(), ...(endsAt ? { endsAt: new Date(endsAt).toISOString() } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) }),
+        body: JSON.stringify({ pointId, technicianId, kind, startsAt: startDate.toISOString(), ...(endDate ? { endsAt: endDate.toISOString() } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) }),
       });
       setNotice(kind === 'POINT_OVERRIDE' ? 'Kalıcı nokta istisnası oluşturuldu.' : 'Geçici görevlendirme oluşturuldu.');
       setReason(''); setEndsAt('');
@@ -115,6 +123,17 @@ export default function AssignmentManagement() {
   const activeCount = history?.assignments.filter((a) => a.active).length ?? 0;
   const overrideCount = history?.assignments.filter((a) => a.kind === 'POINT_OVERRIDE').length ?? 0;
   const temporaryCount = history?.assignments.filter((a) => a.kind === 'TEMPORARY').length ?? 0;
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLocaleLowerCase('tr-TR');
+    return (history?.assignments ?? []).filter((a) => {
+      if (historyFilter === 'ACTIVE' && !a.active) return false;
+      if (historyFilter === 'CLOSED' && a.active) return false;
+      if (historyFilter === 'POINT_OVERRIDE' && a.kind !== 'POINT_OVERRIDE') return false;
+      if (historyFilter === 'TEMPORARY' && a.kind !== 'TEMPORARY') return false;
+      if (!q) return true;
+      return `${a.technician.name} ${a.kind} ${a.reason ?? ''} ${a.createdBy.name}`.toLocaleLowerCase('tr-TR').includes(q);
+    });
+  }, [history, historyFilter, historySearch]);
 
   return <>
     <section className="dashboardGrid">
@@ -148,8 +167,12 @@ export default function AssignmentManagement() {
 
     <section className="panel">
       <div className="panelHeader"><div><h2>{history?.point.name || 'Nokta'} · Görevlendirme Geçmişi</h2><p>{history?.point.code || '—'} · Bölge varsayılanı: {history?.point.region?.name || 'Bölge yok'}</p></div></div>
+      <div className="compactForm">
+        <input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Teknisyen / neden / oluşturan ara" />
+        <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı</option><option value="POINT_OVERRIDE">Kalıcı override</option><option value="TEMPORARY">Geçici</option></select>
+      </div>
       <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>Neden</th><th></th></tr></thead><tbody>
-        {!history?.assignments.length ? <tr><td colSpan={7}>Bu nokta için özel görevlendirme geçmişi yok; bölge ataması kullanılıyor.</td></tr> : history.assignments.map((a) => <tr key={a.id}>
+        {!filteredHistory.length ? <tr><td colSpan={7}>Bu filtrelerde görevlendirme kaydı yok.</td></tr> : filteredHistory.map((a) => <tr key={a.id}>
           <td><strong>{a.technician.name}</strong></td><td>{a.kind === 'POINT_OVERRIDE' ? 'Kalıcı override' : 'Geçici'}</td><td>{new Date(a.startsAt).toLocaleString('tr-TR')}</td><td>{a.endsAt ? new Date(a.endsAt).toLocaleString('tr-TR') : 'Süresiz'}</td><td><span className={a.active ? 'pill active' : 'pill'}>{a.active ? 'AKTİF' : 'KAPALI'}</span></td><td>{a.reason || '—'}</td><td className="actions"><button className="small" type="button" disabled={busy} onClick={() => void openAudit(a.id)}>AUDIT</button>{a.active ? <button className="small" type="button" disabled={busy} onClick={() => void deactivate(a)}>KAPAT</button> : null}</td>
         </tr>)}
       </tbody></table></div>
