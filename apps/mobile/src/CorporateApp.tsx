@@ -231,7 +231,7 @@ export default function CorporateApp() {
       {screen === 'VISIT_SAVED' && prospect && <SuccessView point={prospect.name} assisted="" title={visitPurpose === 'SURVEY' ? 'Keşif kaydedildi' : 'Kurma kaydedildi'} done={() => setScreen('TASKS')} />}
       {busy && <ActivityIndicator size="large" style={styles.loader} />}
     </ScrollView>
-    <View style={styles.nav}><Nav label="İşler" symbol="▣" active={screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM'} onPress={() => setScreen('TASKS')} /><Nav label="Müşterilerim" symbol="⌂" active={screen === 'CUSTOMERS' || screen === 'CUSTOMER'} onPress={() => void openCustomers()} /><Nav label="Yardım Et" symbol="♧" active={screen === 'HELP'} onPress={() => void openHelp()} /><Nav label="Yeni Nokta" symbol="⊕" active={['NEW','EFESIM_RESULT','PROSPECT','VISIT_SAVED'].includes(screen)} onPress={() => setScreen('NEW')} /><Nav label="Geçmiş" symbol="↺" active={screen === 'HISTORY'} onPress={() => void openHistory()} /></View>
+    <View style={styles.nav}><Nav label="İşler" symbol="▣" active={screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM'} onPress={() => setScreen('TASKS')} /><Nav label="Müşterilerim" symbol="⌂" active={screen === 'CUSTOMERS' || screen === 'CUSTOMER'} onPress={() => void openCustomers()} /><Nav label="Yardım Et" symbol="♧" active={screen === 'HELP'} onPress={() => void openHelp()} /><Nav label="Geçmiş" symbol="↺" active={screen === 'HISTORY'} onPress={() => void openHistory()} /></View>
   </View></SafeAreaView>;
 }
 
