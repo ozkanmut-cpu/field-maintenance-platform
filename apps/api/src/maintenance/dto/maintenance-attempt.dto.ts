@@ -6,6 +6,7 @@ export class MaintenanceAttemptDto {
   @IsUUID()
   pointId!: string;
 
+  @IsOptional()
   @IsUUID()
   technicianId!: string;
 
