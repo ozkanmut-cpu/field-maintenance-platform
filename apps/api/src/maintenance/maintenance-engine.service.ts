@@ -158,9 +158,13 @@ export class MaintenanceEngineService {
       select: { id: true, maintenanceWeek: true, createdAt: true },
     });
 
+    const operationsStart = this.operationsStartDate();
+
     for (const point of points) {
       if (![1, 2].includes(point.maintenanceWeek ?? 0)) continue;
-      const firstEligible = this.firstAssignedWindowOnOrAfter(this.toDateOnly(point.createdAt), point.maintenanceWeek!);
+      const pointStart = this.toDateOnly(point.createdAt);
+      const eligibilityStart = pointStart > operationsStart ? pointStart : operationsStart;
+      const firstEligible = this.firstAssignedWindowOnOrAfter(eligibilityStart, point.maintenanceWeek!);
       let start = firstEligible.start;
       while (start <= asOf) {
         const end = this.addDays(start, 6);
@@ -191,6 +195,12 @@ export class MaintenanceEngineService {
 
   private slotForWeek(monday: Date) {
     return rutWeekSlot(monday, this.week1Anchor());
+  }
+
+  private operationsStartDate() {
+    const value = this.config.get<string>('STANDARD_OPERATIONS_START_DATE');
+    if (!value) throw new Error('STANDARD_OPERATIONS_START_DATE is required');
+    return this.toDateOnly(new Date(value));
   }
 
   private week1Anchor() {
