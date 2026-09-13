@@ -45,10 +45,10 @@ jobs:
       - name: Verify generated Android module paths
         working-directory: apps/mobile/android
         run: |
-          echo "react-native=$(node --print \"require.resolve('react-native/package.json')\")"
-          echo "expo=$(node --print \"require.resolve('expo/package.json')\")"
+          node --print "require.resolve('react-native/package.json')"
+          node --print "require.resolve('expo/package.json')"
           PROJECT_ROOT="$(cd .. && pwd)"
-          echo "entry=$(node -e \"require('expo/scripts/resolveAppEntry')\" \"$PROJECT_ROOT\" android absolute)"
+          node -e "require('expo/scripts/resolveAppEntry')" "$PROJECT_ROOT" android absolute
           nl -ba app/build.gradle | sed -n '1,28p'
 
       - name: Build debug APK
