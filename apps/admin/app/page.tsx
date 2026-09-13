@@ -13,6 +13,7 @@ import AssignmentManagement from './assignment-management';
 import PaperworkManagement from './paperwork-management';
 import PointTimeline from './point-timeline';
 import DuplicateSuggestions from './duplicate-suggestions';
+import NonMaintenanceVisits from './non-maintenance-visits';
 
 type User = {
   id: string;
@@ -42,7 +43,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
-  const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'location-matching' | 'ai-dashboard' | 'anomalies' | 'maintenance-calendar' | 'prospects' | 'audit-log' | 'point-details' | 'assignments' | 'paperwork' | 'point-timeline' | 'duplicates' | 'users' | 'new-user'>('dashboard');
+  const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'location-matching' | 'ai-dashboard' | 'anomalies' | 'maintenance-calendar' | 'prospects' | 'audit-log' | 'point-details' | 'assignments' | 'paperwork' | 'point-timeline' | 'duplicates' | 'non-maintenance-visits' | 'users' | 'new-user'>('dashboard');
 
   useEffect(() => {
     void restore();
@@ -207,6 +208,7 @@ export default function Home() {
           <button className={section === 'paperwork' ? 'active' : ''} onClick={() => setSection('paperwork')}>▧ <span>Evrak Yönetimi</span></button>
           <button className={section === 'point-timeline' ? 'active' : ''} onClick={() => setSection('point-timeline')}>◷ <span>Nokta Timeline</span></button>
           <button className={section === 'duplicates' ? 'active' : ''} onClick={() => setSection('duplicates')}>⧉ <span>Mükerrer Noktalar</span></button>
+          <button className={section === 'non-maintenance-visits' ? 'active' : ''} onClick={() => setSection('non-maintenance-visits')}>↗ <span>Bakım Dışı Ziyaretler</span></button>
           <button className={section === 'users' ? 'active' : ''} onClick={() => setSection('users')}>♙ <span>Teknisyenler</span></button>
           <button className={section === 'new-user' ? 'active' : ''} onClick={() => setSection('new-user')}>＋ <span>Yeni Kullanıcı</span></button>
         </nav>
@@ -216,7 +218,7 @@ export default function Home() {
       <header className="topbar" id="dashboard">
         <div>
           <div className="brand">FIELD MAINTENANCE</div>
-          <h1>{section === 'dashboard' ? 'Dashboard' : section === 'approvals' ? 'Onaylar' : section === 'setup-pending' ? 'Ayar Bekleyen Noktalar' : section === 'regions' ? 'Bölgeler' : section === 'points' ? 'Noktalar' : section === 'location-matching' ? 'SAP / Google Eşleştirme' : section === 'ai-dashboard' ? 'Sanal İstatistikçi' : section === 'anomalies' ? 'Bakım Anomalileri' : section === 'maintenance-calendar' ? 'Bakım Takvimi' : section === 'prospects' ? 'Potansiyel Müşteriler' : section === 'audit-log' ? 'İşlem Geçmişi' : section === 'point-details' ? 'Nokta Detayı' : section === 'assignments' ? 'Görevlendirmeler' : section === 'paperwork' ? 'Evrak Yönetimi' : section === 'point-timeline' ? 'Nokta Timeline' : section === 'duplicates' ? 'Mükerrer Noktalar' : section === 'users' ? 'Teknisyenler' : 'Yeni Kullanıcı'}</h1>
+          <h1>{section === 'dashboard' ? 'Dashboard' : section === 'approvals' ? 'Onaylar' : section === 'setup-pending' ? 'Ayar Bekleyen Noktalar' : section === 'regions' ? 'Bölgeler' : section === 'points' ? 'Noktalar' : section === 'location-matching' ? 'SAP / Google Eşleştirme' : section === 'ai-dashboard' ? 'Sanal İstatistikçi' : section === 'anomalies' ? 'Bakım Anomalileri' : section === 'maintenance-calendar' ? 'Bakım Takvimi' : section === 'prospects' ? 'Potansiyel Müşteriler' : section === 'audit-log' ? 'İşlem Geçmişi' : section === 'point-details' ? 'Nokta Detayı' : section === 'assignments' ? 'Görevlendirmeler' : section === 'paperwork' ? 'Evrak Yönetimi' : section === 'point-timeline' ? 'Nokta Timeline' : section === 'duplicates' ? 'Mükerrer Noktalar' : section === 'non-maintenance-visits' ? 'Bakım Dışı Ziyaretler' : section === 'users' ? 'Teknisyenler' : 'Yeni Kullanıcı'}</h1>
         </div>
         <div className="account">
           <span>{me.name}</span>
@@ -234,7 +236,7 @@ export default function Home() {
           <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></button>
         </section>
       </> : null}
-      {section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-details' ? <PointDetails /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : <Operations users={users} activeSection={section} onNavigate={setSection} />}
+      {section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-details' ? <PointDetails /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : <Operations users={users} activeSection={section} onNavigate={setSection} />}
       {section === 'users' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
