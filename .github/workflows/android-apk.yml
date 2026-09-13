@@ -1,0 +1,58 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'package.json'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify React versions
+        run: |
+          node -e "const r=require('./node_modules/react/package.json').version; const rn=require('./node_modules/react-native/package.json').version; console.log('react='+r+' react-native='+rn); if(r!=='19.1.0') process.exit(1); if(rn!=='0.81.4') process.exit(1);"
+
+      - name: Expo prebuild Android
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --non-interactive --no-install
+
+      - name: Build debug APK
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Stage APK
+        run: cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk Field-Maintenance-fixed.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: field-maintenance-android-apk
+          path: Field-Maintenance-fixed.apk
+          if-no-files-found: error
+          retention-days: 14
