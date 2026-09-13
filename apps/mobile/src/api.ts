@@ -130,7 +130,6 @@ export function createProspectVisit(input: {
   return jsonRequest<Record<string, unknown>>('/prospects/visits', { method: 'POST', body: JSON.stringify(input) });
 }
 
-
 export type EquipmentProfile = { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null };
 export type MyCustomer = EquipmentProfile & {
   id: string; code: string; name: string; address?: string | null; region?: { id: string; name: string } | null;
@@ -192,6 +191,7 @@ export function recordMaintenanceAttempt(input: {
 }
 
 export type TechnicianHistoryItem = {
+  id: string;
   type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'PROSPECT_VISIT';
   at: string;
   point?: { id: string; code: string; name: string };
@@ -200,6 +200,13 @@ export type TechnicianHistoryItem = {
   reason?: AttemptReason;
   purpose?: string;
 };
+
+export function revertMaintenance(visitId: string, reason: string) {
+  return jsonRequest<Record<string, unknown>>('/maintenance/revert', {
+    method: 'POST',
+    body: JSON.stringify({ visitId, reason }),
+  });
+}
 
 export function technicianHistory(date?: string) {
   const query = date ? `?date=${encodeURIComponent(date)}` : '';

@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
   DueTask, EfesimExtractResult, extractEfesim, HelpTarget, helpTargets, login, me, ProspectRecord,
-  ProspectVisitPurpose, recordMaintenanceAttempt, restoreSessionToken, technicianDashboard,
+  ProspectVisitPurpose, recordMaintenanceAttempt, restoreSessionToken, revertMaintenance, technicianDashboard,
   TechnicianDashboard, technicianHistory, TechnicianHistoryItem, myCustomers, updateCustomerEquipment, MyCustomer,
 } from './api';
 
@@ -74,6 +74,25 @@ export default function CorporateApp() {
   async function openHelp() { setBusy(true); try { setHelpPeople(await helpTargets()); setHelpDashboard(null); setScreen('HELP'); } catch (e) { Alert.alert('Yardım listesi alınamadı', message(e)); } finally { setBusy(false); } }
   async function selectHelper(target: HelpTarget) { setBusy(true); try { setHelpDashboard(await technicianDashboard(target.id)); } catch (e) { Alert.alert('Görevler alınamadı', message(e)); } finally { setBusy(false); } }
   async function openHistory() { setBusy(true); try { const h = await technicianHistory(); setHistoryItems(h.items.slice().reverse()); setScreen('HISTORY'); } catch (e) { Alert.alert('Geçmiş alınamadı', message(e)); } finally { setBusy(false); } }
+  function confirmRevert(item: TechnicianHistoryItem) {
+    if (item.type !== 'MAINTENANCE') return;
+    const name = item.point?.name ?? 'bu bakım';
+    Alert.alert('Bakımı geri al', `${name} bakım kaydı geri alınacak ve görev yeniden açılacak. Emin misiniz?`, [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Geri Al', style: 'destructive', onPress: () => void revertHistoryItem(item) },
+    ]);
+  }
+  async function revertHistoryItem(item: TechnicianHistoryItem) {
+    setBusy(true);
+    try {
+      await revertMaintenance(item.id, 'Teknisyen mobil geçmiş ekranından geri aldı');
+      const h = await technicianHistory();
+      setHistoryItems(h.items.slice().reverse());
+      await loadTasks();
+      Alert.alert('Geri alındı', 'Bakım kaydı geri alındı ve görev yeniden açıldı.');
+    } catch (e) { Alert.alert('Geri alınamadı', message(e)); }
+    finally { setBusy(false); }
+  }
   function equipmentFrom(value: { coolerCount?:number|null; towerCount?:number|null; tapCount?:number|null; smarttapCount?:number|null }) {
     setEquipment({ coolerCount:value.coolerCount==null?'':String(value.coolerCount), towerCount:value.towerCount==null?'':String(value.towerCount), tapCount:value.tapCount==null?'':String(value.tapCount), smarttapCount:value.smarttapCount==null?'':String(value.smarttapCount) });
   }
@@ -119,13 +138,34 @@ export default function CorporateApp() {
     finally { setBusy(false); }
   }
 
+  function distanceMeters(lat1:number, lon1:number, lat2:number, lon2:number) {
+    const r=6371000;
+    const p1=lat1*Math.PI/180, p2=lat2*Math.PI/180;
+    const dp=(lat2-lat1)*Math.PI/180, dl=(lon2-lon1)*Math.PI/180;
+    const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+    return r*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+
+  async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, loc: Awaited<ReturnType<typeof currentLocation>>) {
+    const equipmentValues = parsedEquipment();
+    await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setScreen('SUCCESS'); setHelpDashboard(null); await loadTasks();
+  }
+
   async function completeTask(task: DueTask, assistedForTechnicianId?: string) {
     setBusy(true);
     try {
       const loc = await currentLocation();
-      const equipmentValues = parsedEquipment();
-      await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
-      setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setScreen('SUCCESS'); setHelpDashboard(null); await loadTasks();
+      const distance = task.latitude != null && task.longitude != null ? distanceMeters(loc.coords.latitude, loc.coords.longitude, task.latitude, task.longitude) : null;
+      if (distance !== null && distance <= 250) {
+        await saveCompletedTask(task, assistedForTechnicianId, loc);
+        return;
+      }
+      const detail = distance === null ? 'Bu noktanın kayıtlı konumu yok.' : `Kayıtlı noktadan yaklaşık ${Math.round(distance)} metre uzaktasınız.`;
+      Alert.alert('Noktada mısınız?', `${detail}\n\nYine de ${task.pointName} noktasında olduğunuzu onaylıyor musunuz?`, [
+        { text: 'Hayır', style: 'cancel' },
+        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },
+      ]);
     } catch (e) { Alert.alert('Bakım kaydedilemedi', message(e)); }
     finally { setBusy(false); }
   }
@@ -139,11 +179,7 @@ export default function CorporateApp() {
       if (picked.canceled) return;
       const asset = picked.assets[0];
       const targetWidth = Math.min(asset.width || 1440, 1440);
-      const resized = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        asset.width && asset.width > targetWidth ? [{ resize: { width: targetWidth } }] : [],
-        { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-      );
+      const resized = await ImageManipulator.manipulateAsync(asset.uri, asset.width && asset.width > targetWidth ? [{ resize: { width: targetWidth } }] : [], { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true });
       if (!resized.base64) throw new Error('Ekran görüntüsü okunamadı.');
       const loc = await currentLocation(); const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude }; setFieldLocation(coords);
       const result = await extractEfesim({ technicianId: user!.id, imageBase64: resized.base64, ...coords });
@@ -187,7 +223,7 @@ export default function CorporateApp() {
       {screen === 'CUSTOMERS' && <CustomersView customers={customers} open={openCustomer} />}
       {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={() => setScreen('CUSTOMERS')} busy={busy} />}
       {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); setScreen(pendingAssist?'HELP':'TASKS'); }} busy={busy} />}
-      {screen === 'HISTORY' && <HistoryView items={historyItems} />}
+      {screen === 'HISTORY' && <HistoryView items={historyItems} busy={busy} onRevert={confirmRevert} />}
       {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); setScreen('TASKS'); }} />}
       {screen === 'NEW' && <NewPointView begin={() => void beginEfesim()} busy={busy} />}
       {screen === 'EFESIM_RESULT' && efesim && <EfesimView result={efesim} sapNo={sapNo} setSapNo={setSapNo} customerName={customerName} setCustomerName={setCustomerName} strong={strongGoogleMatch} google={google} useGoogle={useGoogle} setUseGoogle={setUseGoogle} addressText={addressText} save={() => void saveProspect()} busy={busy} />}
@@ -213,7 +249,7 @@ function EquipmentFields({equipment,setEquipment}:{equipment:{coolerCount:string
 function CustomersView({customers,open}:{customers:MyCustomer[];open:(c:MyCustomer)=>void}) { return <View style={styles.card}><Text style={styles.cardTitle}>Müşterilerim</Text><Text style={styles.help}>Bakım zamanı gelmeden de müşteri ekipman bilgilerini buradan tamamlayabilirsin.</Text>{customers.length===0?<Empty text="Atanmış aktif müşteri yok."/>:customers.map(c=><TouchableOpacity key={c.id} style={styles.personRow} onPress={()=>open(c)}><View style={styles.personText}><Text style={styles.personName}>{c.name}</Text><Text style={styles.personMeta}>{c.code}{c.region?.name?` · ${c.region.name}`:''}</Text><Text style={c.equipmentComplete?styles.okText:styles.warningText}>{c.equipmentComplete?'Ekipman bilgisi tamam':'Ekipman bilgisi eksik'}</Text></View><Text style={styles.chevron}>›</Text></TouchableOpacity>)}</View>; }
 function CustomerView({customer,equipment,setEquipment,save,back,busy}:{customer:MyCustomer;equipment:any;setEquipment:(v:any)=>void;save:()=>void;back:()=>void;busy:boolean}) { const hasLocation=customer.canonicalLatitude!=null&&customer.canonicalLongitude!=null; return <><View style={styles.card}><TouchableOpacity onPress={back}><Text style={styles.refresh}>‹ MÜŞTERİLERİM</Text></TouchableOpacity><Text style={styles.taskName}>{customer.name}</Text><Text style={styles.taskMeta}>{customer.code}{customer.region?.name?` · ${customer.region.name}`:''}</Text>{customer.address?<Text style={styles.help}>{customer.address}</Text>:null}{hasLocation?<Text style={styles.locationText}>⌖ {customer.canonicalLatitude?.toFixed(5)}, {customer.canonicalLongitude?.toFixed(5)} · güven {customer.locationConfidence ?? 0}%</Text>:<Text style={styles.personMeta}>Konum bilgisi henüz yok</Text>}</View><EquipmentFields equipment={equipment} setEquipment={setEquipment}/><PrimaryButton title="EKİPMAN BİLGİLERİNİ KAYDET" onPress={save} disabled={busy}/></>; }
 function EquipmentConfirmView({task,equipment,setEquipment,confirm,cancel,busy}:{task:DueTask;equipment:any;setEquipment:(v:any)=>void;confirm:()=>void;cancel:()=>void;busy:boolean}) { const known=[task.coolerCount,task.towerCount,task.tapCount,task.smarttapCount].every(v=>v!=null); return <><View style={styles.card}><Text style={styles.cardTitle}>{task.pointName}</Text><Text style={styles.help}>{known?'Kayıtlı ekipman bilgileri doğru mu? Yanlışsa adetleri değiştir.':'İlk bakım için ekipman adetlerini gir.'}</Text></View><EquipmentFields equipment={equipment} setEquipment={setEquipment}/><PrimaryButton title={known?'BİLGİLER DOĞRU · BAKIMI KAYDET':'BİLGİLERİ KAYDET · BAKIMI TAMAMLA'} onPress={confirm} disabled={busy}/><TouchableOpacity style={styles.failButton} onPress={cancel} disabled={busy}><Text style={styles.failText}>Vazgeç</Text></TouchableOpacity></>; }
-function HistoryView({items}:{items:TechnicianHistoryItem[]}) { return <View style={styles.card}><Text style={styles.cardTitle}>Bugünkü İşlemler</Text><Text style={styles.help}>Son kayıtlarını buradan kontrol edebilirsin.</Text>{items.length===0?<Empty text="Bugün işlem yok."/>:items.map((i,n)=>{const attempt=i.type==='ATTEMPT';const name=i.point?.name||i.prospect?.name||'İşlem';const label=i.type==='MAINTENANCE'?(i.assistedForTechnician?`${i.assistedForTechnician.name} için bakım`:'Bakım yapıldı'):attempt?'Bakım yapılamadı':i.type==='PROSPECT_VISIT'?(i.purpose==='INSTALLATION'?'Kurma':'Keşif'):'Bakım dışı ziyaret';return <View key={`${i.at}-${n}`} style={styles.historyRow}><View style={[styles.historyDot,attempt&&styles.historyWarn]}><Text style={styles.historyDotText}>{attempt?'!':'✓'}</Text></View><View><Text style={styles.historyTime}>{new Date(i.at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.personName}>{name}</Text><Text style={attempt?styles.warningText:styles.okText}>{label}</Text></View></View>})}</View>; }
+function HistoryView({items,busy,onRevert}:{items:TechnicianHistoryItem[];busy:boolean;onRevert:(i:TechnicianHistoryItem)=>void}) { return <View style={styles.card}><Text style={styles.cardTitle}>Bugünkü İşlemler</Text><Text style={styles.help}>Son kayıtlarını buradan kontrol edebilirsin.</Text>{items.length===0?<Empty text="Bugün işlem yok."/>:items.map((i,n)=>{const attempt=i.type==='ATTEMPT';const name=i.point?.name||i.prospect?.name||'İşlem';const label=i.type==='MAINTENANCE'?(i.assistedForTechnician?`${i.assistedForTechnician.name} için bakım`:'Bakım yapıldı'):attempt?'Bakım yapılamadı':i.type==='PROSPECT_VISIT'?(i.purpose==='INSTALLATION'?'Kurma':'Keşif'):'Bakım dışı ziyaret';return <View key={`${i.at}-${n}`} style={styles.historyRow}><View style={[styles.historyDot,attempt&&styles.historyWarn]}><Text style={styles.historyDotText}>{attempt?'!':'✓'}</Text></View><View style={styles.historyContent}><Text style={styles.historyTime}>{new Date(i.at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.personName}>{name}</Text><Text style={attempt?styles.warningText:styles.okText}>{label}</Text>{i.type==='MAINTENANCE'?<TouchableOpacity disabled={busy} onPress={()=>onRevert(i)} style={styles.revertButton}><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity>:null}</View></View>})}</View>; }
 function NewPointView({begin,busy}:{begin:()=>void;busy:boolean}) { return <View style={styles.card}><Text style={styles.cardTitle}>Bu ziyaret ne için?</Text><View style={styles.newChoice}><Text style={styles.choiceIcon}>⌕</Text><View><Text style={styles.personName}>Keşif</Text><Text style={styles.personMeta}>Potansiyel müşteri</Text></View></View><View style={styles.newChoice}><Text style={styles.choiceIcon}>⚒</Text><View><Text style={styles.personName}>Kurma</Text><Text style={styles.personMeta}>Yeni kurulacak nokta</Text></View></View><View style={styles.infoBox}><Text style={styles.infoText}>Devam etmek için önce EFESİM ekran görüntüsü alınır. Manuel adres girişi yoktur.</Text></View><PrimaryButton title="EFESİM EKRAN GÖRÜNTÜSÜ SEÇ" onPress={begin} disabled={busy}/></View>; }
 function EfesimView(p:any) { return <><View style={styles.card}><Text style={styles.sectionLabel}>EFESİM</Text><TextInput style={styles.input} value={p.sapNo} onChangeText={p.setSapNo} keyboardType="number-pad" placeholder="SAP No"/><TextInput style={styles.input} value={p.customerName} onChangeText={p.setCustomerName} placeholder="Müşteri adı"/></View>{p.strong?<View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS EŞLEŞMESİ</Text><Text style={styles.taskName}>{p.google?.name}</Text><Text style={styles.help}>{p.google?.address||'Adres bilgisi yok'}</Text><View style={styles.choiceRow}><Choice title="BU İŞLETME" selected={p.useGoogle} onPress={()=>p.setUseGoogle(true)}/><Choice title="EŞLEŞMEDİ" selected={!p.useGoogle} onPress={()=>p.setUseGoogle(false)}/></View></View>:<View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS</Text><Text style={styles.help}>Güvenilir eşleşme bulunamadı. İsim ile devam edebilirsin.</Text></View>}<View style={styles.card}><Text style={styles.sectionLabel}>ADRES</Text><Text style={styles.help}>{p.addressText}</Text><Text style={styles.locked}>Adres düzenlenemez.</Text><PrimaryButton title="ADAY MÜŞTERİYİ OLUŞTUR" onPress={p.save} disabled={p.busy}/></View></>; }
 function ProspectView(p:{prospect:ProspectRecord;purpose:ProspectVisitPurpose;setPurpose:(v:ProspectVisitPurpose)=>void;save:()=>void;busy:boolean}) { return <View style={styles.card}><Text style={styles.okText}>Aday müşteri hazır</Text><Text style={styles.taskName}>{p.prospect.name}</Text>{p.prospect.sapNo?<Text style={styles.help}>SAP No: {p.prospect.sapNo}</Text>:null}<Text style={styles.sectionLabel}>ZİYARET AMACI</Text><View style={styles.choiceRow}><Choice title="KEŞİF" selected={p.purpose==='SURVEY'} onPress={()=>p.setPurpose('SURVEY')}/><Choice title="KURMA" selected={p.purpose==='INSTALLATION'} onPress={()=>p.setPurpose('INSTALLATION')}/></View><PrimaryButton title={p.purpose==='SURVEY'?'KEŞİF ZİYARETİNİ KAYDET':'KURMA ZİYARETİNİ KAYDET'} onPress={p.save} disabled={p.busy}/></View>; }
@@ -235,7 +271,7 @@ const styles=StyleSheet.create({
   task:{backgroundColor:'#fff',borderRadius:15,padding:15,gap:8,borderWidth:1,borderColor:'#E3E9EE'}, taskTop:{flexDirection:'row',alignItems:'center',gap:7}, statusDot:{width:9,height:9,borderRadius:5}, redDot:{backgroundColor:RED}, orangeDot:{backgroundColor:ORANGE}, lateText:{color:RED,fontSize:12,fontWeight:'900'}, currentText:{color:ORANGE,fontSize:12,fontWeight:'900'}, taskName:{fontSize:19,fontWeight:'900',color:'#1A2733'}, taskMeta:{fontSize:13,color:'#667989'}, routeButton:{borderWidth:1,borderColor:'#BCD0DF',backgroundColor:'#F8FBFD',borderRadius:10,padding:11,alignItems:'center'}, routeText:{color:BLUE,fontSize:12,fontWeight:'900'}, primary:{backgroundColor:'#0877D1',borderRadius:11,paddingVertical:14,paddingHorizontal:12,alignItems:'center'}, primaryText:{color:'#fff',fontSize:14,fontWeight:'900'}, failButton:{borderWidth:1,borderColor:'#E2B7B4',borderRadius:10,paddingVertical:11,alignItems:'center'}, failText:{color:'#B7372F',fontSize:13,fontWeight:'800'}, disabled:{opacity:.45},
   personRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderBottomColor:'#EDF1F4'}, avatar:{width:42,height:42,borderRadius:21,backgroundColor:'#DDEEFF',alignItems:'center',justifyContent:'center'}, avatarText:{color:BLUE,fontWeight:'900'}, personText:{flex:1,marginLeft:11}, personName:{fontSize:15,fontWeight:'800',color:'#1C2935'}, personMeta:{fontSize:12,color:'#758594',marginTop:2}, chevron:{fontSize:28,color:'#8091A0'}, assistBanner:{backgroundColor:'#FFF0B7',borderRadius:12,padding:13,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}, assistText:{fontSize:13,fontWeight:'900',color:'#6E5700'}, assistChange:{fontSize:11,fontWeight:'900',color:'#6E5700'},
   nav:{height:66,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:'#DDE5EB',flexDirection:'row',paddingBottom:4}, navItem:{flex:1,alignItems:'center',justifyContent:'center',gap:2}, navSymbol:{fontSize:20,color:'#80909D'}, navLabel:{fontSize:10,color:'#80909D',fontWeight:'700'}, navActive:{color:'#0877D1',fontWeight:'900'},
-  historyRow:{flexDirection:'row',gap:12,paddingVertical:11,borderBottomWidth:1,borderBottomColor:'#EDF1F4'}, historyDot:{width:34,height:34,borderRadius:17,backgroundColor:GREEN,alignItems:'center',justifyContent:'center'}, historyWarn:{backgroundColor:ORANGE}, historyDotText:{color:'#fff',fontWeight:'900',fontSize:17}, historyTime:{fontSize:11,color:'#7A8A97'}, okText:{color:GREEN,fontSize:13,fontWeight:'800'}, warningText:{color:ORANGE,fontSize:13,fontWeight:'800'},
+  historyRow:{flexDirection:'row',gap:12,paddingVertical:11,borderBottomWidth:1,borderBottomColor:'#EDF1F4'}, historyContent:{flex:1}, revertButton:{alignSelf:'flex-start',marginTop:8,borderWidth:1,borderColor:'#E2B7B4',borderRadius:8,paddingHorizontal:10,paddingVertical:6}, revertText:{color:'#B7372F',fontSize:11,fontWeight:'900'}, historyDot:{width:34,height:34,borderRadius:17,backgroundColor:GREEN,alignItems:'center',justifyContent:'center'}, historyWarn:{backgroundColor:ORANGE}, historyDotText:{color:'#fff',fontWeight:'900',fontSize:17}, historyTime:{fontSize:11,color:'#7A8A97'}, okText:{color:GREEN,fontSize:13,fontWeight:'800'}, warningText:{color:ORANGE,fontSize:13,fontWeight:'800'},
   newChoice:{borderWidth:1,borderColor:'#DCE5EC',borderRadius:12,padding:15,flexDirection:'row',alignItems:'center',gap:14}, choiceIcon:{fontSize:27,color:BLUE}, infoBox:{backgroundColor:'#EAF4FC',borderRadius:10,padding:12}, infoText:{fontSize:13,lineHeight:19,color:'#315A78'}, sectionLabel:{fontSize:11,fontWeight:'900',letterSpacing:.9,color:'#5C7080'}, input:{borderWidth:1,borderColor:'#D6E0E8',borderRadius:10,padding:12,fontSize:16}, choiceRow:{flexDirection:'row',gap:8}, choice:{flex:1,borderWidth:1,borderColor:'#C7D3DD',borderRadius:10,padding:12,alignItems:'center'}, choiceSelected:{backgroundColor:BLUE,borderColor:BLUE}, choiceText:{fontSize:12,fontWeight:'900',color:'#415565'}, choiceTextSelected:{color:'#fff'}, locked:{fontSize:12,color:'#7D8A95',fontWeight:'700'},
   equipmentRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,borderBottomWidth:1,borderBottomColor:'#EDF1F4',paddingVertical:8}, equipmentLabel:{fontSize:15,fontWeight:'800',color:'#1C2935'}, equipmentInput:{width:92,borderWidth:1,borderColor:'#D6E0E8',borderRadius:10,padding:10,fontSize:18,textAlign:'center',fontWeight:'800'}, locationText:{fontSize:13,color:BLUE,fontWeight:'700'},
   successCard:{backgroundColor:'#fff',borderRadius:16,padding:24,gap:10,alignItems:'center'}, successCircle:{width:78,height:78,borderRadius:39,backgroundColor:GREEN,alignItems:'center',justifyContent:'center',marginBottom:4}, successCheck:{color:'#fff',fontSize:47,fontWeight:'700'}, successTitle:{fontSize:23,fontWeight:'900',color:'#182633'}, successPoint:{fontSize:18,fontWeight:'900',color:BLUE,textAlign:'center'}, successMeta:{fontSize:13,color:'#6E7D89',marginBottom:8,textAlign:'center'}, empty:{backgroundColor:'#fff',borderRadius:14,padding:22,alignItems:'center'}, emptyTitle:{fontSize:16,fontWeight:'800',color:'#60717F'}, loader:{marginVertical:8},
