@@ -4,6 +4,7 @@ export class CompleteMaintenanceDto {
   @IsUUID()
   pointId!: string;
 
+  @IsOptional()
   @IsUUID()
   technicianId!: string;
 
