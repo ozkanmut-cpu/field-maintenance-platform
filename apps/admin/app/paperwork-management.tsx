@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type User = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type PaperworkStatus = 'PENDING' | 'PRESENT' | 'MISSING';
@@ -30,6 +31,7 @@ export default function PaperworkManagement() {
   const [history, setHistory] = useState<PaperworkHistoryItem[]>([]);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -49,13 +51,13 @@ export default function PaperworkManagement() {
 
   async function loadVisits() {
     if (!technicianId || !date) { setVisits([]); return; }
-    setBusy(true); setError('');
+    setBusy(true); setLoading(true); setError('');
     try {
       const data = await api<TechnicianHistory>(`/api/backend/maintenance/technician-history?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`);
       setVisits(data.items.filter((item) => item.type === 'MAINTENANCE'));
       setSelected([]); setHistoryVisitId(''); setHistory([]);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setLoading(false); }
   }
 
   useEffect(() => { void loadTechnicians().catch((e) => setError(e instanceof Error ? e.message : String(e))); }, []);
@@ -124,7 +126,7 @@ export default function PaperworkManagement() {
     </section>
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Evrak Yönetimi</h2><p>Teknisyen ve güne göre bakım kayıtlarını getir; servis fişi ve teyit durumlarını yönet.</p></div><button className="ghost" disabled={busy} onClick={() => void loadVisits()}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Evrak Yönetimi</h2><p>Teknisyen ve güne göre bakım kayıtlarını getir; servis fişi ve teyit durumlarını yönet.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadVisits()}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
@@ -146,7 +148,7 @@ export default function PaperworkManagement() {
 
     <section className="panel">
       <div className="tableWrap"><table><thead><tr><th><input type="checkbox" checked={visible.length > 0 && visible.every((v) => selected.includes(v.id))} onChange={toggleAll} /></th><th>Saat</th><th>Nokta</th><th>Servis Fişi</th><th>Teyit</th><th></th></tr></thead><tbody>
-        {visible.length === 0 ? <tr><td colSpan={6}>Bu filtrede bakım kaydı yok.</td></tr> : visible.map((visit) => <tr key={visit.id}>
+        {loading ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Bakım kayıtları yükleniyor</strong><span>Seçili teknisyen ve güne ait evraklar hazırlanıyor.</span></div></td></tr> : visible.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Bakım kaydı yok</strong><span>Seçili teknisyen, tarih veya arama için kayıt bulunamadı.</span></div></td></tr> : visible.map((visit) => <tr key={visit.id}>
           <td><input type="checkbox" checked={selected.includes(visit.id)} onChange={() => toggle(visit.id)} /></td>
           <td>{new Date(visit.performedAt || visit.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td>
           <td><strong>{visit.point?.name || '—'}</strong><div className="muted">{visit.point?.code || '—'}</div></td>
@@ -157,9 +159,9 @@ export default function PaperworkManagement() {
       </tbody></table></div>
     </section>
 
-    {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { setHistoryVisitId(''); setHistory([]); }}>KAPAT</button></div>
+    {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Evrak</th><th>Önce</th><th>Sonra</th><th>Kullanıcı</th><th>Not</th></tr></thead><tbody>
-        {history.length === 0 ? <tr><td colSpan={6}>Bu ziyaret için evrak değişikliği yok.</td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy.name}</td><td>{h.note || '—'}</td></tr>)}
+        {history.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Evrak değişikliği yok</strong><span>Bu ziyaret için evrak audit kaydı bulunmuyor.</span></div></td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy.name}</td><td>{h.note || '—'}</td></tr>)}
       </tbody></table></div>
     </section> : null}
   </>;
