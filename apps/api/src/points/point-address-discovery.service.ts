@@ -67,16 +67,32 @@ export class PointAddressDiscoveryService {
     }
     if (!all.length) return { status: 'NO_MATCH' as const };
 
-    const deduped = [...new Map(all.sort((a, b) => b.score - a.score).map((item) => [item.candidate.id ?? `${item.candidate.displayName?.text}|${item.candidate.formattedAddress}`, item])).values()].sort((a, b) => b.score - a.score);
+    const deduped = [...new Map(all.sort((a, b) => b.score - a.score).map((item) => [item.candidate.id ?? `${item.candidate.displayName?.text}|${item.candidate.formattedAddress}`, item])).values()];
+    for (const item of deduped) {
+      const identity = this.identityStrength(point.name, point.sapName, point.region?.name, item.candidate);
+      const transition = deduped.some((other) => other !== item
+        && this.isSapTransitionCandidate(point.name, point.sapName, point.region?.name, item.candidate, other.candidate));
+      const addressQualifier = this.hasAddressQualifierMatch(point.name, item.candidate) ? 5 : 0;
+      const identityScore = identity >= 3 ? 95 + addressQualifier : identity >= 2 ? 90 + addressQualifier : 0;
+      item.score = Math.max(item.score, transition ? 100 : 0, identityScore);
+    }
+    deduped.sort((a, b) => b.score - a.score);
     const best = deduped[0], second = deduped[1];
     const closeCompetitor = !!second && best.score - second.score < 10;
     const samePhysicalPlace = !!second && this.isSamePhysicalPlace(best.candidate, second.candidate);
     const colocatedAliasPair = !!second && this.isColocatedHyphenAliasPair(point.name, best.candidate, second.candidate);
-    const effectiveBestScore = colocatedAliasPair ? Math.max(best.score, 75) : best.score;
-    const exactNameAdvantage = !!second && best.score >= 90
+    const bestIdentity = this.identityStrength(point.name, point.sapName, point.region?.name, best.candidate);
+    const secondIdentity = second ? this.identityStrength(point.name, point.sapName, point.region?.name, second.candidate) : 0;
+    const decisiveIdentity = bestIdentity >= 2 && bestIdentity > secondIdentity;
+    const identityScore = bestIdentity >= 3 ? 95 : bestIdentity >= 2 ? 90 : 0;
+    const effectiveBestScore = Math.max(best.score, colocatedAliasPair ? 75 : 0, identityScore);
+    const exactNameAdvantage = !!second && effectiveBestScore >= 90
       && pointNames.some((name) => this.hasExactExpectedName(name, point.region?.name, best.candidate))
       && !pointNames.some((name) => this.hasExactExpectedName(name, point.region?.name, second.candidate));
-    if (!best || effectiveBestScore < 70 || (closeCompetitor && !samePhysicalPlace && !colocatedAliasPair && !exactNameAdvantage)) return { status: 'AMBIGUOUS' as const, confidence: effectiveBestScore ?? 0 };
+    const addressQualifierAdvantage = !!second
+      && this.hasAddressQualifierMatch(point.name, best.candidate)
+      && !this.hasAddressQualifierMatch(point.name, second.candidate);
+    if (!best || effectiveBestScore < 70 || (closeCompetitor && !samePhysicalPlace && !colocatedAliasPair && !exactNameAdvantage && !decisiveIdentity && !addressQualifierAdvantage)) return { status: 'AMBIGUOUS' as const, confidence: effectiveBestScore ?? 0 };
     best.score = effectiveBestScore;
     const lat = best.candidate.location?.latitude, lng = best.candidate.location?.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_COORDINATES' as const };
@@ -205,7 +221,7 @@ export class PointAddressDiscoveryService {
     // Curated neighborhood aliases (e.g. HATAY -> Konak) must not be satisfied by a
     // same-named distant city/province. Either the expected parent district is present
     // in the address or the candidate must sit near already verified points in the region.
-    if (fallback) return address.includes(fallback) || nearestAnchorMeters <= 40_000;
+    if (fallback) return address.includes(fallback) || address.includes('izmir') || nearestAnchorMeters <= 40_000;
 
     // For other regions, an explicit region name is sufficient. Otherwise require a
     // geographic cluster when we have enough trusted anchors; with no anchors we keep
@@ -262,6 +278,50 @@ export class PointAddressDiscoveryService {
   private hasExactExpectedName(pointName: string, regionName: string | undefined, candidate: GoogleCandidate) {
     const actual = this.normalize(candidate.displayName?.text ?? '');
     return this.primaryNameVariants(pointName, regionName).map((x) => this.normalize(x)).filter(Boolean).some((expected) => this.canonicalName(expected) === this.canonicalName(actual));
+  }
+
+  private identityStrength(pointName: string, sapName: string | null | undefined, regionName: string | undefined, candidate: GoogleCandidate) {
+    const operationalExact = this.hasExactExpectedName(pointName, regionName, candidate);
+    const sapExact = !!sapName?.trim() && this.hasExactExpectedName(sapName, regionName, candidate);
+    const operationalBrand = this.hasDistinctiveBrandMatch(pointName, candidate);
+    const sapBrand = !!sapName?.trim() && this.hasDistinctiveBrandMatch(sapName, candidate);
+
+    // Exact agreement across operational/SAP identities is definitive. An exact SAP match is
+    // also strong enough to explain old/new venue names embedded in parentheses (Kantin,
+    // Mahalleli), while distinctive alphabetic brand roots cover concept suffix changes
+    // such as Kordelya Cafe -> Kordelya Bar rock&jazz.
+    if ((operationalExact && sapExact) || (sapExact && operationalBrand) || (operationalExact && sapBrand)) return 3;
+    if (sapExact || operationalExact || (operationalBrand && sapBrand)) return 2;
+    if (operationalBrand || sapBrand) return 1;
+    return 0;
+  }
+
+  private hasDistinctiveBrandMatch(expectedName: string, candidate: GoogleCandidate) {
+    const actualTokens = new Set(this.canonicalName(candidate.displayName?.text ?? '').split(' ').filter(Boolean));
+    const generic = new Set(['social', 'house', 'studio', 'lokasyon', 'mekan', 'kantin', 'izmir', 'bostanli', 'atakent']);
+    return this.canonicalName(expectedName).split(' ').filter((token) =>
+      token.length >= 4 && /^[a-zçğıöşü]+$/i.test(token) && !this.businessTypeTokens.has(token) && !generic.has(token)
+    ).some((token) => actualTokens.has(token));
+  }
+
+  private hasAddressQualifierMatch(pointName: string, candidate: GoogleCandidate) {
+    const actualTokens = new Set(this.canonicalName(candidate.displayName?.text ?? '').split(' ').filter(Boolean));
+    const addressTokens = new Set(this.normalize(candidate.formattedAddress ?? '').split(' ').filter(Boolean));
+    const ignored = new Set(['lokasyon', 'seyyar', 'yeni', 'eski', 'adi', 'ismi']);
+    return this.normalize(pointName).split(' ').filter((token) =>
+      token.length >= 4 && !actualTokens.has(token) && !this.businessTypeTokens.has(token) && !ignored.has(token)
+    ).some((token) => addressTokens.has(token));
+  }
+
+  private isSapTransitionCandidate(pointName: string, sapName: string | null | undefined, regionName: string | undefined, candidate: GoogleCandidate, other: GoogleCandidate) {
+    if (!sapName?.trim() || !this.isSamePhysicalPlace(candidate, other)) return false;
+    const candidateName = this.canonicalName(candidate.displayName?.text ?? '');
+    const otherName = this.canonicalName(other.displayName?.text ?? '');
+    if (!candidateName || !otherName || candidateName === otherName) return false;
+
+    const sapEvidence = this.nameEvidence(sapName, regionName, candidate);
+    const operationalEvidence = this.nameEvidence(pointName, regionName, other);
+    return sapEvidence >= 35 && operationalEvidence >= 35;
   }
 
   private isSamePhysicalPlace(a: GoogleCandidate, b: GoogleCandidate) {
