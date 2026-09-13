@@ -94,3 +94,13 @@ test('narrow İzmir operational regions reject cross-city-side candidates', () =
   assert.equal(service.isPlausibleRegionCandidate('HATAY', karsiyakaWinston, hatayAnchors), false);
   assert.equal(service.isPlausibleRegionCandidate('BAYRAKLI', konakFourPoints, bayrakliAnchors), true);
 });
+
+
+test('search queries use the operational region province instead of hard-coded İzmir', () => {
+  const denizli = service.buildQueries('YUNUS RESTAURANT', 'DENİZLİ');
+  const manisa = service.buildQueries('KÖRFEZ RESTAURANT', 'AKHİSAR');
+  const kusadasi = service.buildQueries('RAMADA OTEL', 'KUŞADASI');
+  assert.ok(denizli.every((q: string) => q.includes('Denizli Türkiye') && !q.includes('İzmir Türkiye')));
+  assert.ok(manisa.every((q: string) => q.includes('Manisa Türkiye') && !q.includes('İzmir Türkiye')));
+  assert.ok(kusadasi.every((q: string) => q.includes('Aydın Türkiye') && !q.includes('İzmir Türkiye')));
+});
