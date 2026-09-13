@@ -46,7 +46,6 @@ test('regional proximity may cross nearby district boundaries when identity is s
   assert.equal(service.hasDecisiveGeography('URLA', tooFar, far, 2), false);
 });
 
-
 test('operational area rejects distant Hatay province and HATAY searches İzmir local aliases', () => {
   const doryol = candidate('Portofino', 'Yeniyurt, 31620 Dörtyol/Hatay', 36.8596076, 36.1427114);
   const guzelyali = candidate('Portofino Lounge', 'Güzelyalı, Mithatpaşa Cd. No:1126/A, Konak/İzmir', 38.3981559, 27.0848575);
@@ -56,4 +55,42 @@ test('operational area rejects distant Hatay province and HATAY searches İzmir 
   assert.ok(queries.some((q: string) => q.includes('Güzelyalı')));
   assert.ok(queries.some((q: string) => q.includes('Konak')));
   assert.ok(queries.some((q: string) => q.includes('Karabağlar')));
+});
+
+test('generic type or numeric overlap cannot substitute for venue identity', () => {
+  const arena = candidate('ARENA NIGHT CLUB', 'Gökkaya, Ahmetli/Manisa', 38.52, 27.94);
+  const noter = candidate('Tire 1. Noter', 'Yeni, Tire/İzmir', 38.09, 27.73);
+  const varan = candidate('VARAN TURİZM URLA', 'Yaka, Urla/İzmir', 38.32, 26.76);
+  assert.equal(service.nameScore(service.normalize('NEFESİM NIGHT CLUB'), service.normalize('ARENA NIGHT CLUB')), 0);
+  assert.equal(service.nameScore(service.normalize('CARTA 1'), service.normalize('Tire 1. Noter')), 0);
+  assert.equal(service.nameScore(service.normalize('KEYFİ KAHYA TURİZM'), service.normalize('VARAN TURİZM URLA')), 0);
+  assert.equal(service.identityStrength('NEFESİM NIGHT CLUB', 'NEFESİM NIGHT CLUB', 'MANİSA', arena), 0);
+  assert.equal(service.identityStrength('CARTA 1', 'CARTA 1', 'TİRE', noter), 0);
+  assert.equal(service.identityStrength('KEYFİ KAHYA TURİZM', null, 'URLA', varan), 0);
+});
+
+test('duplicated SAP name does not double-count a partial brand match', () => {
+  const wrongBranch = candidate('Sir Winston Pub', 'İnönü, Karşıyaka/İzmir', 38.47, 27.11);
+  assert.equal(service.identityStrength('SİR WİNSTON GÖZTEPE', 'SIR WINSTON GÖZTEPE', 'HATAY', wrongBranch), 1);
+});
+
+test('missing branch qualifier caps a same-brand candidate below auto acceptance', () => {
+  const wrongWinston = candidate('Sir Winston Pub', 'İnönü, Karşıyaka/İzmir', 38.47, 27.11);
+  const wrongMaze = candidate('Maze İzmir', 'Umurbey, Konak/İzmir', 38.44, 27.15);
+  const anchors = [{ latitude: 38.40, longitude: 27.10 }, { latitude: 38.41, longitude: 27.11 }, { latitude: 38.42, longitude: 27.12 }];
+  assert.ok(service.score('SİR WİNSTON GÖZTEPE', 'HATAY', wrongWinston, anchors) < 70);
+  assert.ok(service.score('MAZE BALÇOVA', 'BALÇOVA', wrongMaze, anchors) < 70);
+});
+
+test('narrow İzmir operational regions reject cross-city-side candidates', () => {
+  const karsiyakaWinston = candidate('Sir Winston Pub', 'İnönü, 6718. Sk. No:68/C, Karşıyaka/İzmir', 38.47, 27.11);
+  const konakFourPoints = candidate('Four Points by Sheraton Izmir', 'Çınarlı, Ankara Asfaltı Cd. No:17-A, Konak/İzmir', 38.45, 27.16);
+  const hatayAnchors = [
+    { latitude: 38.399, longitude: 27.086 }, { latitude: 38.402, longitude: 27.095 }, { latitude: 38.405, longitude: 27.10 },
+  ];
+  const bayrakliAnchors = [
+    { latitude: 38.46, longitude: 27.16 }, { latitude: 38.465, longitude: 27.17 }, { latitude: 38.47, longitude: 27.18 },
+  ];
+  assert.equal(service.isPlausibleRegionCandidate('HATAY', karsiyakaWinston, hatayAnchors), false);
+  assert.equal(service.isPlausibleRegionCandidate('BAYRAKLI', konakFourPoints, bayrakliAnchors), true);
 });
