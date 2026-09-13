@@ -13,6 +13,7 @@ import AssignmentManagement from './assignment-management';
 import PaperworkManagement from './paperwork-management';
 import PointTimeline from './point-timeline';
 import DuplicateSuggestions from './duplicate-suggestions';
+import { AdminIcon } from './admin-icons';
 import NonMaintenanceVisits from './non-maintenance-visits';
 
 type User = {
@@ -192,27 +193,27 @@ export default function Home() {
       <aside className="sidebar">
         <div className="sidebarBrand"><span className="brandMark">S</span><div><strong>SAHA BAKIM</strong><small>Yönetim Sistemi</small></div></div>
         <nav className="sideNav">
-          <button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>▣ <span>Dashboard</span></button>
-          <button className={section === 'approvals' ? 'active' : ''} onClick={() => setSection('approvals')}>! <span>Onaylar</span></button>
-          <button className={section === 'setup-pending' ? 'active' : ''} onClick={() => setSection('setup-pending')}>⚙ <span>Ayar Bekleyenler</span></button>
-          <button className={section === 'regions' ? 'active' : ''} onClick={() => setSection('regions')}>◉ <span>Bölgeler</span></button>
-          <button className={section === 'points' ? 'active' : ''} onClick={() => setSection('points')}>● <span>Noktalar</span></button>
-          <button className={section === 'location-matching' ? 'active' : ''} onClick={() => setSection('location-matching')}>⌖ <span>SAP / Google</span></button>
-          <button className={section === 'ai-dashboard' ? 'active' : ''} onClick={() => setSection('ai-dashboard')}>◈ <span>Sanal İstatistikçi</span></button>
-          <button className={section === 'anomalies' ? 'active' : ''} onClick={() => setSection('anomalies')}>⚠ <span>Anomaliler</span></button>
-          <button className={section === 'maintenance-calendar' ? 'active' : ''} onClick={() => setSection('maintenance-calendar')}>▤ <span>Bakım Takvimi</span></button>
-          <button className={section === 'prospects' ? 'active' : ''} onClick={() => setSection('prospects')}>◇ <span>Potansiyel Müşteriler</span></button>
-          <button className={section === 'audit-log' ? 'active' : ''} onClick={() => setSection('audit-log')}>≡ <span>İşlem Geçmişi</span></button>
-          <button className={section === 'point-details' ? 'active' : ''} onClick={() => setSection('point-details')}>◎ <span>Nokta Detayı</span></button>
-          <button className={section === 'assignments' ? 'active' : ''} onClick={() => setSection('assignments')}>⇄ <span>Görevlendirmeler</span></button>
-          <button className={section === 'paperwork' ? 'active' : ''} onClick={() => setSection('paperwork')}>▧ <span>Evrak Yönetimi</span></button>
-          <button className={section === 'point-timeline' ? 'active' : ''} onClick={() => setSection('point-timeline')}>◷ <span>Nokta Timeline</span></button>
-          <button className={section === 'duplicates' ? 'active' : ''} onClick={() => setSection('duplicates')}>⧉ <span>Mükerrer Noktalar</span></button>
-          <button className={section === 'non-maintenance-visits' ? 'active' : ''} onClick={() => setSection('non-maintenance-visits')}>↗ <span>Bakım Dışı Ziyaretler</span></button>
-          <button className={section === 'users' ? 'active' : ''} onClick={() => setSection('users')}>♙ <span>Teknisyenler</span></button>
-          <button className={section === 'new-user' ? 'active' : ''} onClick={() => setSection('new-user')}>＋ <span>Yeni Kullanıcı</span></button>
+          <button className={section === 'dashboard' ? 'active' : ''} aria-current={section === 'dashboard' ? 'page' : undefined} aria-label="Dashboard" title="Dashboard" onClick={() => setSection('dashboard')}><AdminIcon name="dashboard" /><span>Dashboard</span></button>
+          <button className={section === 'approvals' ? 'active' : ''} aria-current={section === 'approvals' ? 'page' : undefined} aria-label="Onaylar" title="Onaylar" onClick={() => setSection('approvals')}><AdminIcon name="approval" /><span>Onaylar</span></button>
+          <button className={section === 'setup-pending' ? 'active' : ''} aria-current={section === 'setup-pending' ? 'page' : undefined} aria-label="Ayar Bekleyenler" title="Ayar Bekleyenler" onClick={() => setSection('setup-pending')}><AdminIcon name="settings" /><span>Ayar Bekleyenler</span></button>
+          <button className={section === 'regions' ? 'active' : ''} aria-current={section === 'regions' ? 'page' : undefined} aria-label="Bölgeler" title="Bölgeler" onClick={() => setSection('regions')}><AdminIcon name="regions" /><span>Bölgeler</span></button>
+          <button className={section === 'points' ? 'active' : ''} aria-current={section === 'points' ? 'page' : undefined} aria-label="Noktalar" title="Noktalar" onClick={() => setSection('points')}><AdminIcon name="points" /><span>Noktalar</span></button>
+          <button className={section === 'location-matching' ? 'active' : ''} aria-current={section === 'location-matching' ? 'page' : undefined} aria-label="SAP / Google" title="SAP / Google" onClick={() => setSection('location-matching')}><AdminIcon name="map" /><span>SAP / Google</span></button>
+          <button className={section === 'ai-dashboard' ? 'active' : ''} aria-current={section === 'ai-dashboard' ? 'page' : undefined} aria-label="Sanal İstatistikçi" title="Sanal İstatistikçi" onClick={() => setSection('ai-dashboard')}><AdminIcon name="analytics" /><span>Sanal İstatistikçi</span></button>
+          <button className={section === 'anomalies' ? 'active' : ''} aria-current={section === 'anomalies' ? 'page' : undefined} aria-label="Anomaliler" title="Anomaliler" onClick={() => setSection('anomalies')}><AdminIcon name="warning" /><span>Anomaliler</span></button>
+          <button className={section === 'maintenance-calendar' ? 'active' : ''} aria-current={section === 'maintenance-calendar' ? 'page' : undefined} aria-label="Bakım Takvimi" title="Bakım Takvimi" onClick={() => setSection('maintenance-calendar')}><AdminIcon name="calendar" /><span>Bakım Takvimi</span></button>
+          <button className={section === 'prospects' ? 'active' : ''} aria-current={section === 'prospects' ? 'page' : undefined} aria-label="Potansiyel Müşteriler" title="Potansiyel Müşteriler" onClick={() => setSection('prospects')}><AdminIcon name="prospects" /><span>Potansiyel Müşteriler</span></button>
+          <button className={section === 'audit-log' ? 'active' : ''} aria-current={section === 'audit-log' ? 'page' : undefined} aria-label="İşlem Geçmişi" title="İşlem Geçmişi" onClick={() => setSection('audit-log')}><AdminIcon name="history" /><span>İşlem Geçmişi</span></button>
+          <button className={section === 'point-details' ? 'active' : ''} aria-current={section === 'point-details' ? 'page' : undefined} aria-label="Nokta Detayı" title="Nokta Detayı" onClick={() => setSection('point-details')}><AdminIcon name="detail" /><span>Nokta Detayı</span></button>
+          <button className={section === 'assignments' ? 'active' : ''} aria-current={section === 'assignments' ? 'page' : undefined} aria-label="Görevlendirmeler" title="Görevlendirmeler" onClick={() => setSection('assignments')}><AdminIcon name="assignment" /><span>Görevlendirmeler</span></button>
+          <button className={section === 'paperwork' ? 'active' : ''} aria-current={section === 'paperwork' ? 'page' : undefined} aria-label="Evrak Yönetimi" title="Evrak Yönetimi" onClick={() => setSection('paperwork')}><AdminIcon name="documents" /><span>Evrak Yönetimi</span></button>
+          <button className={section === 'point-timeline' ? 'active' : ''} aria-current={section === 'point-timeline' ? 'page' : undefined} aria-label="Nokta Timeline" title="Nokta Timeline" onClick={() => setSection('point-timeline')}><AdminIcon name="timeline" /><span>Nokta Timeline</span></button>
+          <button className={section === 'duplicates' ? 'active' : ''} aria-current={section === 'duplicates' ? 'page' : undefined} aria-label="Mükerrer Noktalar" title="Mükerrer Noktalar" onClick={() => setSection('duplicates')}><AdminIcon name="duplicate" /><span>Mükerrer Noktalar</span></button>
+          <button className={section === 'non-maintenance-visits' ? 'active' : ''} aria-current={section === 'non-maintenance-visits' ? 'page' : undefined} aria-label="Bakım Dışı Ziyaretler" title="Bakım Dışı Ziyaretler" onClick={() => setSection('non-maintenance-visits')}><AdminIcon name="visit" /><span>Bakım Dışı Ziyaretler</span></button>
+          <button className={section === 'users' ? 'active' : ''} aria-current={section === 'users' ? 'page' : undefined} aria-label="Teknisyenler" title="Teknisyenler" onClick={() => setSection('users')}><AdminIcon name="users" /><span>Teknisyenler</span></button>
+          <button className={section === 'new-user' ? 'active' : ''} aria-current={section === 'new-user' ? 'page' : undefined} aria-label="Yeni Kullanıcı" title="Yeni Kullanıcı" onClick={() => setSection('new-user')}><AdminIcon name="addUser" /><span>Yeni Kullanıcı</span></button>
         </nav>
-        <div className="sidebarFoot">Saha operasyon yönetimi</div>
+        <div className="sidebarFoot"><span className="statusDot" /> Sistem aktif</div>
       </aside>
       <div className="adminMain">
       <header className="topbar" id="dashboard">
@@ -222,7 +223,7 @@ export default function Home() {
         </div>
         <div className="account">
           <span>{me.name}</span>
-          <button className="ghost" onClick={() => void signOut()}>Çıkış</button>
+          <button className="ghost iconAction" onClick={() => void signOut()}><AdminIcon name="logout" size={17} /><span>Çıkış</span></button>
         </div>
       </header>
 
