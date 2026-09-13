@@ -22,6 +22,10 @@ export class PointAddressDiscoveryService {
     BOSTANLI: 'Karşıyaka', ÇAMDİBİ: 'Bornova', MYVIA: 'Bornova', HATAY: 'Konak',
     MORDOĞAN: 'Karaburun',
   };
+  private readonly regionSearchAliases: Record<string, string[]> = {
+    HATAY: ['Konak', 'Güzelyalı', 'Karabağlar'],
+  };
+
   private readonly annotationOnly = new Set([
     'lokasyon', 'seyyar', 'yeni adi', 'eski adi', 'yeni ismi', 'eski ismi', 'sube', 'sanal', 'gecici',
   ]);
@@ -60,6 +64,7 @@ export class PointAddressDiscoveryService {
     const queries = new Set(pointNames.flatMap((name) => this.buildQueries(name, point.region?.name)));
     for (const query of queries) {
       for (const candidate of await this.searchGoogle(key, query)) {
+        if (!this.isWithinOperationalArea(candidate)) continue;
         if (!this.isPlausibleRegionCandidate(point.region?.name, candidate, regionAnchors)) continue;
         const score = this.combinedScore(point.name, point.sapName, point.region?.name, candidate, regionAnchors);
         all.push({ candidate, score, query, regionDistance: this.regionAnchorDistance(candidate, regionAnchors) });
@@ -129,8 +134,10 @@ export class PointAddressDiscoveryService {
     const variants = this.nameVariants(name, regionName);
     const areas = new Set<string>();
     if (regionName) areas.add(regionName);
-    const fallback = regionName ? this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] : undefined;
+    const regionKey = regionName?.toLocaleUpperCase('tr-TR');
+    const fallback = regionKey ? this.regionFallbacks[regionKey] : undefined;
     if (fallback) areas.add(fallback);
+    for (const alias of (regionKey ? this.regionSearchAliases[regionKey] : undefined) ?? []) areas.add(alias);
     if (!areas.size) areas.add('İzmir');
     const queries = new Set<string>();
     for (const variant of variants) for (const area of areas) queries.add([variant, area, 'İzmir', 'Türkiye'].join(' '));
@@ -205,6 +212,18 @@ export class PointAddressDiscoveryService {
     if (!cleaned) return '';
     if (this.annotationOnly.has(this.normalize(cleaned))) return '';
     return cleaned;
+  }
+
+
+  private isWithinOperationalArea(candidate: GoogleCandidate) {
+    const lat = candidate.location?.latitude, lng = candidate.location?.longitude;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
+    // Field operations cover the Aegean Region and its immediate surroundings.
+    // Keep a deliberately broad envelope so border districts (e.g. Dinar/Afyon,
+    // Balıkesir/Çanakkale) remain eligible, while distant same-name places such as
+    // Dörtyol/Hatay cannot win an İzmir HATAY operational-region match.
+    return (lat as number) >= 36.0 && (lat as number) <= 41.0
+      && (lng as number) >= 25.0 && (lng as number) <= 31.5;
   }
 
   private isPlausibleRegionCandidate(regionName: string | undefined, candidate: GoogleCandidate, regionAnchors: GeoAnchor[] = []) {
