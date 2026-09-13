@@ -25,12 +25,17 @@ export class PointAddressDiscoveryService {
   private readonly regionSearchAliases: Record<string, string[]> = {
     HATAY: ['Konak', 'Güzelyalı', 'Karabağlar'],
   };
+  private readonly strictLocalRegions = new Set([
+    'ALSANCAK', 'BALÇOVA', 'BAYRAKLI', 'BORNOVA', 'BOSTANLI', 'BUCA', 'ÇAMDİBİ', 'ÇANKAYA',
+    'ÇİĞLİ', 'EŞREFPAŞA', 'GAZİEMİR', 'HATAY', 'İNCİRALTI', 'KARABAĞLAR', 'KARŞIYAKA',
+    'KEMERALTI', 'KONAK', 'KÜÇÜKPARK', 'MAVİŞEHİR', 'MYVIA', 'NARLIDERE', 'SAHİLEVLERİ',
+  ]);
 
   private readonly annotationOnly = new Set([
     'lokasyon', 'seyyar', 'yeni adi', 'eski adi', 'yeni ismi', 'eski ismi', 'sube', 'sanal', 'gecici',
   ]);
   private readonly businessTypeTokens = new Set([
-    'bar', 'pub', 'cafe', 'kafe', 'rest', 'restaurant', 'restoran', 'otel', 'hotel', 'butik', 'club', 'kulubu', 'kulup', 'birahane', 'birahanesi', 'disco',
+    'bar', 'pub', 'cafe', 'kafe', 'rest', 'restaurant', 'restoran', 'otel', 'hotel', 'butik', 'club', 'kulubu', 'kulup', 'birahane', 'birahanesi', 'disco', 'night', 'turizm', 'lokali', 'lokal', 'noter',
   ]);
 
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
@@ -116,7 +121,7 @@ export class PointAddressDiscoveryService {
     const results = [];
     for (const point of points) {
       try { results.push({ pointId: point.id, ...(await this.discover(point.id)) }); }
-      catch (error) { results.push({ pointId: point.id, status: 'ERROR', error: error instanceof Error ? error.message : String(error) }); }
+      catch (error) { results.push({ pointId: point.id, status: 'ERROR', error: error instanceof Error ? error.message : String(error) } as never); }
     }
     return { count: results.length, results };
   }
@@ -214,14 +219,9 @@ export class PointAddressDiscoveryService {
     return cleaned;
   }
 
-
   private isWithinOperationalArea(candidate: GoogleCandidate) {
     const lat = candidate.location?.latitude, lng = candidate.location?.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
-    // Field operations cover the Aegean Region and its immediate surroundings.
-    // Keep a deliberately broad envelope so border districts (e.g. Dinar/Afyon,
-    // Balıkesir/Çanakkale) remain eligible, while distant same-name places such as
-    // Dörtyol/Hatay cannot win an İzmir HATAY operational-region match.
     return (lat as number) >= 36.0 && (lat as number) <= 41.0
       && (lng as number) >= 25.0 && (lng as number) <= 31.5;
   }
@@ -236,7 +236,18 @@ export class PointAddressDiscoveryService {
       ? Math.min(...regionAnchors.map((anchor) => this.distanceMeters(lat as number, lng as number, anchor.latitude, anchor.longitude)))
       : Number.POSITIVE_INFINITY;
 
-    if (fallback) return address.includes(fallback) || address.includes('izmir') || nearestAnchorMeters <= 40_000;
+    const regionKey = regionName.toLocaleUpperCase('tr-TR');
+    const aliases = this.regionSearchAliases[regionKey] ?? [];
+    const explicitLocalMatch = address.includes(region)
+      || (!!fallback && address.includes(fallback))
+      || aliases.some((alias) => address.includes(this.normalize(alias)));
+
+    if (this.strictLocalRegions.has(regionKey)) {
+      if (explicitLocalMatch) return true;
+      return regionAnchors.length >= 3 && nearestAnchorMeters <= 7_000;
+    }
+
+    if (fallback) return explicitLocalMatch || nearestAnchorMeters <= 40_000;
     if (address.includes(region)) return true;
     if (regionAnchors.length >= 3) return nearestAnchorMeters <= 40_000;
     return true;
@@ -271,6 +282,7 @@ export class PointAddressDiscoveryService {
       else if (anchorDistanceMeters > 80_000) score -= 20;
     }
     if (address.includes('izmir')) score += 5;
+    if (this.hasUnmatchedDistinctiveQualifier(pointName, candidate)) score = Math.min(score, 65);
     return Math.max(0, Math.min(score, 100));
   }
 
@@ -298,8 +310,11 @@ export class PointAddressDiscoveryService {
     const sapExact = !!sapName?.trim() && this.hasExactExpectedName(sapName, regionName, candidate);
     const operationalBrand = this.hasDistinctiveBrandMatch(pointName, candidate);
     const sapBrand = !!sapName?.trim() && this.hasDistinctiveBrandMatch(sapName, candidate);
+    const distinctSapIdentity = !!sapName?.trim() && this.canonicalName(sapName) !== this.canonicalName(pointName);
+    const qualifierMismatch = this.hasUnmatchedDistinctiveQualifier(pointName, candidate)
+      || (!!sapName?.trim() && this.hasUnmatchedDistinctiveQualifier(sapName, candidate));
     if ((operationalExact && sapExact) || (sapExact && operationalBrand) || (operationalExact && sapBrand)) return 3;
-    if (sapExact || operationalExact || (operationalBrand && sapBrand)) return 2;
+    if (sapExact || operationalExact || (operationalBrand && sapBrand && (distinctSapIdentity || !qualifierMismatch))) return 2;
     if (operationalBrand || sapBrand) return 1;
     return 0;
   }
@@ -310,6 +325,17 @@ export class PointAddressDiscoveryService {
     return this.canonicalName(expectedName).split(' ').filter((token) =>
       token.length >= 4 && /^[a-zçğıöşü]+$/i.test(token) && !this.businessTypeTokens.has(token) && !generic.has(token)
     ).some((token) => actualTokens.has(token));
+  }
+
+  private hasUnmatchedDistinctiveQualifier(expectedName: string, candidate: GoogleCandidate) {
+    const actualTokens = this.canonicalName(candidate.displayName?.text ?? '').split(' ').filter(Boolean);
+    const addressTokens = this.normalize(candidate.formattedAddress ?? '').split(' ').filter(Boolean);
+    const ignored = new Set(['social', 'house', 'studio', 'lokasyon', 'mekan', 'kantin', 'izmir', 'bostanli', 'atakent']);
+    const present = (token: string) => actualTokens.some((actual) => this.tokensEquivalent(token, actual))
+      || addressTokens.some((address) => this.tokensEquivalent(token, address));
+    const distinctive = this.canonicalName(expectedName).split(' ').filter((token) =>
+      token.length >= 4 && !/^\d+$/.test(token) && !this.businessTypeTokens.has(token) && !ignored.has(token));
+    return distinctive.some((token) => !present(token));
   }
 
   private hasAddressQualifierMatch(pointName: string, candidate: GoogleCandidate) {
@@ -389,6 +415,9 @@ export class PointAddressDiscoveryService {
       if (Math.min(compactExpected.length, compactActual.length) >= 6 && this.isRepeatedFinalLetterVariant(compactExpected, compactActual)) return 55;
     }
     if (!expectedTokens.length || !actualTokens.length) return 0;
+    const distinctiveExpected = expectedTokens.filter((token) => token.length >= 4 && !/^\d+$/.test(token) && !this.businessTypeTokens.has(token));
+    if (distinctiveExpected.length && !distinctiveExpected.some((expectedToken) =>
+      actualTokens.some((actualToken) => this.tokensEquivalent(expectedToken, actualToken)))) return 0;
     const matchedActual = new Set<number>();
     let overlap = 0;
     for (const expectedToken of expectedTokens) {
