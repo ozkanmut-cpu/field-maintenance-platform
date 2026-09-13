@@ -9,10 +9,12 @@ import { MaintenanceObligationService } from './maintenance-obligation.service';
 import { MaintenanceService } from './maintenance.service';
 import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
 import { PointLocationLearningService } from './point-location-learning.service';
+import { PointTimelineController } from './point-timeline.controller';
+import { PointTimelineService } from './point-timeline.service';
 
 @Module({
   imports: [AssignmentsModule],
-  controllers: [MaintenanceController, MaintenanceObligationController],
+  controllers: [MaintenanceController, MaintenanceObligationController, PointTimelineController],
   providers: [
     MaintenanceEngineService,
     MaintenanceAnomalyService,
@@ -21,6 +23,7 @@ import { PointLocationLearningService } from './point-location-learning.service'
     NonMaintenanceVisitService,
     MaintenanceObligationService,
     MaintenanceService,
+    PointTimelineService,
   ],
   exports: [
     MaintenanceEngineService,
@@ -30,6 +33,7 @@ import { PointLocationLearningService } from './point-location-learning.service'
     NonMaintenanceVisitService,
     MaintenanceObligationService,
     MaintenanceService,
+    PointTimelineService,
   ],
 })
 export class MaintenanceModule {}
