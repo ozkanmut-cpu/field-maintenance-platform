@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type Alias = { id: string; alias: string; createdAt: string; createdBy?: { id: string; name: string } | null };
 type EquipmentSnapshot = { coolerCount?: number | null; towerCount?: number | null; tapCount?: number | null; smarttapCount?: number | null };
@@ -28,6 +29,7 @@ export default function PointDetails() {
   const [equipmentHistory, setEquipmentHistory] = useState<EquipmentAudit[]>([]);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loadingPoints, setLoadingPoints] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -39,9 +41,12 @@ export default function PointDetails() {
   }
 
   async function loadPoints() {
-    const list = await api<Point[]>('/api/backend/points');
-    setPoints(list);
-    setSelectedId((current) => current || list[0]?.id || '');
+    setLoadingPoints(true);
+    try {
+      const list = await api<Point[]>('/api/backend/points');
+      setPoints(list);
+      setSelectedId((current) => current || list[0]?.id || '');
+    } finally { setLoadingPoints(false); }
   }
 
   async function loadPoint(id: string) {
@@ -106,18 +111,18 @@ export default function PointDetails() {
 
   return <>
     <section className="panel">
-      <div className="panelHeader"><div><h2>Nokta Detayı</h2><p>Saha, SAP, Google, alias, ekipman ve konum verilerini tek yerde incele.</p></div><button className="ghost" disabled={busy} onClick={() => void loadPoints()}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Nokta Detayı</h2><p>Saha, SAP, Google, alias, ekipman ve konum verilerini tek yerde incele.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadPoints()}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
-      <div className="compactForm">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / saha adı / SAP adı / Google adı ara" />
+      <div className="filterBar pointDetailFilters">
+        <label className="searchField"><AdminIcon name="search" size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / saha adı / SAP adı / Google adı ara" /></label>
         <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
           {filtered.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
-        </select>
+        </select><span className="filterCount">{filtered.length} / {points.length}</span>
       </div>
     </section>
 
-    {point ? <>
+    {loadingPoints ? <section className="panel"><div className="emptyState"><AdminIcon name="clock" /><strong>Noktalar yükleniyor</strong><span>Nokta detayları hazırlanıyor.</span></div></section> : point ? <>
       <section className="dashboardGrid">
         <div className="dashboardCard"><span>Konum confidence</span><strong>{point.locationConfidence ?? 0}%</strong><small>{point.locationSource || 'UNKNOWN'}</small></div>
         <div className="dashboardCard"><span>Alias</span><strong>{aliases.length}</strong><small>Alternatif isim</small></div>
@@ -149,7 +154,7 @@ export default function PointDetails() {
         {latestAuditMatches === false ? <div className="error banner">Mevcut ekipman profili, son ekipman audit kaydının yeni değeriyle eşleşmiyor. İnceleme önerilir.</div> : null}
         {!equipmentComplete ? <div className="banner">Eksik ekipman alanları: {missingEquipment.join(', ')}. Bu profil bir sonraki teknisyen doğrulamasında tamamlanmalı.</div> : null}
         <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Doğrulayan</th><th>Önce</th><th>Sonra</th><th>Not</th></tr></thead><tbody>
-          {equipmentHistory.length === 0 ? <tr><td colSpan={6}>Bu nokta için ekipman değişiklik kaydı yok.</td></tr> : equipmentHistory.map((item) => <tr key={item.id}>
+          {equipmentHistory.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Ekipman değişikliği yok</strong><span>Bu nokta için kayıtlı ekipman audit olayı bulunmuyor.</span></div></td></tr> : equipmentHistory.map((item) => <tr key={item.id}>
             <td>{new Date(item.createdAt).toLocaleString('tr-TR')}</td><td><strong>{item.action}</strong></td><td>{item.actor.name}<div className="muted">@{item.actor.username}</div></td>
             <td><span className="muted">S {item.oldValue?.coolerCount ?? '—'} · K {item.oldValue?.towerCount ?? '—'} · M {item.oldValue?.tapCount ?? '—'} · ST {item.oldValue?.smarttapCount ?? '—'}</span></td>
             <td><span className="muted">S {item.newValue?.coolerCount ?? '—'} · K {item.newValue?.towerCount ?? '—'} · M {item.newValue?.tapCount ?? '—'} · ST {item.newValue?.smarttapCount ?? '—'}</span></td><td>{item.note || '—'}</td>
@@ -160,9 +165,9 @@ export default function PointDetails() {
 
       <section className="panel"><div className="panelHeader"><div><h2>Alias / Alternatif İsimler</h2><p>Google ve saha eşleştirmelerinde kullanılan ek isimler.</p></div></div>
         <div className="tableWrap"><table><thead><tr><th>Alias</th><th>Ekleyen</th><th>Tarih</th></tr></thead><tbody>
-          {aliases.length === 0 ? <tr><td colSpan={3}>Alias yok.</td></tr> : aliases.map((a) => <tr key={a.id}><td><strong>{a.alias}</strong></td><td>{a.createdBy?.name || '—'}</td><td>{new Date(a.createdAt).toLocaleString('tr-TR')}</td></tr>)}
+          {aliases.length === 0 ? <tr><td colSpan={3}><div className="emptyState compact"><AdminIcon name="detail" /><strong>Alias yok</strong><span>Henüz alternatif nokta adı eklenmemiş.</span></div></td></tr> : aliases.map((a) => <tr key={a.id}><td><strong>{a.alias}</strong></td><td>{a.createdBy?.name || '—'}</td><td>{new Date(a.createdAt).toLocaleString('tr-TR')}</td></tr>)}
         </tbody></table></div>
       </section>
-    </> : null}
+    </> : <section className="panel"><div className="emptyState"><AdminIcon name="search" /><strong>Nokta seçilmedi</strong><span>Arama sonucundan bir nokta seç.</span></div></section>}
   </>;
 }
