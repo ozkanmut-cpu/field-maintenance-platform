@@ -8,6 +8,7 @@ import AnomalyReview from './anomaly-review';
 import MaintenanceCalendar from './maintenance-calendar';
 import Prospects from './prospects';
 import AuditLog from './audit-log';
+import PointDetails from './point-details';
 
 type User = {
   id: string;
@@ -37,7 +38,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
-  const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'location-matching' | 'ai-dashboard' | 'anomalies' | 'maintenance-calendar' | 'prospects' | 'audit-log' | 'users' | 'new-user'>('dashboard');
+  const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'location-matching' | 'ai-dashboard' | 'anomalies' | 'maintenance-calendar' | 'prospects' | 'audit-log' | 'point-details' | 'users' | 'new-user'>('dashboard');
 
   useEffect(() => {
     void restore();
@@ -197,6 +198,7 @@ export default function Home() {
           <button className={section === 'maintenance-calendar' ? 'active' : ''} onClick={() => setSection('maintenance-calendar')}>▤ <span>Bakım Takvimi</span></button>
           <button className={section === 'prospects' ? 'active' : ''} onClick={() => setSection('prospects')}>◇ <span>Potansiyel Müşteriler</span></button>
           <button className={section === 'audit-log' ? 'active' : ''} onClick={() => setSection('audit-log')}>≡ <span>İşlem Geçmişi</span></button>
+          <button className={section === 'point-details' ? 'active' : ''} onClick={() => setSection('point-details')}>◎ <span>Nokta Detayı</span></button>
           <button className={section === 'users' ? 'active' : ''} onClick={() => setSection('users')}>♙ <span>Teknisyenler</span></button>
           <button className={section === 'new-user' ? 'active' : ''} onClick={() => setSection('new-user')}>＋ <span>Yeni Kullanıcı</span></button>
         </nav>
@@ -206,7 +208,7 @@ export default function Home() {
       <header className="topbar" id="dashboard">
         <div>
           <div className="brand">FIELD MAINTENANCE</div>
-          <h1>{section === 'dashboard' ? 'Dashboard' : section === 'approvals' ? 'Onaylar' : section === 'setup-pending' ? 'Ayar Bekleyen Noktalar' : section === 'regions' ? 'Bölgeler' : section === 'points' ? 'Noktalar' : section === 'location-matching' ? 'SAP / Google Eşleştirme' : section === 'ai-dashboard' ? 'Sanal İstatistikçi' : section === 'anomalies' ? 'Bakım Anomalileri' : section === 'maintenance-calendar' ? 'Bakım Takvimi' : section === 'prospects' ? 'Potansiyel Müşteriler' : section === 'audit-log' ? 'İşlem Geçmişi' : section === 'users' ? 'Teknisyenler' : 'Yeni Kullanıcı'}</h1>
+          <h1>{section === 'dashboard' ? 'Dashboard' : section === 'approvals' ? 'Onaylar' : section === 'setup-pending' ? 'Ayar Bekleyen Noktalar' : section === 'regions' ? 'Bölgeler' : section === 'points' ? 'Noktalar' : section === 'location-matching' ? 'SAP / Google Eşleştirme' : section === 'ai-dashboard' ? 'Sanal İstatistikçi' : section === 'anomalies' ? 'Bakım Anomalileri' : section === 'maintenance-calendar' ? 'Bakım Takvimi' : section === 'prospects' ? 'Potansiyel Müşteriler' : section === 'audit-log' ? 'İşlem Geçmişi' : section === 'point-details' ? 'Nokta Detayı' : section === 'users' ? 'Teknisyenler' : 'Yeni Kullanıcı'}</h1>
         </div>
         <div className="account">
           <span>{me.name}</span>
@@ -224,7 +226,7 @@ export default function Home() {
           <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></button>
         </section>
       </> : null}
-      {section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : <Operations users={users} activeSection={section} onNavigate={setSection} />}
+      {section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-details' ? <PointDetails /> : <Operations users={users} activeSection={section} onNavigate={setSection} />}
       {section === 'users' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
