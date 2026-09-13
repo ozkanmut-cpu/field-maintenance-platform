@@ -37,11 +37,11 @@ test('generic numeric token must not turn 1912 Highball into 1912 KSK', () => {
   assert.ok(service.identityStrength('1912 KSK LOKASYON', '1912 KSK', 'BOSTANLI', highball) < 2);
 });
 
-test('nearby locality rules prefer trusted adjacent districts without leaking to unrelated regions', () => {
-  const karacasu = candidate('Elmas Restaurant Hotel', 'Dandalas Mevkii, Yaylalı, 09370 Karacasu/Aydın', 37.73465, 28.63559);
-  const bergama = candidate('Dostlar Birahanesi', 'Ertuğrul, Cumhuriyet Cd. No:17, 35700 Bergama/İzmir', 39.12, 27.18);
-  const seferihisar = candidate('Neptün Hotels', 'Sığacık, Akkum Cd. No:175, 35460 Seferihisar/İzmir', 38.19, 26.78);
-  assert.equal(service.isCompatibleNearbyLocality('NAZİLLİ', karacasu), true);
-  assert.equal(service.isCompatibleNearbyLocality('AKHİSAR', bergama), false);
-  assert.equal(service.isCompatibleNearbyLocality('URLA', seferihisar), false);
+test('regional proximity may cross nearby district boundaries when identity is strong', () => {
+  const near = { candidate: candidate('Same Venue', 'Nearby district', 38.0, 27.0), score: 90, query: '', regionDistance: 28_000 };
+  const far = { candidate: candidate('Same Venue', 'Far district', 39.0, 28.0), score: 90, query: '', regionDistance: 65_000 };
+  assert.equal(service.hasDecisiveGeography('AKHİSAR', near, far, 2), true);
+
+  const tooFar = { ...near, regionDistance: 55_000 };
+  assert.equal(service.hasDecisiveGeography('URLA', tooFar, far, 2), false);
 });
