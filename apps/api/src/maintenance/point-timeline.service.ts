@@ -19,7 +19,7 @@ export class PointTimelineService {
         select: {
           id: true, performedAt: true, recordedAtServer: true, status: true, enteredLate: true,
           serviceSlipStatus: true, confirmationStatus: true, reviewRecommended: true, reviewReason: true,
-          sitePresenceConfirmed: true, sitePresenceDistanceM: true, coolerCount: true, towerCount: true,
+          coolerCount: true, towerCount: true,
           tapCount: true, smarttapCount: true,
           technician: { select: { id: true, name: true, username: true } },
         },
