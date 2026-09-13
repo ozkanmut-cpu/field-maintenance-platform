@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type PointSummary = {
   id: string; code: string; name: string; aliases: string[]; address?: string | null;
@@ -60,7 +61,7 @@ export default function DuplicateSuggestions() {
     </section>
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Mükerrer Nokta Önerileri</h2><p>İsim, adres, fiziksel yakınlık ve Google Place sinyallerine göre olası mükerrer kayıtları incele. Sistem otomatik birleştirme yapmaz.</p></div><button className="ghost" disabled={busy} onClick={() => void load()}>YENİDEN TARA</button></div>
+      <div className="panelHeader"><div><h2>Mükerrer Nokta Önerileri</h2><p>İsim, adres, fiziksel yakınlık ve Google Place sinyallerine göre olası mükerrer kayıtları incele. Sistem otomatik birleştirme yapmaz.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void load()}><AdminIcon name="refresh" size={17} /><span>YENİDEN TARA</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       <div className="compactForm">
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Müşteri no / nokta adı / Google adı ara" />
@@ -72,7 +73,7 @@ export default function DuplicateSuggestions() {
 
     <section className="panel">
       <div className="tableWrap"><table><thead><tr><th>Skor</th><th>1. Nokta</th><th>2. Nokta</th><th>Sinyaller</th><th>Benzerlik</th><th>Mesafe</th></tr></thead><tbody>
-        {items.length === 0 ? <tr><td colSpan={6}>Bu filtrelerde mükerrer aday yok.</td></tr> : items.map((item, index) => <tr key={`${item.left.id}-${item.right.id}-${index}`}>
+        {busy && !data ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Mükerrer taraması çalışıyor</strong><span>Nokta çiftleri karşılaştırılıyor.</span></div></td></tr> : items.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact success"><AdminIcon name="check" /><strong>Mükerrer aday yok</strong><span>Seçili eşik ve aramada şüpheli çift bulunmadı.</span></div></td></tr> : items.map((item, index) => <tr key={`${item.left.id}-${item.right.id}-${index}`}>
           <td><strong>{pct(item.score)}</strong><div className="muted">{item.sameRegion ? 'Aynı bölge' : 'Farklı bölge'}</div></td>
           <td><strong>{item.left.name}</strong><div className="muted">{item.left.code}</div><div className="muted">{item.left.googleBusinessName || 'Google adı yok'}</div><div className="muted">{item.left.address || 'Adres yok'}</div>{item.left.aliases?.length ? <div className="muted">Alias: {item.left.aliases.join(', ')}</div> : null}</td>
           <td><strong>{item.right.name}</strong><div className="muted">{item.right.code}</div><div className="muted">{item.right.googleBusinessName || 'Google adı yok'}</div><div className="muted">{item.right.address || 'Adres yok'}</div>{item.right.aliases?.length ? <div className="muted">Alias: {item.right.aliases.join(', ')}</div> : null}</td>
