@@ -51,19 +51,19 @@ jobs:
           node -e "require('expo/scripts/resolveAppEntry')" "$PROJECT_ROOT" android absolute
           nl -ba app/build.gradle | sed -n '1,28p'
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: apps/mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Stage APK
-        run: cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk Field-Maintenance-fixed.apk
+        run: cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk Field-Maintenance-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: field-maintenance-android-apk
-          path: Field-Maintenance-fixed.apk
+          name: field-maintenance-android-release-apk
+          path: Field-Maintenance-release.apk
           if-no-files-found: error
           retention-days: 14
