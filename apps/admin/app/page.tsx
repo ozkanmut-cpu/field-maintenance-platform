@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Operations from './operations';
 import LocationMatching from './location-matching';
 import AiDashboard from './ai-dashboard';
@@ -44,6 +44,10 @@ export default function Home() {
   const [error, setError] = useState('');
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | User['role']>('ALL');
+  const [userStatusFilter, setUserStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PASSIVE'>('ALL');
+  const [userNotice, setUserNotice] = useState('');
   const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'location-matching' | 'ai-dashboard' | 'anomalies' | 'maintenance-calendar' | 'prospects' | 'audit-log' | 'point-details' | 'assignments' | 'paperwork' | 'point-timeline' | 'duplicates' | 'non-maintenance-visits' | 'users' | 'new-user'>('dashboard');
 
   useEffect(() => {
@@ -111,6 +115,7 @@ export default function Home() {
         body: JSON.stringify(newUser),
       });
       setNewUser(emptyUser);
+      setUserNotice('Kullanıcı oluşturuldu.');
       await loadUsers();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -118,6 +123,16 @@ export default function Home() {
       setBusy(false);
     }
   }
+
+  const visibleUsers = useMemo(() => {
+    const q = userSearch.trim().toLocaleLowerCase('tr-TR');
+    return users.filter((user) => {
+      if (userRoleFilter !== 'ALL' && user.role !== userRoleFilter) return false;
+      if (userStatusFilter === 'ACTIVE' && !user.active) return false;
+      if (userStatusFilter === 'PASSIVE' && user.active) return false;
+      return !q || `${user.name} ${user.username}`.toLocaleLowerCase('tr-TR').includes(q);
+    });
+  }, [users, userSearch, userRoleFilter, userStatusFilter]);
 
   async function toggleActive(user: User) {
     setBusy(true);
@@ -241,13 +256,19 @@ export default function Home() {
       {section === 'users' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
-          <button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button>
+          <button className="ghost iconAction" onClick={() => void loadUsers()} disabled={busy}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button>
+        </div>
+        <div className="filterBar userFilters">
+          <label className="searchField"><AdminIcon name="search" size={18} /><input value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Ad veya kullanıcı adı ara" /></label>
+          <select value={userRoleFilter} onChange={(e) => setUserRoleFilter(e.target.value as typeof userRoleFilter)}><option value="ALL">Tüm roller</option><option value="TECHNICIAN">Teknisyen</option><option value="ADMIN">Yönetici</option></select>
+          <select value={userStatusFilter} onChange={(e) => setUserStatusFilter(e.target.value as typeof userStatusFilter)}><option value="ALL">Tüm durumlar</option><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option></select>
+          <span className="filterCount">{visibleUsers.length} / {users.length}</span>
         </div>
         <div className="tableWrap">
           <table>
             <thead><tr><th>Ad</th><th>Kullanıcı adı</th><th>Rol</th><th>Durum</th><th>Son giriş</th><th></th></tr></thead>
             <tbody>
-              {users.map((user) => (
+              {busy && users.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Kullanıcılar yükleniyor</strong><span>Hesap listesi hazırlanıyor.</span></div></td></tr> : visibleUsers.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Kullanıcı bulunamadı</strong><span>Arama veya filtreleri değiştir.</span></div></td></tr> : visibleUsers.map((user) => (
                 <tr key={user.id}>
                   <td><strong>{user.name}</strong></td>
                   <td>{user.username}</td>
@@ -266,7 +287,7 @@ export default function Home() {
         </div>
       </section> : null}
       {section === 'users' && helpEditorId ? <section className="panel">
-        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => setHelpEditorId('')}>Kapat</button></div>
+        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost iconAction" onClick={() => setHelpEditorId('')}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
         <div className="helpGrid">
           {users.filter((u) => u.role === 'TECHNICIAN' && u.active && u.id !== helpEditorId).map((target) => (
             <label className="helpOption" key={target.id}>
@@ -280,6 +301,7 @@ export default function Home() {
 
       {section === 'new-user' ? <section className="panel" id="new-user">
         <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
+        {userNotice ? <div className="banner">{userNotice}</div> : null}
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />
           <input value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase() })} placeholder="Kullanıcı adı" required />
