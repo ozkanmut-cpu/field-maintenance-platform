@@ -22,11 +22,6 @@ export class PointAddressDiscoveryService {
     BOSTANLI: 'Karşıyaka', ÇAMDİBİ: 'Bornova', MYVIA: 'Bornova', HATAY: 'Konak',
     MORDOĞAN: 'Karaburun',
   };
-  private readonly regionNearbyLocalities: Record<string, string[]> = {
-    DENİZLİ: ['Pamukkale', 'Merkezefendi'],
-    NAZİLLİ: ['Karacasu'],
-  };
-
   private readonly annotationOnly = new Set([
     'lokasyon', 'seyyar', 'yeni adi', 'eski adi', 'yeni ismi', 'eski ismi', 'sube', 'sanal', 'gecici',
   ]);
@@ -159,8 +154,6 @@ export class PointAddressDiscoveryService {
     const withoutParentheses = cleanedName.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
     if (withoutParentheses) variants.add(withoutParentheses);
 
-    // Hyphen-separated names often contain an old/new venue name. Query each side independently,
-    // but keep scoring conservative: alternate variants remain capped below auto-acceptance on their own.
     for (const part of withoutParentheses.split(/\s*[-–—]\s*/).map((x) => x.trim()).filter(Boolean)) {
       if (part !== withoutParentheses && this.normalize(part).length >= 4) variants.add(part);
     }
@@ -224,14 +217,7 @@ export class PointAddressDiscoveryService {
       ? Math.min(...regionAnchors.map((anchor) => this.distanceMeters(lat as number, lng as number, anchor.latitude, anchor.longitude)))
       : Number.POSITIVE_INFINITY;
 
-    // Curated neighborhood aliases (e.g. HATAY -> Konak) must not be satisfied by a
-    // same-named distant city/province. Either the expected parent district is present
-    // in the address or the candidate must sit near already verified points in the region.
     if (fallback) return address.includes(fallback) || address.includes('izmir') || nearestAnchorMeters <= 40_000;
-
-    // For other regions, an explicit region name is sufficient. Otherwise require a
-    // geographic cluster when we have enough trusted anchors; with no anchors we keep
-    // the candidate for conservative scoring rather than guessing a hard boundary.
     if (address.includes(region)) return true;
     if (regionAnchors.length >= 3) return nearestAnchorMeters <= 40_000;
     return true;
@@ -257,17 +243,11 @@ export class PointAddressDiscoveryService {
       else score -= 35;
     }
 
-    // Region names in the field are operational territories, not always postal districts.
-    // Trusted matches already assigned to that region therefore form the strongest local
-    // geography signal. Prefer candidates that sit inside that cluster and penalize very
-    // distant same-name businesses. Using the mean of the three nearest anchors avoids a
-    // single stray historical point deciding the match.
     if (Number.isFinite(anchorDistanceMeters)) {
-      const localityCompatible = !!regionName && this.isCompatibleNearbyLocality(regionName, candidate);
-      if (localityCompatible && anchorDistanceMeters <= 5_000) score += 20;
-      else if (localityCompatible && anchorDistanceMeters <= 15_000) score += 15;
-      else if (localityCompatible && anchorDistanceMeters <= 30_000) score += 8;
-      else if (localityCompatible && anchorDistanceMeters <= 50_000) score += 3;
+      if (anchorDistanceMeters <= 5_000) score += 20;
+      else if (anchorDistanceMeters <= 15_000) score += 15;
+      else if (anchorDistanceMeters <= 30_000) score += 8;
+      else if (anchorDistanceMeters <= 50_000) score += 3;
       else if (anchorDistanceMeters > 120_000) score -= 35;
       else if (anchorDistanceMeters > 80_000) score -= 20;
     }
@@ -278,10 +258,6 @@ export class PointAddressDiscoveryService {
   private combinedScore(pointName: string, sapName: string | null | undefined, regionName: string | undefined, candidate: GoogleCandidate, regionAnchors: GeoAnchor[] = []) {
     const operationalScore = this.score(pointName, regionName, candidate, regionAnchors);
     if (!sapName?.trim()) return operationalScore;
-
-    // SAP is corroborating evidence, not an independent auto-accept path. A strong SAP-name match
-    // can lift a candidate that already has meaningful support from the operational name/aliases,
-    // region/address or geographic anchors, but it cannot rescue an otherwise unrelated place.
     const sapEvidence = this.nameEvidence(sapName, regionName, candidate);
     if (operationalScore < 45) return operationalScore;
     const sapBonus = sapEvidence >= 60 ? 20 : sapEvidence >= 50 ? 15 : sapEvidence >= 45 ? 8 : 0;
@@ -303,11 +279,6 @@ export class PointAddressDiscoveryService {
     const sapExact = !!sapName?.trim() && this.hasExactExpectedName(sapName, regionName, candidate);
     const operationalBrand = this.hasDistinctiveBrandMatch(pointName, candidate);
     const sapBrand = !!sapName?.trim() && this.hasDistinctiveBrandMatch(sapName, candidate);
-
-    // Exact agreement across operational/SAP identities is definitive. An exact SAP match is
-    // also strong enough to explain old/new venue names embedded in parentheses (Kantin,
-    // Mahalleli), while distinctive alphabetic brand roots cover concept suffix changes
-    // such as Kordelya Cafe -> Kordelya Bar rock&jazz.
     if ((operationalExact && sapExact) || (sapExact && operationalBrand) || (operationalExact && sapBrand)) return 3;
     if (sapExact || operationalExact || (operationalBrand && sapBrand)) return 2;
     if (operationalBrand || sapBrand) return 1;
@@ -336,7 +307,6 @@ export class PointAddressDiscoveryService {
     const candidateName = this.canonicalName(candidate.displayName?.text ?? '');
     const otherName = this.canonicalName(other.displayName?.text ?? '');
     if (!candidateName || !otherName || candidateName === otherName) return false;
-
     const sapEvidence = this.nameEvidence(sapName, regionName, candidate);
     const operationalEvidence = this.nameEvidence(pointName, regionName, other);
     return sapEvidence >= 35 && operationalEvidence >= 35;
@@ -365,19 +335,9 @@ export class PointAddressDiscoveryService {
 
   private hasDecisiveGeography(regionName: string | undefined, best: RankedCandidate, second: RankedCandidate, bestIdentity: number) {
     if (!regionName || bestIdentity < 2 || !Number.isFinite(best.regionDistance) || !Number.isFinite(second.regionDistance)) return false;
-    if (best.regionDistance > 20_000 || !this.isCompatibleNearbyLocality(regionName, best.candidate)) return false;
+    if (best.regionDistance > 50_000) return false;
     const gap = second.regionDistance - best.regionDistance;
-    return gap >= 15_000 && second.regionDistance >= best.regionDistance * 1.8;
-  }
-
-  private isCompatibleNearbyLocality(regionName: string, candidate: GoogleCandidate) {
-    const address = this.normalize(candidate.formattedAddress ?? '');
-    const region = this.normalize(regionName);
-    if (address.includes(region)) return true;
-    const fallback = this.normalize(this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] ?? '');
-    if (fallback && address.includes(fallback)) return true;
-    const nearby = this.regionNearbyLocalities[regionName.toLocaleUpperCase('tr-TR')] ?? [];
-    return nearby.some((locality) => address.includes(this.normalize(locality)));
+    return gap >= 15_000 && second.regionDistance >= best.regionDistance * 1.5;
   }
 
   private regionAnchorDistance(candidate: GoogleCandidate, regionAnchors: GeoAnchor[]) {
