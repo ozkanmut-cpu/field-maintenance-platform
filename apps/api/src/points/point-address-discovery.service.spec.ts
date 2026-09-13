@@ -45,3 +45,15 @@ test('regional proximity may cross nearby district boundaries when identity is s
   const tooFar = { ...near, regionDistance: 55_000 };
   assert.equal(service.hasDecisiveGeography('URLA', tooFar, far, 2), false);
 });
+
+
+test('operational area rejects distant Hatay province and HATAY searches İzmir local aliases', () => {
+  const doryol = candidate('Portofino', 'Yeniyurt, 31620 Dörtyol/Hatay', 36.8596076, 36.1427114);
+  const guzelyali = candidate('Portofino Lounge', 'Güzelyalı, Mithatpaşa Cd. No:1126/A, Konak/İzmir', 38.3981559, 27.0848575);
+  assert.equal(service.isWithinOperationalArea(doryol), false);
+  assert.equal(service.isWithinOperationalArea(guzelyali), true);
+  const queries = service.buildQueries('PORTOFİNO', 'HATAY');
+  assert.ok(queries.some((q: string) => q.includes('Güzelyalı')));
+  assert.ok(queries.some((q: string) => q.includes('Konak')));
+  assert.ok(queries.some((q: string) => q.includes('Karabağlar')));
+});
