@@ -62,36 +62,10 @@
 - [ ] Offline maintenance queue
 - [ ] Auto-sync / conflict handling
 
-## P2 — Background intelligence, reporting and automation
+## P2 — Reporting and automation
 
-- [ ] AI Risk Engine
-- [ ] AI Planning Engine
-- [ ] AI Location Engine
-- [ ] AI Data Quality Engine
-- [ ] Point Difficulty Score using equipment profile as primary workload features
-- [ ] Treat expert prior as fixed domain knowledge: equipment-aware workload is more informative than raw point count; point count remains contextual only
-- [ ] Learn relative workload impact among cooler/tower/tap/SmartTap types from observed outcomes rather than hard-coding arbitrary per-equipment weights
-- [ ] Equipment-profile confidence: completeness, verification age and verification history
-- [ ] Equipment-profile stability/change-rate feature per point
-- [ ] Equipment-change anomaly detection for implausible or repeated count swings
-- [ ] Equipment data-quality brake for difficulty/capacity/risk/recommendation engines
-- [ ] Historical point-difficulty reconstruction from visit-level equipment snapshots
-- [ ] Cold-start cohorts incorporating maintenance type + equipment profile when sample size is sufficient
-- [ ] Technician capacity model adjusted for equipment mix, not only point count
-- [ ] Decompose weekly workload into service workload and travel workload; do not collapse both into raw point count
-- [ ] Travel workload features from point-to-point distance, geographic dispersion, isolated points, cluster fragmentation and technician work-area proximity
-- [ ] Prefer route-coherent equipment workload over equalized point counts when evaluating workload balance
-- [ ] Weekly workload engine using equipment-weighted point difficulty + geographic/travel burden
-- [ ] Risk prediction using workload mix + equipment difficulty + geography + past performance
-- [ ] Recommendation ranking aware of equipment-heavy clusters, travel burden and technician capacity
-- [ ] Similar Week matching using equipment-mix + geographic-dispersion similarity
-- [ ] What-if simulator inputs for equipment-count changes, route/geography changes and resulting workload/risk delta
-- [ ] Outcome validation should calibrate equipment-type and travel-burden weights; it must not be used to decide whether raw point count is preferable to the equipment-aware domain model
-- [ ] AI maturity gating based on equipment-profile coverage, location coverage and verified-history depth
-- [ ] Period-end delay risk
-- [ ] Technician workload/capacity analysis
-- [ ] Region health indicators
-- [ ] SmartClean approaching windows
+AI / karar destek backlog'u ayrı tutulur: [AI_TODO.md](./AI_TODO.md)
+
 - [ ] Paperwork completion-time analytics
 - [ ] Daily technician summary
 - [ ] Daily admin summary
