@@ -1,8 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
   DueTask, EfesimExtractResult, extractEfesim, HelpTarget, helpTargets, login, me, ProspectRecord,
@@ -133,11 +135,18 @@ export default function CorporateApp() {
     try {
       const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!media.granted) return Alert.alert('İzin gerekli', 'EFESİM ekran görüntüsünü seçmek için fotoğraf izni gerekli.');
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.9, base64: true });
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.8, base64: false });
       if (picked.canceled) return;
-      const asset = picked.assets[0]; if (!asset.base64) throw new Error('Ekran görüntüsü okunamadı.');
+      const asset = picked.assets[0];
+      const targetWidth = Math.min(asset.width || 1440, 1440);
+      const resized = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        asset.width && asset.width > targetWidth ? [{ resize: { width: targetWidth } }] : [],
+        { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (!resized.base64) throw new Error('Ekran görüntüsü okunamadı.');
       const loc = await currentLocation(); const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude }; setFieldLocation(coords);
-      const result = await extractEfesim({ technicianId: user!.id, imageBase64: asset.base64, ...coords });
+      const result = await extractEfesim({ technicianId: user!.id, imageBase64: resized.base64, ...coords });
       setEfesim(result); setCustomerName(result.customerName ?? ''); setSapNo(result.sapNo ?? ''); setUseGoogle(result.nextStep === 'CONFIRM_GOOGLE_MATCH'); setScreen('EFESIM_RESULT');
     } catch (e) { Alert.alert('EFESİM okunamadı', message(e)); }
     finally { setBusy(false); }
@@ -166,11 +175,11 @@ export default function CorporateApp() {
     finally { setBusy(false); }
   }
 
-  if (sessionLoading) return <SafeAreaView style={styles.center}><ActivityIndicator size="large" /><Text>Oturum kontrol ediliyor...</Text></SafeAreaView>;
+  if (sessionLoading) return <SafeAreaView edges={['top','bottom']} style={styles.center}><ActivityIndicator size="large" /><Text>Oturum kontrol ediliyor...</Text></SafeAreaView>;
   if (!user) return <Login username={username} password={password} setUsername={setUsername} setPassword={setPassword} busy={busy} signIn={signIn} />;
 
   const title = screen === 'CUSTOMERS' || screen === 'CUSTOMER' ? 'Müşterilerim' : screen === 'EQUIPMENT_CONFIRM' ? 'Ekipman Kontrolü' : screen === 'HELP' ? 'Yardım Et' : screen === 'NEW' || screen === 'EFESIM_RESULT' || screen === 'PROSPECT' || screen === 'VISIT_SAVED' ? 'Yeni Nokta' : screen === 'HISTORY' ? 'Geçmiş' : 'İşler';
-  return <SafeAreaView style={styles.safe}><StatusBar style="light" /><View style={styles.shell}>
+  return <SafeAreaView edges={['top','bottom']} style={styles.safe}><StatusBar style="light" /><View style={styles.shell}>
     <View style={styles.header}><View><Text style={styles.eyebrow}>SAHA BAKIM</Text><Text style={styles.headerTitle}>{title}</Text><Text style={styles.headerUser}>{user.name}</Text></View><TouchableOpacity style={styles.logoutBtn} onPress={() => void signOut()}><Text style={styles.logoutText}>ÇIKIŞ</Text></TouchableOpacity></View>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
