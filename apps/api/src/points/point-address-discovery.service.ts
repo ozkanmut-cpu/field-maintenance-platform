@@ -9,7 +9,7 @@ type GoogleCandidate = {
   formattedAddress?: string;
   location?: { latitude?: number; longitude?: number };
 };
-type RankedCandidate = { candidate: GoogleCandidate; score: number; query: string };
+type RankedCandidate = { candidate: GoogleCandidate; score: number; query: string; regionDistance: number };
 type GeoAnchor = { latitude: number; longitude: number };
 
 @Injectable()
@@ -22,6 +22,11 @@ export class PointAddressDiscoveryService {
     BOSTANLI: 'Karşıyaka', ÇAMDİBİ: 'Bornova', MYVIA: 'Bornova', HATAY: 'Konak',
     MORDOĞAN: 'Karaburun',
   };
+  private readonly regionNearbyLocalities: Record<string, string[]> = {
+    DENİZLİ: ['Pamukkale', 'Merkezefendi'],
+    NAZİLLİ: ['Karacasu'],
+  };
+
   private readonly annotationOnly = new Set([
     'lokasyon', 'seyyar', 'yeni adi', 'eski adi', 'yeni ismi', 'eski ismi', 'sube', 'sanal', 'gecici',
   ]);
@@ -62,12 +67,12 @@ export class PointAddressDiscoveryService {
       for (const candidate of await this.searchGoogle(key, query)) {
         if (!this.isPlausibleRegionCandidate(point.region?.name, candidate, regionAnchors)) continue;
         const score = this.combinedScore(point.name, point.sapName, point.region?.name, candidate, regionAnchors);
-        all.push({ candidate, score, query });
+        all.push({ candidate, score, query, regionDistance: this.regionAnchorDistance(candidate, regionAnchors) });
       }
     }
     if (!all.length) return { status: 'NO_MATCH' as const };
 
-    const deduped = [...new Map(all.sort((a, b) => b.score - a.score).map((item) => [item.candidate.id ?? `${item.candidate.displayName?.text}|${item.candidate.formattedAddress}`, item])).values()];
+    const deduped = [...new Map(all.sort((a, b) => b.score - a.score || a.regionDistance - b.regionDistance).map((item) => [item.candidate.id ?? `${item.candidate.displayName?.text}|${item.candidate.formattedAddress}`, item])).values()];
     for (const item of deduped) {
       const identity = this.identityStrength(point.name, point.sapName, point.region?.name, item.candidate);
       const transition = deduped.some((other) => other !== item
@@ -76,7 +81,7 @@ export class PointAddressDiscoveryService {
       const identityScore = identity >= 3 ? 95 + addressQualifier : identity >= 2 ? 90 + addressQualifier : 0;
       item.score = Math.max(item.score, transition ? 100 : 0, identityScore);
     }
-    deduped.sort((a, b) => b.score - a.score);
+    deduped.sort((a, b) => b.score - a.score || a.regionDistance - b.regionDistance);
     const best = deduped[0], second = deduped[1];
     const closeCompetitor = !!second && best.score - second.score < 10;
     const samePhysicalPlace = !!second && this.isSamePhysicalPlace(best.candidate, second.candidate);
@@ -92,7 +97,8 @@ export class PointAddressDiscoveryService {
     const addressQualifierAdvantage = !!second
       && this.hasAddressQualifierMatch(point.name, best.candidate)
       && !this.hasAddressQualifierMatch(point.name, second.candidate);
-    if (!best || effectiveBestScore < 70 || (closeCompetitor && !samePhysicalPlace && !colocatedAliasPair && !exactNameAdvantage && !decisiveIdentity && !addressQualifierAdvantage)) return { status: 'AMBIGUOUS' as const, confidence: effectiveBestScore ?? 0 };
+    const geographyAdvantage = !!second && this.hasDecisiveGeography(point.region?.name, best, second, bestIdentity);
+    if (!best || effectiveBestScore < 70 || (closeCompetitor && !samePhysicalPlace && !colocatedAliasPair && !exactNameAdvantage && !decisiveIdentity && !addressQualifierAdvantage && !geographyAdvantage)) return { status: 'AMBIGUOUS' as const, confidence: effectiveBestScore ?? 0 };
     best.score = effectiveBestScore;
     const lat = best.candidate.location?.latitude, lng = best.candidate.location?.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_COORDINATES' as const };
@@ -242,16 +248,28 @@ export class PointAddressDiscoveryService {
     const fallback = regionName ? this.normalize(this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] ?? '') : '';
     const exactRegionMatch = !!region && address.includes(region), fallbackMatch = !!fallback && address.includes(fallback);
     let score = nameScore;
+    const anchorDistanceMeters = this.regionAnchorDistance(candidate, regionAnchors);
     if (exactRegionMatch) score += 25;
     else if (fallbackMatch) score += 20;
     else if (region) {
-      const lat = candidate.location?.latitude, lng = candidate.location?.longitude;
-      const nearestAnchorMeters = Number.isFinite(lat) && Number.isFinite(lng) && regionAnchors.length >= 3
-        ? Math.min(...regionAnchors.map((anchor) => this.distanceMeters(lat as number, lng as number, anchor.latitude, anchor.longitude)))
-        : Number.POSITIVE_INFINITY;
-      if (nameScore >= 40 && nearestAnchorMeters <= 25_000) score += 25;
-      else if (nameScore >= 50 && nearestAnchorMeters <= 40_000) score += 5;
+      if (nameScore >= 40 && anchorDistanceMeters <= 25_000) score += 25;
+      else if (nameScore >= 50 && anchorDistanceMeters <= 40_000) score += 5;
       else score -= 35;
+    }
+
+    // Region names in the field are operational territories, not always postal districts.
+    // Trusted matches already assigned to that region therefore form the strongest local
+    // geography signal. Prefer candidates that sit inside that cluster and penalize very
+    // distant same-name businesses. Using the mean of the three nearest anchors avoids a
+    // single stray historical point deciding the match.
+    if (Number.isFinite(anchorDistanceMeters)) {
+      const localityCompatible = !!regionName && this.isCompatibleNearbyLocality(regionName, candidate);
+      if (localityCompatible && anchorDistanceMeters <= 5_000) score += 20;
+      else if (localityCompatible && anchorDistanceMeters <= 15_000) score += 15;
+      else if (localityCompatible && anchorDistanceMeters <= 30_000) score += 8;
+      else if (localityCompatible && anchorDistanceMeters <= 50_000) score += 3;
+      else if (anchorDistanceMeters > 120_000) score -= 35;
+      else if (anchorDistanceMeters > 80_000) score -= 20;
     }
     if (address.includes('izmir')) score += 5;
     return Math.max(0, Math.min(score, 100));
@@ -343,6 +361,33 @@ export class PointAddressDiscoveryService {
     const aMatches = aliases.filter((alias) => this.nameScore(this.normalize(alias), aName) >= 30);
     const bMatches = aliases.filter((alias) => this.nameScore(this.normalize(alias), bName) >= 30);
     return aMatches.some((left) => bMatches.some((right) => this.normalize(left) !== this.normalize(right)));
+  }
+
+  private hasDecisiveGeography(regionName: string | undefined, best: RankedCandidate, second: RankedCandidate, bestIdentity: number) {
+    if (!regionName || bestIdentity < 2 || !Number.isFinite(best.regionDistance) || !Number.isFinite(second.regionDistance)) return false;
+    if (best.regionDistance > 20_000 || !this.isCompatibleNearbyLocality(regionName, best.candidate)) return false;
+    const gap = second.regionDistance - best.regionDistance;
+    return gap >= 15_000 && second.regionDistance >= best.regionDistance * 1.8;
+  }
+
+  private isCompatibleNearbyLocality(regionName: string, candidate: GoogleCandidate) {
+    const address = this.normalize(candidate.formattedAddress ?? '');
+    const region = this.normalize(regionName);
+    if (address.includes(region)) return true;
+    const fallback = this.normalize(this.regionFallbacks[regionName.toLocaleUpperCase('tr-TR')] ?? '');
+    if (fallback && address.includes(fallback)) return true;
+    const nearby = this.regionNearbyLocalities[regionName.toLocaleUpperCase('tr-TR')] ?? [];
+    return nearby.some((locality) => address.includes(this.normalize(locality)));
+  }
+
+  private regionAnchorDistance(candidate: GoogleCandidate, regionAnchors: GeoAnchor[]) {
+    const lat = candidate.location?.latitude, lng = candidate.location?.longitude;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || regionAnchors.length < 3) return Number.POSITIVE_INFINITY;
+    const distances = regionAnchors
+      .map((anchor) => this.distanceMeters(lat as number, lng as number, anchor.latitude, anchor.longitude))
+      .sort((a, b) => a - b);
+    const nearest = distances.slice(0, Math.min(3, distances.length));
+    return nearest.reduce((sum, value) => sum + value, 0) / nearest.length;
   }
 
   private distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
