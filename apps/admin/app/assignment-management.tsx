@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Point = { id: string; code: string; name: string; region?: { id: string; name: string; technicianId?: string | null } | null };
@@ -144,7 +145,7 @@ export default function AssignmentManagement() {
     </section>
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Görevlendirme Yönetimi</h2><p>Bölge teknisyenini ezmeden nokta bazlı kalıcı istisna veya süreli görevlendirme tanımla.</p></div><button className="ghost" disabled={busy} onClick={() => void loadPoint(pointId)}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Görevlendirme Yönetimi</h2><p>Bölge teknisyenini ezmeden nokta bazlı kalıcı istisna veya süreli görevlendirme tanımla.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadPoint(pointId)}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
@@ -172,13 +173,13 @@ export default function AssignmentManagement() {
         <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı</option><option value="POINT_OVERRIDE">Kalıcı override</option><option value="TEMPORARY">Geçici</option></select>
       </div>
       <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>Neden</th><th></th></tr></thead><tbody>
-        {!filteredHistory.length ? <tr><td colSpan={7}>Bu filtrelerde görevlendirme kaydı yok.</td></tr> : filteredHistory.map((a) => <tr key={a.id}>
-          <td><strong>{a.technician.name}</strong></td><td>{a.kind === 'POINT_OVERRIDE' ? 'Kalıcı override' : 'Geçici'}</td><td>{new Date(a.startsAt).toLocaleString('tr-TR')}</td><td>{a.endsAt ? new Date(a.endsAt).toLocaleString('tr-TR') : 'Süresiz'}</td><td><span className={a.active ? 'pill active' : 'pill'}>{a.active ? 'AKTİF' : 'KAPALI'}</span></td><td>{a.reason || '—'}</td><td className="actions"><button className="small" type="button" disabled={busy} onClick={() => void openAudit(a.id)}>AUDIT</button>{a.active ? <button className="small" type="button" disabled={busy} onClick={() => void deactivate(a)}>KAPAT</button> : null}</td>
+        {busy && !history ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Görevlendirmeler yükleniyor</strong><span>Nokta geçmişi hazırlanıyor.</span></div></td></tr> : !filteredHistory.length ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="search" /><strong>Görevlendirme kaydı yok</strong><span>Seçili filtrelerde kayıt bulunamadı.</span></div></td></tr> : filteredHistory.map((a) => <tr key={a.id}>
+          <td><strong>{a.technician.name}</strong></td><td>{a.kind === 'POINT_OVERRIDE' ? 'Kalıcı override' : 'Geçici'}</td><td>{new Date(a.startsAt).toLocaleString('tr-TR')}</td><td>{a.endsAt ? new Date(a.endsAt).toLocaleString('tr-TR') : 'Süresiz'}</td><td><span className={a.active ? 'pill active' : 'pill'}>{a.active ? 'AKTİF' : 'KAPALI'}</span></td><td>{a.reason || '—'}</td><td className="actions"><button className="small iconAction" type="button" disabled={busy} onClick={() => void openAudit(a.id)}><AdminIcon name="history" size={15} /><span>AUDIT</span></button>{a.active ? <button className="small" type="button" disabled={busy} onClick={() => void deactivate(a)}><AdminIcon name="error" size={16} /><span>KAPAT</span></button> : null}</td>
         </tr>)}
       </tbody></table></div>
     </section>
 
-    {audit ? <section className="panel"><div className="panelHeader"><div><h2>Görevlendirme Audit Geçmişi</h2><p>{audit.assignment.kind} · {audit.assignment.active ? 'Aktif' : 'Kapalı'}</p></div><button className="ghost" onClick={() => setAudit(null)}>KAPAT</button></div>
+    {audit ? <section className="panel"><div className="panelHeader"><div><h2>Görevlendirme Audit Geçmişi</h2><p>{audit.assignment.kind} · {audit.assignment.active ? 'Aktif' : 'Kapalı'}</p></div><button className="ghost" onClick={() => setAudit(null)}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Kullanıcı</th><th>Not</th><th>Değişiklik</th></tr></thead><tbody>
         {audit.history.map((h) => <tr key={h.id}><td>{new Date(h.createdAt).toLocaleString('tr-TR')}</td><td>{h.action}</td><td>{h.actor.name}</td><td>{h.note || '—'}</td><td><details><summary>JSON</summary><pre>{JSON.stringify({ before: h.oldValue ?? null, after: h.newValue ?? null }, null, 2)}</pre></details></td></tr>)}
       </tbody></table></div>
