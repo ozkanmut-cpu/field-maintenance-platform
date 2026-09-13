@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Field Maintenance",
+    "name": "fıçıbakım",
     "slug": "field-maintenance",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -11,11 +11,16 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "READ_MEDIA_IMAGES"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/fici-bakim-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "plugins": [
       "expo-image-picker",
       "expo-location"
-    ]
+    ],
+    "icon": "./assets/fici-bakim-icon.png"
   }
 }
