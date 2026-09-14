@@ -126,8 +126,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
   - [ ] AI Dashboard browser e2e testi
 - [x] Feature snapshot reproducibility testi
 - [x] Model/heuristic version bilgisini temel kullanıcıya açık AI çıktılarında ve snapshotlarda taşı
-- [ ] AI hesaplama süresi ve hata metriği
-- [ ] Risk/recommendation dağılım drift metriği
+- [x] AI hesaplama süresi ve hata metriği
+- [x] Risk/recommendation dağılım drift metriği
 
 ## Definition of Done — AI V1
 

@@ -9,7 +9,7 @@ test('AI dashboard keeps the production backend contract and core decision-suppo
   for (const label of [
     'Sanal İstatistikçi', 'Teknisyen Kapasitesi', 'AI Tarihsel Karşılaştırma',
     'Bölge Sağlığı', 'Geçmiş Risk Backtest', 'Veri Kalitesi Öncelik Kuyruğu',
-    'Kalibrasyon ve Drift', 'Benzer Haftalar', 'AI Planlama Önerileri', 'Nokta Zorluk Profili',
+    'Kalibrasyon ve Drift', 'AI Çalışma Sağlığı', 'AI Çıktı Dağılım Drift', 'Benzer Haftalar', 'AI Planlama Önerileri', 'Nokta Zorluk Profili',
   ]) assert.ok(source.includes(label), `missing dashboard section: ${label}`);
 });
 

@@ -47,7 +47,9 @@ function controller() {
   const summaries:any = { technicianDaily:() => [], adminDaily:() => ({state:'HEALTHY',reasonCodes:[]}), period:() => ({state:'HEALTHY',reasonCodes:[]}) };
   const feedback:any = { record:async () => ({}), list:async () => [] };
   const calibration:any = { assess:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,confidence:'LOW',equipment:[],travel:[],drift:[],reasonCodes:[]}) };
-  return new AdminAiController(prisma,summaries,simple,featureStore,maturity,simple,location,baselines,simple,difficulty,assignedWorkload,weekly,risk,planning,simple,feedback,simple,simple,calibration);
+  const telemetry:any = { measure: async (_name:string, fn:any) => fn(), snapshot:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,generatedAt:'2026-09-14T00:00:00.000Z',operations:[]}) };
+  const distributionDrift:any = { observe:() => undefined, snapshot:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,observationCount:4,state:'STABLE',maxAbsoluteDelta:0,risk:{},recommendation:{},reasonCodes:['AI_OUTPUT_DISTRIBUTION_STABLE']}) };
+  return new AdminAiController(prisma,summaries,simple,featureStore,maturity,simple,location,baselines,simple,difficulty,assignedWorkload,weekly,risk,planning,simple,feedback,simple,simple,calibration,telemetry,distributionDrift);
 }
 test('admin dashboard endpoint contract exposes versioned explainable AI sections', async () => {
   const c:any = controller();
@@ -63,6 +65,8 @@ test('admin dashboard endpoint contract exposes versioned explainable AI section
   assert.ok(result.planning);
   assert.ok(result.dataQuality);
   assert.ok(result.calibration);
+  assert.ok(result.telemetry);
+  assert.equal(result.outputDistributionDrift.state, 'STABLE');
   assert.ok(result.summaries);
   assert.ok(Array.isArray(result.pointDifficulty));
 });

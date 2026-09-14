@@ -26,6 +26,8 @@ import { TrendService } from './trend.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 import { RegionWorkloadVector, WhatIfService } from './what-if.service';
 import { WorkloadCalibrationService } from './workload-calibration.service';
+import { AiTelemetryService } from './ai-telemetry.service';
+import { AiDistributionDriftService } from './ai-distribution-drift.service';
 
 @Controller('ai')
 export class AdminAiController {
@@ -49,11 +51,17 @@ export class AdminAiController {
     private readonly similarWeeks: SimilarWeekService,
     private readonly whatIf: WhatIfService,
     private readonly calibration: WorkloadCalibrationService,
+    private readonly telemetry: AiTelemetryService,
+    private readonly distributionDrift: AiDistributionDriftService,
   ) {}
 
   @Roles(UserRole.ADMIN)
   @Get('admin-dashboard')
-  async adminDashboard(@Query('weeks') weeksQuery?: string) {
+  adminDashboard(@Query('weeks') weeksQuery?: string) {
+    return this.telemetry.measure('admin-dashboard', () => this.buildAdminDashboard(weeksQuery));
+  }
+
+  private async buildAdminDashboard(weeksQuery?: string) {
     const requested = Number(weeksQuery ?? 12);
     const weeks = Number.isFinite(requested) ? Math.min(16, Math.max(4, Math.floor(requested))) : 12;
     const now = new Date();
@@ -146,6 +154,11 @@ export class AdminAiController {
       adminDaily: this.summaries.adminDaily(summaryInputs, regionHealth, planning),
       period: this.summaries.period(history.at(-1)?.weekKey ?? null, summaryInputs, regionHealth),
     };
+    this.distributionDrift.observe(
+      [...technicianRows.map((item) => item.risk), ...pointDifficulty.map((item) => item.risk)],
+      planning.recommendations,
+    );
+    const outputDistributionDrift = this.distributionDrift.snapshot();
 
     return {
       weeks,
@@ -162,6 +175,8 @@ export class AdminAiController {
       summaries,
       trends: this.trends.assess(history),
       calibration: this.calibration.assess(history),
+      telemetry: this.telemetry.snapshot(),
+      outputDistributionDrift,
       dataQuality,
       similarWeeks: this.similarWeeks.find(history),
       pointDifficulty,
@@ -170,7 +185,11 @@ export class AdminAiController {
 
   @Roles(UserRole.ADMIN)
   @Post('what-if')
-  async simulateWhatIf(@Body() dto: WhatIfDto) {
+  simulateWhatIf(@Body() dto: WhatIfDto) {
+    return this.telemetry.measure('what-if', () => this.runWhatIf(dto));
+  }
+
+  private async runWhatIf(dto: WhatIfDto) {
     const now = new Date();
     const history: FeatureSnapshot[] = [];
     for (let offset = 11; offset >= 0; offset -= 1) {
