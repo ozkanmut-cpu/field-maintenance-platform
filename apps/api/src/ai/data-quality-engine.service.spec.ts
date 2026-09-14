@@ -4,9 +4,11 @@ import { DataQualityEngineService } from './data-quality-engine.service';
 import { EquipmentProfileService } from './equipment-profile.service';
 import { GeographyService } from './geography.service';
 import { LocationIntelligenceService } from './location-intelligence.service';
+import { IdentityConfidenceService } from './identity-confidence.service';
 import { FeatureSnapshot } from './feature-store.types';
 
-const service = new DataQualityEngineService(new EquipmentProfileService(), new LocationIntelligenceService(new GeographyService({} as any)));
+const geography = new GeographyService({} as any);
+const service = new DataQualityEngineService(new EquipmentProfileService(), new LocationIntelligenceService(geography), new IdentityConfidenceService(geography));
 const snap = (week: number, features: Record<string, any>): FeatureSnapshot => ({
   weekKey: `2026-W${String(week).padStart(2, '0')}`, isoYear: 2026, isoWeek: week, weekStart: '2026-01-01', weekEnd: '2026-01-07',
   startInstant: '2026-01-01T00:00:00Z', endExclusiveInstant: '2026-01-08T00:00:00Z', sourceDataThrough: null, sourceHash: String(week), generatedAt: '2026-01-08T00:00:00Z',

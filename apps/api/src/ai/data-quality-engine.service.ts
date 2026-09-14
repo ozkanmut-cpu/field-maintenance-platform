@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EquipmentProfileService } from './equipment-profile.service';
 import { FeatureSnapshot } from './feature-store.types';
 import { LocationIntelligenceService } from './location-intelligence.service';
+import { IdentityConfidenceService } from './identity-confidence.service';
 import { DataQualityAssessment, DataQualityIssue, DataQualitySeverity } from './data-quality-engine.types';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class DataQualityEngineService {
   constructor(
     private readonly equipmentProfiles: EquipmentProfileService,
     private readonly locations: LocationIntelligenceService,
+    private readonly identities: IdentityConfidenceService,
   ) {}
 
   assess(history: FeatureSnapshot[]): DataQualityAssessment {
@@ -19,6 +21,12 @@ export class DataQualityEngineService {
     const locationByPoint = new Map(this.locations.assess(ordered).map((x) => [x.pointId, x]));
     const pointIds = new Set(latest.records.filter((r) => r.entityType === 'POINT').map((r) => r.entityId));
     const equipmentByPoint = new Map([...pointIds].map((id) => [id, this.equipmentProfiles.assessPoint(ordered, id)]));
+
+    for (const candidate of this.identities.assess(ordered)) {
+      const severity = candidate.confidence >= 0.9 ? 'HIGH' : 'MEDIUM';
+      this.add(issues, 'DUPLICATE_IDENTITY_CANDIDATE', severity, candidate.leftPointId, { counterpartPointId: candidate.rightPointId, identityConfidence: candidate.confidence, historySupported: candidate.historySupported });
+      this.add(issues, 'DUPLICATE_IDENTITY_CANDIDATE', severity, candidate.rightPointId, { counterpartPointId: candidate.leftPointId, identityConfidence: candidate.confidence, historySupported: candidate.historySupported });
+    }
 
     for (const row of latest.records.filter((r) => r.entityType === 'POINT')) {
       const f = row.features;

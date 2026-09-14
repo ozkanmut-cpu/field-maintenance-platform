@@ -6,14 +6,16 @@ import { DataQualityEngineService } from './data-quality-engine.service';
 import { EquipmentProfileService } from './equipment-profile.service';
 import { GeographyService } from './geography.service';
 import { LocationIntelligenceService } from './location-intelligence.service';
+import { IdentityConfidenceService } from './identity-confidence.service';
 import { PointDifficultyService } from './point-difficulty.service';
 import { RegionHealthService } from './region-health.service';
 import { TechnicianBaselineService } from './technician-baseline.service';
 import { FeatureSnapshot } from './feature-store.types';
 
 const equipment = new EquipmentProfileService();
-const location = new LocationIntelligenceService(new GeographyService({} as any));
-const service = new TrendService(new DataMaturityService(), new DataQualityEngineService(equipment, location), new RegionHealthService(), new TechnicianBaselineService(), new PointDifficultyService(equipment));
+const geography = new GeographyService({} as any);
+const location = new LocationIntelligenceService(geography);
+const service = new TrendService(new DataMaturityService(), new DataQualityEngineService(equipment, location, new IdentityConfidenceService(geography)), new RegionHealthService(), new TechnicianBaselineService(), new PointDifficultyService(equipment));
 const snap = (week: number, completed: number, difficultyAttempt: number): FeatureSnapshot => ({
   weekKey: `2026-W${String(week).padStart(2,'0')}`,
   isoYear: 2026,

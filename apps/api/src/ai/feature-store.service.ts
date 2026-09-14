@@ -28,7 +28,7 @@ export class FeatureStoreService {
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
       this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
-      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentVerifiedAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
+      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, code: true, name: true, address: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, googlePlaceId: true, googleBusinessName: true, aliases: { select: { alias: true } }, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentVerifiedAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceAttempt.findMany({ where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceObligation.findMany({ where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } }, select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true }, orderBy: { id: 'asc' } }),
@@ -163,6 +163,12 @@ export class FeatureStoreService {
       const clusterMembership = pointClusterMembership.get(point.id);
       const verifiedAt = pointProfileEligible ? point.equipmentVerifiedAt : latestEquipmentVisit?.performedAt ?? null;
       records.push({ entityType: 'POINT', entityId: point.id, features: {
+        pointCode: point.code,
+        pointName: point.name,
+        pointAddress: point.address,
+        googlePlaceId: point.googlePlaceId,
+        googleBusinessName: point.googleBusinessName,
+        pointAliases: point.aliases.map((item) => item.alias).join('|'),
         regionId: point.regionId,
         hasRegion: Boolean(point.regionId),
         hasCanonicalLocation: point.canonicalLatitude !== null && point.canonicalLongitude !== null,

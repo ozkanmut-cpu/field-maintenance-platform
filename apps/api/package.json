@@ -25,6 +25,7 @@
     "test:point-address-discovery": "node --test --require ts-node/register src/points/point-address-discovery.service.spec.ts",
     "test:risk-engine": "node --test --require ts-node/register src/ai/risk-engine.service.spec.ts",
     "test:location-intelligence": "node --test --require ts-node/register src/ai/location-intelligence.service.spec.ts",
+    "test:identity-confidence": "node --test --require ts-node/register src/ai/identity-confidence.service.spec.ts",
     "test:data-quality-engine": "node --test --require ts-node/register src/ai/data-quality-engine.service.spec.ts",
     "test:backtest": "node --test --require ts-node/register src/ai/backtest.service.spec.ts",
     "test:region-health": "node --test --require ts-node/register src/ai/region-health.service.spec.ts",

@@ -84,15 +84,15 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 - [x] AI Location Engine
 - [x] Learned canonical-location güvenini ziyaret geçmişiyle geliştirme
-- [ ] Co-located / alias işletmeler için identity confidence
-- [ ] İsim + adres + mesafe + geçmiş ziyaret kanıtını tek confidence modelinde birleştirme
+- [x] Co-located / alias işletmeler için identity confidence
+- [x] İsim + adres + mesafe + geçmiş ziyaret kanıtını tek confidence modelinde birleştirme
 - [x] Location contradiction detection
 - [ ] Implausible travel / suspicious batch skorunu geography modeline bağlama
 - [x] AI Data Quality Engine
 - [x] Missingness severity scoring
 - [x] Contradictory point metadata detection
 - [x] Stale equipment/location/profile detection
-- [ ] Duplicate candidate confidence'i mevcut fuzzy duplicate sisteminden AI data-quality katmanına besleme
+- [x] Duplicate candidate confidence'i mevcut fuzzy duplicate sisteminden AI data-quality katmanına besleme
 - [x] Admin için “önce bunları düzelt” data-quality priority queue
 
 ## P4 — Operasyonel AI özetleri
