@@ -65,13 +65,13 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 ## P2 — Benzer dönem, simülasyon ve kalibrasyon
 
-- [ ] Similar Week matching: equipment mix + geographic dispersion + workload similarity
-- [ ] What-if simulator
-- [ ] What-if: equipment adet değişikliği
-- [ ] What-if: nokta ekleme/çıkarma
+- [x] Similar Week matching: equipment mix + geographic dispersion + workload similarity
+- [x] What-if simulator — V1 technician workload/risk simulation
+- [x] What-if: equipment adet değişikliği
+- [x] What-if: nokta ekleme/çıkarma — workload delta üzerinden
 - [ ] What-if: bölge/teknisyen değişikliği
-- [ ] What-if: route/geography değişikliği
-- [ ] What-if çıktısı: workload delta + risk delta + confidence
+- [x] What-if: route/geography değişikliği
+- [x] What-if çıktısı: workload delta + risk delta + confidence
 - [ ] Outcome validation pipeline
 - [ ] Equipment-type relative workload etkilerini gözlenen sonuçlardan kalibre et
 - [ ] Travel-burden ağırlıklarını gözlenen süre/başarı sonuçlarından kalibre et
@@ -112,8 +112,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 - [x] Risk Engine deterministik fixture testleri
 - [x] Planning Engine deterministik fixture testleri
-- [ ] Similar Week testleri
-- [ ] What-if simulator testleri
+- [x] Similar Week testleri
+- [x] What-if simulator — V1 technician workload/risk simulation testleri
 - [ ] Calibration/backtest testleri
 - [ ] Confidence/maturity gate testleri
 - [ ] Veri eksik/çelişkili/stale durum testleri

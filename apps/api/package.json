@@ -25,7 +25,9 @@
     "test:point-address-discovery": "node --test --require ts-node/register src/points/point-address-discovery.service.spec.ts",
     "test:risk-engine": "node --test --require ts-node/register src/ai/risk-engine.service.spec.ts",
     "test:equipment-profile": "node --test --require ts-node/register src/ai/equipment-profile.service.spec.ts",
-    "test:planning-engine": "node --test --require ts-node/register src/ai/planning-engine.service.spec.ts"
+    "test:planning-engine": "node --test --require ts-node/register src/ai/planning-engine.service.spec.ts",
+    "test:similar-week": "node --test --require ts-node/register src/ai/similar-week.service.spec.ts",
+    "test:what-if": "node --test --require ts-node/register src/ai/what-if.service.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

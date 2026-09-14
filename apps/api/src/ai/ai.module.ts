@@ -13,13 +13,15 @@ import { EquipmentProfileService } from './equipment-profile.service';
 import { PointDifficultyService } from './point-difficulty.service';
 import { PlanningEngineService } from './planning-engine.service';
 import { RiskEngineService } from './risk-engine.service';
+import { SimilarWeekService } from './similar-week.service';
 import { TechnicianBaselineService } from './technician-baseline.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
+import { WhatIfService } from './what-if.service';
 
 @Module({
   imports: [PrismaModule, AssignmentsModule],
   controllers: [AdminAiController],
-  providers: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, EquipmentProfileService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, TechnicianBaselineService, WeeklyWorkloadService, RiskEngineService],
-  exports: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, EquipmentProfileService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, TechnicianBaselineService, WeeklyWorkloadService, RiskEngineService],
+  providers: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, EquipmentProfileService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, TechnicianBaselineService, WeeklyWorkloadService, RiskEngineService, SimilarWeekService, WhatIfService],
+  exports: [EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, FeatureStoreService, EquipmentProfileService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, TechnicianBaselineService, WeeklyWorkloadService, RiskEngineService, SimilarWeekService, WhatIfService],
 })
 export class AiModule {}
