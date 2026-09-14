@@ -7,6 +7,8 @@ import { DataMaturityService } from './data-maturity.service';
 import { FeatureStoreService } from './feature-store.service';
 import { FeatureSnapshot } from './feature-store.types';
 import { PointDifficultyService } from './point-difficulty.service';
+import { RiskEngineService } from './risk-engine.service';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianBaselineService } from './technician-baseline.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 
@@ -20,6 +22,7 @@ export class AdminAiController {
     private readonly difficulties: PointDifficultyService,
     private readonly assignedWorkload: AssignedWeeklyWorkloadService,
     private readonly weeklyWorkload: WeeklyWorkloadService,
+    private readonly riskEngine: RiskEngineService,
   ) {}
 
   @Roles(UserRole.ADMIN)
@@ -48,6 +51,8 @@ export class AdminAiController {
       }),
     ]);
 
+    const maturity = this.maturity.assess(history);
+    const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
     const baselineByTechnician = new Map(this.baselines.assess(history).map((item) => [item.technicianId, item]));
     const workloadByTechnician = new Map(assigned.technicians.map((item) => [item.technicianId, item]));
     const technicianRows = technicians.map((technician) => {
@@ -64,12 +69,17 @@ export class AdminAiController {
         assignedTowerCount: 0,
         assignedTapCount: 0,
         assignedSmarttapCount: 0,
+        assignedLocatedPointCount: 0,
+        assignedUnlocatedPointCount: 0,
+        assignedFieldP90RadiusMeters: null,
       };
+      const assessment = this.weeklyWorkload.assess(workload, baseline);
       return {
         ...technician,
         baseline,
         workload,
-        assessment: this.weeklyWorkload.assess(workload, baseline),
+        assessment,
+        risk: this.riskEngine.assessTechnician(workload, baseline, assessment, riskMaturity),
       };
     });
 
@@ -81,8 +91,10 @@ export class AdminAiController {
     return {
       weeks,
       generatedAt: new Date().toISOString(),
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       currentWeek: history.at(-1)?.weekKey ?? null,
-      maturity: this.maturity.assess(history),
+      maturity,
       unassigned: assigned.unassigned,
       technicians: technicianRows,
       pointDifficulty,

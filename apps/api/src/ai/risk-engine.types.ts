@@ -1,0 +1,20 @@
+import { TechnicianBaselineConfidence } from './technician-baseline.types';
+
+export type AiRiskSeverity = 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
+export type AiRiskState = 'INSUFFICIENT_DATA' | 'READY';
+
+export type AiRiskSignal = {
+  code: string;
+  severity: Exclude<AiRiskSeverity, 'UNKNOWN'>;
+  evidence: Record<string, string | number | boolean | null>;
+};
+
+export type TechnicianRiskAssessment = {
+  technicianId: string;
+  engineVersion: string;
+  state: AiRiskState;
+  severity: AiRiskSeverity;
+  confidence: TechnicianBaselineConfidence | 'UNKNOWN';
+  signals: AiRiskSignal[];
+  reasons: string[];
+};

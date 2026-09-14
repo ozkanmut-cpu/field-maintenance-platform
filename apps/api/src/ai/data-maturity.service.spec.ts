@@ -11,6 +11,7 @@ function snapshot(week: number, overrides: Partial<Record<string, number>> = {})
   const regionCount = overrides.regionCount ?? 12;
   const visitCount = overrides.visitCount ?? 80;
   const attemptCount = overrides.attemptCount ?? 8;
+  const equipmentProfileCoverage = overrides.equipmentProfileCoverage ?? 0.9;
   return {
     weekKey,
     isoYear: 2026,
@@ -24,7 +25,7 @@ function snapshot(week: number, overrides: Partial<Record<string, number>> = {})
     generatedAt: '2026-01-01T00:00:00.000Z',
     records: [
       { entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
-        activePointCount, locatedPointCount, activeTechnicianCount, regionCount, visitCount, attemptCount, obligationCount: 0,
+        activePointCount, locatedPointCount, activeTechnicianCount, regionCount, visitCount, attemptCount, obligationCount: 0, equipmentProfileCoverage,
       }},
       { entityType: 'TECHNICIAN', entityId: 't1', features: {
         suspiciousVisitCount: overrides.suspiciousVisitCount ?? 1,
@@ -76,4 +77,28 @@ test('latest week is selected deterministically from unsorted history', () => {
   const result = service.assess([snapshot(9), snapshot(7), snapshot(8)]);
   assert.equal(result.latestWeekKey, '2026-W09');
   assert.equal(result.evidence.weeks, 3);
+});
+
+
+test('poor equipment coverage brakes capacity, risk and recommendation maturity', () => {
+  const good = service.assess(Array.from({ length: 16 }, (_, i) => snapshot(i + 1, { equipmentProfileCoverage: 0.95 })));
+  const poor = service.assess(Array.from({ length: 16 }, (_, i) => snapshot(i + 1, { equipmentProfileCoverage: 0.1 })));
+
+  for (const capability of ['CAPACITY', 'RISK', 'RECOMMENDATION']) {
+    const goodItem = good.capabilities.find((item) => item.capability === capability)!;
+    const poorItem = poor.capabilities.find((item) => item.capability === capability)!;
+    assert.ok(poorItem.score < goodItem.score, `${capability} should be data-quality braked`);
+    assert.ok(poorItem.reasons.some((reason) => reason.includes('Ekipman profil kapsaması')));
+  }
+});
+
+test('current coverage uses the latest snapshot instead of mixing maxima from different weeks', () => {
+  const result = service.assess([
+    snapshot(1, { activePointCount: 100, locatedPointCount: 95, equipmentProfileCoverage: 0.95 }),
+    snapshot(2, { activePointCount: 200, locatedPointCount: 50, equipmentProfileCoverage: 0.4 }),
+  ]);
+  assert.equal(result.evidence.activePoints, 200);
+  assert.equal(result.evidence.locatedPoints, 50);
+  assert.equal(result.evidence.locationCoverage, 0.25);
+  assert.equal(result.evidence.equipmentProfileCoverage, 0.4);
 });

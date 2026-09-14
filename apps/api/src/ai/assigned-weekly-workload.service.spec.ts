@@ -1,14 +1,15 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
+import { GeographyService } from './geography.service';
 
-type Equipment = { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null };
+type PointProfile = { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null; canonicalLatitude?: number | null; canonicalLongitude?: number | null };
 
 function sutFor(options: {
   standard: Array<{ pointId: string; dueEnd: Date }>;
   smartclean: Array<{ pointId: string; state: 'CURRENT' | 'CARRYOVER' }>;
   assignments: Record<string, string | null>;
-  equipment?: Record<string, Equipment>;
+  equipment?: Record<string, PointProfile>;
 }) {
   const prisma = {
     maintenanceObligation: { findMany: async () => options.standard },
@@ -22,7 +23,7 @@ function sutFor(options: {
     ),
   } as any;
   const effectiveWorkload = { smartcleanForWeek: async () => options.smartclean } as any;
-  return new AssignedWeeklyWorkloadService(prisma, assignments, effectiveWorkload);
+  return new AssignedWeeklyWorkloadService(prisma, assignments, effectiveWorkload, new GeographyService({} as any));
 }
 
 test('splits current and carryover workload by effective technician assignment', async () => {
@@ -79,4 +80,27 @@ test('counts workload without an effective assignment as unassigned', async () =
   const result = await sut.forWeek(new Date('2026-09-09T12:00:00Z'));
   assert.deepEqual(result.technicians, []);
   assert.deepEqual(result.unassigned, { standardCurrent: 1, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 1 });
+});
+
+
+test('derives assigned geographic coverage and field radius from unique assigned points', async () => {
+  const sut = sutFor({
+    standard: [
+      { pointId: 'a', dueEnd: new Date('2026-09-13T00:00:00Z') },
+      { pointId: 'b', dueEnd: new Date('2026-09-13T00:00:00Z') },
+      { pointId: 'missing', dueEnd: new Date('2026-09-13T00:00:00Z') },
+    ],
+    smartclean: [],
+    assignments: { a: 't1', b: 't1', missing: 't1' },
+    equipment: {
+      a: { coolerCount: 1, towerCount: 1, tapCount: 1, smarttapCount: 0, canonicalLatitude: 38.40, canonicalLongitude: 27.10 },
+      b: { coolerCount: 1, towerCount: 1, tapCount: 1, smarttapCount: 0, canonicalLatitude: 38.42, canonicalLongitude: 27.12 },
+      missing: { coolerCount: 1, towerCount: 1, tapCount: 1, smarttapCount: 0, canonicalLatitude: null, canonicalLongitude: null },
+    },
+  });
+
+  const [row] = (await sut.forWeek(new Date('2026-09-09T12:00:00Z'))).technicians;
+  assert.equal(row.assignedLocatedPointCount, 2);
+  assert.equal(row.assignedUnlocatedPointCount, 1);
+  assert.ok(row.assignedFieldP90RadiusMeters !== null && row.assignedFieldP90RadiusMeters > 1000);
 });

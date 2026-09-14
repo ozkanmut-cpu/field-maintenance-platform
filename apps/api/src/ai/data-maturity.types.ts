@@ -22,6 +22,7 @@ export type MaturityEvidence = {
   suspiciousVisits: number;
   reviewRecommended: number;
   locationCoverage: number;
+  equipmentProfileCoverage: number;
 };
 
 export type CapabilityMaturity = {
