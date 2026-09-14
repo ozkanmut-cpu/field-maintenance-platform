@@ -35,7 +35,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Equipment-profile confidence: completeness, verification age, verification history
 - [x] Equipment-profile stability/change-rate feature per point
 - [x] Equipment-change anomaly detection: olağandışı / tekrarlayan adet sıçramaları
-- [ ] Equipment data-quality brake: difficulty/capacity/risk/recommendation motorlarına ortak güven kapısı
+- [x] Equipment data-quality brake: difficulty/capacity/risk/recommendation motorlarına ortak güven kapısı
 - [x] Historical point-difficulty reconstruction: visit-level equipment snapshot kullanarak geçmiş skor üretimi
 - [x] Cold-start cohortlarını maintenance type + equipment mix + geography ile zenginleştir
 - [x] Technician capacity modelini equipment mix ile ayarla
@@ -44,20 +44,20 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [ ] Route coherence metriği: eşit nokta sayısı yerine rota bütünlüğü + equipment workload dengesini değerlendir
 - [ ] AI maturity gating'i tüm AI çıktılarında zorunlu hale getir
 - [ ] Her skor/öneri için confidence + reason codes üret
-- [ ] Admin AI Dashboard'da “neden bu skor?” açıklaması göster
+- [x] Admin AI Dashboard'da “neden bu skor?” açıklaması göster
 
 ## P1 — Risk ve planlama motorları
 
-- [ ] AI Risk Engine
-- [ ] Period-end delay risk
-- [ ] Bakım gecikme riski: workload mix + equipment difficulty + geography + geçmiş performans
-- [ ] Technician overload / underload risk
+- [x] AI Risk Engine
+- [x] Period-end delay risk
+- [x] Bakım gecikme riski: workload mix + equipment difficulty + geography + geçmiş performans
+- [x] Technician overload / underload risk
 - [x] Point-level service failure / repeated-attempt risk
-- [ ] Data-quality risk ve yanlış yönlendirme koruması
+- [x] Data-quality risk ve yanlış yönlendirme koruması
 - [x] AI Planning Engine — V1 açıklanabilir, non-mutating öneri motoru
 - [x] Technician workload/capacity analysis
-- [ ] Region health indicators
-- [ ] SmartClean approaching-window risk/priority
+- [x] Region health indicators
+- [x] SmartClean approaching-window risk/priority
 - [ ] Recommendation ranking: equipment-heavy clusters + travel burden + technician capacity
 - [x] Önerilerde mevcut bölge/görevlendirme/business-rule kısıtlarını hard constraint olarak uygula
 - [ ] AI önerisinin admin tarafından kabul/red sonucunu audit et
@@ -72,28 +72,28 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [ ] What-if: bölge/teknisyen değişikliği
 - [x] What-if: route/geography değişikliği
 - [x] What-if çıktısı: workload delta + risk delta + confidence
-- [ ] Outcome validation pipeline
+- [x] Outcome validation pipeline
 - [ ] Equipment-type relative workload etkilerini gözlenen sonuçlardan kalibre et
 - [ ] Travel-burden ağırlıklarını gözlenen süre/başarı sonuçlarından kalibre et
 - [ ] Calibration drift takibi
 - [ ] Model/heuristic versioning
 - [ ] Feature versioning
-- [ ] Backtest: geçmiş haftalarda öneri verilseydi sonuç ne olurdu?
+- [x] Backtest: geçmiş haftalarda öneri verilseydi sonuç ne olurdu?
 
 ## P3 — AI Location ve veri kalitesi
 
-- [ ] AI Location Engine
-- [ ] Learned canonical-location güvenini ziyaret geçmişiyle geliştirme
+- [x] AI Location Engine
+- [x] Learned canonical-location güvenini ziyaret geçmişiyle geliştirme
 - [ ] Co-located / alias işletmeler için identity confidence
 - [ ] İsim + adres + mesafe + geçmiş ziyaret kanıtını tek confidence modelinde birleştirme
-- [ ] Location contradiction detection
+- [x] Location contradiction detection
 - [ ] Implausible travel / suspicious batch skorunu geography modeline bağlama
-- [ ] AI Data Quality Engine
-- [ ] Missingness severity scoring
-- [ ] Contradictory point metadata detection
-- [ ] Stale equipment/location/profile detection
+- [x] AI Data Quality Engine
+- [x] Missingness severity scoring
+- [x] Contradictory point metadata detection
+- [x] Stale equipment/location/profile detection
 - [ ] Duplicate candidate confidence'i mevcut fuzzy duplicate sisteminden AI data-quality katmanına besleme
-- [ ] Admin için “önce bunları düzelt” data-quality priority queue
+- [x] Admin için “önce bunları düzelt” data-quality priority queue
 
 ## P4 — Operasyonel AI özetleri
 
@@ -114,7 +114,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Planning Engine deterministik fixture testleri
 - [x] Similar Week testleri
 - [x] What-if simulator — V1 technician workload/risk simulation testleri
-- [ ] Calibration/backtest testleri
+- [x] Calibration/backtest testleri
 - [ ] Confidence/maturity gate testleri
 - [ ] Veri eksik/çelişkili/stale durum testleri
 - [ ] AI endpoint contract testleri

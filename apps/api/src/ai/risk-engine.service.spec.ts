@@ -74,3 +74,16 @@ test('point risk exposes repeated attempt risk without inventing a score when ev
   assert.equal(result.severity, 'HIGH');
   assert.ok(result.signals.some((signal) => signal.code === 'REPEATED_ATTEMPTS_DOMINATE_VISITS'));
 });
+
+
+test('period-end capacity excess creates explicit delay and overload signals', () => {
+  const result = service.assessTechnician(assigned({ standardCurrent: 13, smartcleanCurrent: 1 }), baseline, workload('WITHIN_BASELINE'), maturity);
+  assert.equal(result.severity, 'HIGH');
+  assert.ok(result.signals.some((signal) => signal.code === 'PERIOD_END_DELAY_RISK_HIGH'));
+  assert.ok(result.signals.some((signal) => signal.code === 'TECHNICIAN_OVERLOAD'));
+});
+
+test('SmartClean carryover is surfaced as an overdue window risk', () => {
+  const result = service.assessTechnician(assigned({ smartcleanCarryover: 1 }), baseline, workload('WITHIN_BASELINE'), maturity);
+  assert.ok(result.signals.some((signal) => signal.code === 'SMARTCLEAN_WINDOW_OVERDUE'));
+});

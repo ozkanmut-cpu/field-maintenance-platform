@@ -149,6 +149,11 @@ export class FeatureStoreService {
       const pointVisits = visits.filter((v) => v.pointId === point.id);
       const pointAttempts = attempts.filter((a) => a.pointId === point.id);
       const pointObligations = obligations.filter((o) => o.pointId === point.id);
+      const pointLocationVisits = pointVisits.filter((v) => v.latitude !== null && v.longitude !== null);
+      const pointVisitGeo = this.geography.summarize(pointLocationVisits.map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
+      const locationVisitToCanonicalMeters = pointVisitGeo.centerLatitude !== null && pointVisitGeo.centerLongitude !== null && point.canonicalLatitude !== null && point.canonicalLongitude !== null
+        ? this.geography.distanceMeters({ latitude: pointVisitGeo.centerLatitude, longitude: pointVisitGeo.centerLongitude }, { latitude: Number(point.canonicalLatitude), longitude: Number(point.canonicalLongitude) })
+        : null;
       const equipmentVisits = pointVisits
         .filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null))
         .sort((a, b) => a.performedAt.getTime() - b.performedAt.getTime());
@@ -168,6 +173,13 @@ export class FeatureStoreService {
         nearestNeighborMeters: nearestNeighborMeters.get(point.id) ?? null,
         locationConfidence: point.locationConfidence,
         locationSource: point.locationSource,
+        locationEvidenceVisitCount: pointLocationVisits.length,
+        locationVisitCenterLatitude: pointVisitGeo.centerLatitude,
+        locationVisitCenterLongitude: pointVisitGeo.centerLongitude,
+        locationVisitP90RadiusMeters: pointVisitGeo.p90RadiusMeters,
+        locationVisitToCanonicalMeters,
+        suspiciousVisitCount: pointVisits.filter((v) => v.suspiciousBatch).length,
+        reviewRecommendedVisitCount: pointVisits.filter((v) => v.reviewRecommended).length,
         maintenanceType: point.maintenanceType,
         maintenanceWeek: point.maintenanceWeek,
         coolerCount: profile?.coolerCount ?? null,

@@ -3,12 +3,16 @@ import { UserRole } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
+import { BacktestService } from './backtest.service';
 import { DataMaturityService } from './data-maturity.service';
+import { DataQualityEngineService } from './data-quality-engine.service';
 import { WhatIfDto } from './dto/what-if.dto';
 import { FeatureStoreService } from './feature-store.service';
 import { FeatureSnapshot } from './feature-store.types';
 import { PointDifficultyService } from './point-difficulty.service';
+import { LocationIntelligenceService } from './location-intelligence.service';
 import { PlanningEngineService } from './planning-engine.service';
+import { RegionHealthService } from './region-health.service';
 import { RiskEngineService } from './risk-engine.service';
 import { SimilarWeekService } from './similar-week.service';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
@@ -20,14 +24,18 @@ import { WhatIfService } from './what-if.service';
 export class AdminAiController {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly backtest: BacktestService,
     private readonly featureStore: FeatureStoreService,
     private readonly maturity: DataMaturityService,
+    private readonly dataQuality: DataQualityEngineService,
+    private readonly locations: LocationIntelligenceService,
     private readonly baselines: TechnicianBaselineService,
     private readonly difficulties: PointDifficultyService,
     private readonly assignedWorkload: AssignedWeeklyWorkloadService,
     private readonly weeklyWorkload: WeeklyWorkloadService,
     private readonly riskEngine: RiskEngineService,
     private readonly planningEngine: PlanningEngineService,
+    private readonly regionHealth: RegionHealthService,
     private readonly similarWeeks: SimilarWeekService,
     private readonly whatIf: WhatIfService,
   ) {}
@@ -98,10 +106,12 @@ export class AdminAiController {
     );
 
     const pointMeta = new Map(points.map((point) => [point.id, point]));
+    const locationByPoint = new Map(this.locations.assess(history).map((item) => [item.pointId, item]));
     const pointDifficulty = this.difficulties.assess(history)
       .map((item) => ({
         ...item,
         risk: this.riskEngine.assessPoint(item, riskMaturity),
+        location: locationByPoint.get(item.pointId) ?? null,
         point: pointMeta.get(item.pointId) ?? null,
       }))
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.history.attempts - a.history.attempts);
@@ -116,6 +126,9 @@ export class AdminAiController {
       unassigned: assigned.unassigned,
       technicians: technicianRows,
       planning,
+      backtest: this.backtest.evaluate(history),
+      regionHealth: this.regionHealth.assess(history),
+      dataQuality: this.dataQuality.assess(history),
       similarWeeks: this.similarWeeks.find(history),
       pointDifficulty,
     };

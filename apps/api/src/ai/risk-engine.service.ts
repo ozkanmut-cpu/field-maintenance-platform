@@ -58,6 +58,26 @@ export class RiskEngineService {
       });
     }
 
+    const totalAssigned = assigned.standardCurrent + assigned.standardCarryover + assigned.smartcleanCurrent + assigned.smartcleanCarryover;
+    const completionP75 = baseline.service.completedVisits.p75;
+    const completionP90 = baseline.service.completedVisits.p90;
+    const completionMedian = baseline.service.completedVisits.median;
+    if (completionP90 !== null && totalAssigned > completionP90) {
+      signals.push({ code: 'PERIOD_END_DELAY_RISK_HIGH', severity: 'HIGH', evidence: { totalAssigned, completionP90 } });
+    } else if (completionP75 !== null && totalAssigned > completionP75) {
+      signals.push({ code: 'PERIOD_END_DELAY_RISK_MEDIUM', severity: 'MEDIUM', evidence: { totalAssigned, completionP75 } });
+    }
+    if (completionP90 !== null && totalAssigned > completionP90) {
+      signals.push({ code: 'TECHNICIAN_OVERLOAD', severity: 'HIGH', evidence: { totalAssigned, completionP90 } });
+    } else if (completionMedian !== null && totalAssigned > 0 && totalAssigned < Math.max(1, completionMedian * 0.5)) {
+      signals.push({ code: 'TECHNICIAN_UNDERLOAD', severity: 'LOW', evidence: { totalAssigned, completionMedian } });
+    }
+    if (assigned.smartcleanCarryover > 0) {
+      signals.push({ code: 'SMARTCLEAN_WINDOW_OVERDUE', severity: 'HIGH', evidence: { smartcleanCarryover: assigned.smartcleanCarryover } });
+    } else if (assigned.smartcleanCurrent > 0 && completionP75 !== null && totalAssigned > completionP75) {
+      signals.push({ code: 'SMARTCLEAN_WINDOW_PRESSURE', severity: 'MEDIUM', evidence: { smartcleanCurrent: assigned.smartcleanCurrent, totalAssigned, completionP75 } });
+    }
+
     const severity = signals.length ? this.maxSeverity(signals.map((signal) => signal.severity)) : 'LOW';
     const confidence = maturity?.state === 'RELIABLE' && baseline.confidence === 'HIGH' ? 'HIGH' : baseline.confidence === 'LOW' ? 'LOW' : 'MEDIUM';
     return {
