@@ -156,9 +156,17 @@ export class FeatureStoreService {
         nearestNeighborP90Meters: regionCluster.nearestNeighborP90Meters,
         visitCount: visits.filter((v) => regionPointIds.has(v.pointId)).length,
         attemptCount: attempts.filter((a) => regionPointIds.has(a.pointId)).length,
+        standardCurrentWorkloadCount: obligations.filter((o) => regionPointIds.has(o.pointId) && o.dueEnd >= week.weekStart).length,
+        standardCarryoverWorkloadCount: obligations.filter((o) => regionPointIds.has(o.pointId) && o.dueEnd < week.weekStart).length,
         smartcleanScheduleConfigured,
         smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CURRENT').length,
         smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CARRYOVER').length,
+        equipmentKnownPointCount: regionPoints.filter((p) => [p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((value) => value !== null)).length,
+        equipmentUnknownPointCount: regionPoints.filter((p) => ![p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((value) => value !== null)).length,
+        coolerCount: regionPoints.reduce((sum, p) => sum + (p.coolerCount ?? 0), 0),
+        towerCount: regionPoints.reduce((sum, p) => sum + (p.towerCount ?? 0), 0),
+        tapCount: regionPoints.reduce((sum, p) => sum + (p.tapCount ?? 0), 0),
+        smarttapCount: regionPoints.reduce((sum, p) => sum + (p.smarttapCount ?? 0), 0),
       }});
     }
 

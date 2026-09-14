@@ -70,9 +70,9 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] What-if simulator — V1 technician workload/risk simulation
 - [x] What-if: equipment adet değişikliği
 - [x] What-if: nokta ekleme/çıkarma — workload delta üzerinden
-- [ ] What-if: bölge/teknisyen değişikliği
+- [x] What-if: bölge/teknisyen değişikliği
   - [x] Teknisyen yerleşim karşılaştırması: aynı önerilen yük iki teknisyende simüle edilir; düşük post-change risk tercih sinyali olur, otomatik atama yapılmaz.
-  - [ ] Bölge değişikliği: bölgenin gerçek workload/equipment/geography vektörünü hedef teknisyene taşıyarak simüle et.
+  - [x] Bölge değişikliği: bölgenin gerçek workload/equipment/geography vektörünü hedef teknisyene taşıyarak simüle et.
 - [x] What-if: route/geography değişikliği
 - [x] What-if çıktısı: workload delta + risk delta + confidence
 - [x] Outcome validation pipeline

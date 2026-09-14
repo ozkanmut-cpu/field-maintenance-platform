@@ -40,3 +40,20 @@ test('technician placement comparison prefers the lower post-change risk and nev
   assert.equal(assigned.standardCurrent, 4);
   assert.equal(target.standardCurrent, 2);
 });
+
+test('region placement applies the real region workload vector without changing assignment state', () => {
+  const target:any = { ...assigned, technicianId:'t2', standardCurrent:1, smartcleanCurrent:0, assignedCoolerCount:5 };
+  const targetBaseline:any = { ...baseline, technicianId:'t2' };
+  const region:any = {
+    regionId:'r1', standardCurrent:3, standardCarryover:1, smartcleanCurrent:2, smartcleanCarryover:0,
+    equipmentKnownPointCount:5, equipmentUnknownPointCount:0, coolerCount:12, towerCount:4, tapCount:3, smarttapCount:1,
+    locatedPointCount:5, unlocatedPointCount:0, p90RadiusMeters:6000, fragmentationRatio:0.2,
+  };
+  const result = service.simulateRegionPlacement(region, 't1', target, targetBaseline, maturity);
+  assert.equal(result.mode, 'REGION_PLACEMENT_SIMULATION');
+  assert.equal(result.scenario.after.assigned.standardCurrent, 4);
+  assert.equal(result.scenario.after.assigned.assignedCoolerCount, 17);
+  assert.equal(result.sourceTechnicianId, 't1');
+  assert.ok(result.constraints.includes('NO_AUTOMATIC_REGION_ASSIGNMENT_CHANGE'));
+  assert.equal(target.standardCurrent, 1);
+});

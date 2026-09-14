@@ -6,6 +6,25 @@ import { RiskEngineService } from './risk-engine.service';
 import { TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 
+
+export type RegionWorkloadVector = {
+  regionId: string;
+  standardCurrent: number;
+  standardCarryover: number;
+  smartcleanCurrent: number;
+  smartcleanCarryover: number;
+  equipmentKnownPointCount: number;
+  equipmentUnknownPointCount: number;
+  coolerCount: number;
+  towerCount: number;
+  tapCount: number;
+  smarttapCount: number;
+  locatedPointCount: number;
+  unlocatedPointCount: number;
+  p90RadiusMeters: number | null;
+  fragmentationRatio: number | null;
+};
+
 export type WhatIfChange = Partial<{
   standardCurrentDelta: number;
   standardCarryoverDelta: number;
@@ -66,6 +85,42 @@ export class WhatIfService {
         : sourceScenario.confidence === 'MEDIUM' || targetScenario.confidence === 'MEDIUM' ? 'MEDIUM' : 'HIGH',
       reasonCodes: preferredTechnicianId ? ['LOWER_POST_CHANGE_RISK'] : ['POST_CHANGE_RISK_TIED'],
       constraints: ['SIMULATION_ONLY', 'NO_AUTOMATIC_ASSIGNMENT_CHANGE'],
+    };
+  }
+
+  simulateRegionPlacement(
+    region: RegionWorkloadVector,
+    sourceTechnicianId: string | null,
+    target: TechnicianAssignedWeeklyWorkload,
+    targetBaseline: TechnicianWeeklyBaseline,
+    riskMaturity: CapabilityMaturity | undefined,
+  ) {
+    const change: WhatIfChange = {
+      standardCurrentDelta: region.standardCurrent,
+      standardCarryoverDelta: region.standardCarryover,
+      smartcleanCurrentDelta: region.smartcleanCurrent,
+      smartcleanCarryoverDelta: region.smartcleanCarryover,
+      coolerDelta: region.coolerCount,
+      towerDelta: region.towerCount,
+      tapDelta: region.tapCount,
+      smarttapDelta: region.smarttapCount,
+      equipmentUnknownPointDelta: region.equipmentUnknownPointCount,
+      locatedPointDelta: region.locatedPointCount,
+      unlocatedPointDelta: region.unlocatedPointCount,
+    };
+    const scenario = this.simulate(target, targetBaseline, riskMaturity, change);
+    return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
+      mode: 'REGION_PLACEMENT_SIMULATION',
+      regionId: region.regionId,
+      sourceTechnicianId,
+      targetTechnicianId: target.technicianId,
+      regionVector: region,
+      scenario,
+      confidence: scenario.confidence,
+      reasonCodes: [...new Set(['REGION_REAL_WORKLOAD_VECTOR_APPLIED', ...scenario.reasons])],
+      constraints: ['SIMULATION_ONLY', 'NO_AUTOMATIC_REGION_ASSIGNMENT_CHANGE', 'COMBINED_ROUTE_REQUIRES_POINT_LEVEL_RECALCULATION'],
     };
   }
 

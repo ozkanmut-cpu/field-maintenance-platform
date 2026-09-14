@@ -24,7 +24,7 @@ import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianBaselineService } from './technician-baseline.service';
 import { TrendService } from './trend.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
-import { WhatIfService } from './what-if.service';
+import { RegionWorkloadVector, WhatIfService } from './what-if.service';
 
 @Controller('ai')
 export class AdminAiController {
@@ -194,7 +194,30 @@ export class AdminAiController {
     const baseline = this.baselines.assessTechnician(history, dto.technicianId);
     const maturity = this.maturity.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
-    const { technicianId: _technicianId, targetTechnicianId: _targetTechnicianId, ...change } = dto;
+    const { technicianId: _technicianId, targetTechnicianId: _targetTechnicianId, regionId: _regionId, ...change } = dto;
+    if (dto.regionId) {
+      const region = history.at(-1)?.records.find((record) => record.entityType === 'REGION' && record.entityId === dto.regionId);
+      if (!region) throw new NotFoundException('Bölge bulunamadı');
+      const f = region.features;
+      const vector: RegionWorkloadVector = {
+        regionId: dto.regionId,
+        standardCurrent: Number(f.standardCurrentWorkloadCount ?? 0),
+        standardCarryover: Number(f.standardCarryoverWorkloadCount ?? 0),
+        smartcleanCurrent: Number(f.smartcleanCurrentWorkloadCount ?? 0),
+        smartcleanCarryover: Number(f.smartcleanCarryoverWorkloadCount ?? 0),
+        equipmentKnownPointCount: Number(f.equipmentKnownPointCount ?? 0),
+        equipmentUnknownPointCount: Number(f.equipmentUnknownPointCount ?? 0),
+        coolerCount: Number(f.coolerCount ?? 0), towerCount: Number(f.towerCount ?? 0), tapCount: Number(f.tapCount ?? 0), smarttapCount: Number(f.smarttapCount ?? 0),
+        locatedPointCount: Number(f.locatedPointCount ?? 0),
+        unlocatedPointCount: Math.max(0, Number(f.pointCount ?? 0) - Number(f.locatedPointCount ?? 0)),
+        p90RadiusMeters: typeof f.p90RadiusMeters === 'number' ? f.p90RadiusMeters : null,
+        fragmentationRatio: typeof f.geographicFragmentationRatio === 'number' ? f.geographicFragmentationRatio : null,
+      };
+      const targetId = dto.targetTechnicianId ?? dto.technicianId;
+      const targetWorkload = assigned.technicians.find((item) => item.technicianId === targetId) ?? { ...workload, technicianId: targetId };
+      const targetBaseline = this.baselines.assessTechnician(history, targetId);
+      return this.whatIf.simulateRegionPlacement(vector, typeof f.assignedTechnicianId === 'string' ? f.assignedTechnicianId : null, targetWorkload, targetBaseline, riskMaturity);
+    }
     if (!dto.targetTechnicianId) return this.whatIf.simulate(workload, baseline, riskMaturity, change);
 
     const targetWorkload = assigned.technicians.find((item) => item.technicianId === dto.targetTechnicianId) ?? {
