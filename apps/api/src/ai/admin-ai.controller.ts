@@ -25,6 +25,7 @@ import { TechnicianBaselineService } from './technician-baseline.service';
 import { TrendService } from './trend.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 import { RegionWorkloadVector, WhatIfService } from './what-if.service';
+import { WorkloadCalibrationService } from './workload-calibration.service';
 
 @Controller('ai')
 export class AdminAiController {
@@ -47,6 +48,7 @@ export class AdminAiController {
     private readonly recommendationFeedback: RecommendationFeedbackService,
     private readonly similarWeeks: SimilarWeekService,
     private readonly whatIf: WhatIfService,
+    private readonly calibration: WorkloadCalibrationService,
   ) {}
 
   @Roles(UserRole.ADMIN)
@@ -157,6 +159,7 @@ export class AdminAiController {
       regionHealth,
       summaries,
       trends: this.trends.assess(history),
+      calibration: this.calibration.assess(history),
       dataQuality: this.dataQuality.assess(history),
       similarWeeks: this.similarWeeks.find(history),
       pointDifficulty,

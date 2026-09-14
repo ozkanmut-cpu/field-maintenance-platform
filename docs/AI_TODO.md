@@ -76,9 +76,10 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] What-if: route/geography değişikliği
 - [x] What-if çıktısı: workload delta + risk delta + confidence
 - [x] Outcome validation pipeline
-- [ ] Equipment-type relative workload etkilerini gözlenen sonuçlardan kalibre et
+- [x] Equipment-type relative workload etkilerini gözlenen sonuçlardan kalibre et
 - [ ] Travel-burden ağırlıklarını gözlenen süre/başarı sonuçlarından kalibre et
-- [ ] Calibration drift takibi
+  - [x] Başarı/başarısızlık outcome etkisi ampirik olarak kalibre ediliyor; gerçek servis süresi veri modelinde olmadığı için duration bileşeni açık.
+- [x] Calibration drift takibi
 - [x] Model/heuristic versioning
 - [x] Feature versioning
 - [x] Backtest: geçmiş haftalarda öneri verilseydi sonuç ne olurdu?
