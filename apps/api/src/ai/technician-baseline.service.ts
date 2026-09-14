@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
 import { BaselineBand, TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
+import { estimateServiceEffort } from './service-effort';
 
 @Injectable()
 export class TechnicianBaselineService {
@@ -16,7 +17,8 @@ export class TechnicianBaselineService {
       .map((snapshot) => snapshot.records.find((r) => r.entityType === 'TECHNICIAN' && r.entityId === technicianId)?.features)
       .filter((row): row is Record<string, string | number | boolean | null> => Boolean(row));
 
-    const serviceRows = rows.filter((row) => Number(row.completedVisitCount ?? 0) > 0 && Number(row.equipmentSnapshotCoverage ?? 0) === 1);
+    const serviceRows = rows.filter((row) => Number(row.completedVisitCount ?? 0) > 0 && Number(row.equipmentSnapshotCoverage ?? 0) === 1)
+      .map((row) => ({ ...row, estimatedServiceEffortMidpointMinutes: estimateServiceEffort(this.optionalNumber(row.servicedTowerCount)).midpointMinutes }));
     const travelRows = rows.filter((row) => typeof row.fieldRouteDistanceMeters === 'number' && Number.isFinite(row.fieldRouteDistanceMeters));
     const reasons: string[] = [];
     if (serviceRows.length < 4) reasons.push('SERVICE_HISTORY_TOO_SHORT');
@@ -39,6 +41,7 @@ export class TechnicianBaselineService {
         towerCount: this.band(serviceRows, 'servicedTowerCount'),
         tapCount: this.band(serviceRows, 'servicedTapCount'),
         smarttapCount: this.band(serviceRows, 'servicedSmarttapCount'),
+        estimatedServiceEffortMidpointMinutes: this.band(serviceRows, 'estimatedServiceEffortMidpointMinutes'),
       },
       travel: {
         routeDistanceMeters: this.band(travelRows, 'fieldRouteDistanceMeters'),
@@ -48,7 +51,6 @@ export class TechnicianBaselineService {
       },
       context: {
         uniqueVisitedPoints: this.band(serviceRows, 'uniqueVisitedPointCount'),
-        paperworkCompletionMinutes: this.band(rows, 'paperworkCompletionP90Minutes'),
         suspiciousVisitRate: this.band(rows, 'suspiciousVisitRate'),
         lateEntryMinutes: this.band(rows, 'averageLateEntryMinutes'),
       },
@@ -60,6 +62,8 @@ export class TechnicianBaselineService {
     const values = rows.map((row) => row[key]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)).sort((a, b) => a - b);
     return { median: this.percentile(values, 0.5), p75: this.percentile(values, 0.75), p90: this.percentile(values, 0.9) };
   }
+
+  private optionalNumber(value: unknown) { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
 
   private percentile(sorted: number[], p: number) {
     if (!sorted.length) return null;

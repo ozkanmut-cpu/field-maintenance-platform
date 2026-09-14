@@ -31,8 +31,9 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 ## P0 — Mevcut AI temelini üretim seviyesine çıkar
 
-- [ ] Point Difficulty Score'u ekipman + geçmiş süre/sonuç + coğrafya ile yeniden kalibre et
-  - [x] Ekipman karması + outcome + coğrafya için empirical cohort calibration; gerçek servis süresi alanı henüz veri modelinde olmadığı için duration bileşeni açık kalır.
+- [x] Point Difficulty Score'u ekipman + beklenen servis emeği + geçmiş sonuç + coğrafya ile yeniden kalibre et
+  - [x] Servis emeği kullanıcıdan başlangıç/bitiş istemeden kule başına 15–30 dk normatif aralık olarak hesaplanır; ölçülmüş süre diye sunulmaz.
+  - [x] Ekipman karması + outcome + coğrafya empirical cohort calibration ile birlikte kullanılır.
 - [x] Equipment-profile confidence: completeness, verification age, verification history
 - [x] Equipment-profile stability/change-rate feature per point
 - [x] Equipment-change anomaly detection: olağandışı / tekrarlayan adet sıçramaları
@@ -77,8 +78,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] What-if çıktısı: workload delta + risk delta + confidence
 - [x] Outcome validation pipeline
 - [x] Equipment-type relative workload etkilerini gözlenen sonuçlardan kalibre et
-- [ ] Travel-burden ağırlıklarını gözlenen süre/başarı sonuçlarından kalibre et
-  - [x] Başarı/başarısızlık outcome etkisi ampirik olarak kalibre ediliyor; gerçek servis süresi veri modelinde olmadığı için duration bileşeni açık.
+- [x] Travel-burden etkisini gözlenen başarı/başarısızlık sonuçlarından kalibre et
+  - [x] Rota mesafesi, coğrafi ayrışma ve izolasyonun outcome etkisi ampirik kalibre edilir; bakım ekranı zamanı gerçek servis süresi kabul edilmez.
 - [x] Calibration drift takibi
 - [x] Model/heuristic versioning
 - [x] Feature versioning
@@ -108,7 +109,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Technician capacity trend
 - [x] Point difficulty trend
 - [x] Equipment data-quality trend
-- [x] Paperwork completion-time analitiğini risk sinyali olarak ekle
+- [x] Paperwork durumunu yalnız idari evrak kuyruğu/özet metriği olarak tut; kayıt gecikmesini teknisyen riski, kapasite veya bakım süresi sayma
 - [x] AI Dashboard tarihsel karşılaştırma
 - [x] Export edilebilir AI/KPI raporu
 

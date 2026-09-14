@@ -29,6 +29,7 @@ export class WeeklyWorkloadService {
       towerCount: equipmentUsable ? this.pressure(assigned.assignedTowerCount, baseline.service.towerCount) : 'UNKNOWN' as WorkloadPressureBand,
       tapCount: equipmentUsable ? this.pressure(assigned.assignedTapCount, baseline.service.tapCount) : 'UNKNOWN' as WorkloadPressureBand,
       smarttapCount: equipmentUsable ? this.pressure(assigned.assignedSmarttapCount, baseline.service.smarttapCount) : 'UNKNOWN' as WorkloadPressureBand,
+      estimatedServiceEffortMidpointMinutes: equipmentUsable ? this.pressure(assigned.assignedServiceEffortMidpointMinutes, baseline.service.estimatedServiceEffortMidpointMinutes) : 'UNKNOWN' as WorkloadPressureBand,
     };
 
     const assignedRadius = assignedWorkCount === 0 ? 0 : assigned.assignedFieldP90RadiusMeters;

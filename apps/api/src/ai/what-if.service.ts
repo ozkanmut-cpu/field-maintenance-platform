@@ -6,6 +6,7 @@ import { RiskEngineService } from './risk-engine.service';
 import { TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 import { DataQualityAssessment } from './data-quality-engine.types';
+import { estimateServiceEffort } from './service-effort';
 
 
 export type RegionWorkloadVector = {
@@ -132,6 +133,8 @@ export class WhatIfService {
 
   private apply(source: TechnicianAssignedWeeklyWorkload, change: WhatIfChange): TechnicianAssignedWeeklyWorkload {
     const add = (value: number, delta?: number) => Math.max(0, value + (delta ?? 0));
+    const towerCount = add(source.assignedTowerCount, change.towerDelta);
+    const effort = estimateServiceEffort(towerCount);
     return {
       ...source,
       standardCurrent: add(source.standardCurrent, change.standardCurrentDelta),
@@ -139,7 +142,10 @@ export class WhatIfService {
       smartcleanCurrent: add(source.smartcleanCurrent, change.smartcleanCurrentDelta),
       smartcleanCarryover: add(source.smartcleanCarryover, change.smartcleanCarryoverDelta),
       assignedCoolerCount: add(source.assignedCoolerCount, change.coolerDelta),
-      assignedTowerCount: add(source.assignedTowerCount, change.towerDelta),
+      assignedTowerCount: towerCount,
+      assignedServiceEffortMinMinutes: effort.minMinutes ?? 0,
+      assignedServiceEffortMaxMinutes: effort.maxMinutes ?? 0,
+      assignedServiceEffortMidpointMinutes: effort.midpointMinutes ?? 0,
       assignedTapCount: add(source.assignedTapCount, change.tapDelta),
       assignedSmarttapCount: add(source.assignedSmarttapCount, change.smarttapDelta),
       equipmentUnknownPointCount: add(source.equipmentUnknownPointCount, change.equipmentUnknownPointDelta),

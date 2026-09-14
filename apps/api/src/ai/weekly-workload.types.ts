@@ -25,6 +25,7 @@ export type WeeklyWorkloadAssessment = {
     towerCount: WorkloadPressureBand;
     tapCount: WorkloadPressureBand;
     smarttapCount: WorkloadPressureBand;
+    estimatedServiceEffortMidpointMinutes: WorkloadPressureBand;
   };
   travelPressure: {
     routeDistanceMeters: WorkloadPressureBand;

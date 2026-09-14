@@ -27,7 +27,7 @@ const baseline:any = {
   technicianId:'t1', state:'ACTIVE', confidence:'MEDIUM', observedWeeks:8, serviceEvidenceWeeks:8, travelEvidenceWeeks:6,
   service:{ completedVisits:{median:5,p75:7,p90:9}, coolerCount:{median:1,p75:2,p90:3}, towerCount:{median:1,p75:2,p90:3}, tapCount:{median:1,p75:2,p90:3}, smarttapCount:{median:0,p75:1,p90:2} },
   travel:{ routeDistanceMeters:{median:0,p75:1000,p90:2000}, fieldP90RadiusMeters:{median:0,p75:1000,p90:2000}, routeCoherenceRatio:{median:0,p75:1,p90:2}, fragmentationRatio:{median:0,p75:0.5,p90:1} },
-  context:{ uniqueVisitedPoints:{median:1,p75:2,p90:3}, paperworkCompletionMinutes:{median:null,p75:null,p90:null}, suspiciousVisitRate:{median:0,p75:0,p90:0}, lateEntryMinutes:{median:null,p75:null,p90:null} }, reasons:[],
+  context:{ uniqueVisitedPoints:{median:1,p75:2,p90:3}, suspiciousVisitRate:{median:0,p75:0,p90:0}, lateEntryMinutes:{median:null,p75:null,p90:null} }, reasons:[],
 };
 function controller() {
   const prisma:any = {

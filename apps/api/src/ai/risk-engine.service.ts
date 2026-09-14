@@ -100,13 +100,6 @@ export class RiskEngineService {
       signals.push({ code: 'SUSPICIOUS_TRAVEL_OR_BATCH_EVIDENCE', severity: 'MEDIUM', evidence: { suspiciousVisits, reviewRecommended: assigned.currentWeekReviewRecommendedCount ?? 0 } });
     }
 
-    const paperworkMinutes = assigned.currentWeekPaperworkCompletionP90Minutes;
-    const paperworkBand = baseline.context.paperworkCompletionMinutes;
-    if (paperworkMinutes !== null && paperworkMinutes !== undefined && paperworkBand?.p90 !== null && paperworkBand?.p90 !== undefined && paperworkMinutes > paperworkBand.p90) {
-      signals.push({ code: 'PAPERWORK_COMPLETION_ABOVE_P90', severity: 'HIGH', evidence: { paperworkCompletionP90Minutes: paperworkMinutes, baselineP90Minutes: paperworkBand.p90 } });
-    } else if (paperworkMinutes !== null && paperworkMinutes !== undefined && paperworkBand?.p75 !== null && paperworkBand?.p75 !== undefined && paperworkMinutes > paperworkBand.p75) {
-      signals.push({ code: 'PAPERWORK_COMPLETION_ABOVE_P75', severity: 'MEDIUM', evidence: { paperworkCompletionP90Minutes: paperworkMinutes, baselineP75Minutes: paperworkBand.p75 } });
-    }
     if ((assigned.currentWeekPaperworkPendingCount ?? 0) > 0) {
       signals.push({ code: 'PAPERWORK_BACKLOG_PRESENT', severity: 'MEDIUM', evidence: { pendingItems: assigned.currentWeekPaperworkPendingCount ?? 0 } });
     }

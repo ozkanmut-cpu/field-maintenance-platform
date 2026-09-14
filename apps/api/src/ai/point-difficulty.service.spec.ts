@@ -52,6 +52,7 @@ test('activates only with equipment and outcome depth', () => {
   const p = service.assessPoint(history, 'p1');
   assert.equal(p.state, 'ACTIVE');
   assert.ok(p.score !== null);
+  assert.deepEqual({ min: p.serviceEffort.minMinutes, max: p.serviceEffort.maxMinutes, midpoint: p.serviceEffort.midpointMinutes }, { min: 15, max: 30, midpoint: 22.5 });
 });
 
 test('keeps geography as evidence without arbitrary distance weight', () => {

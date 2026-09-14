@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService, GeoPoint } from './geography.service';
 import { GeographyClusteringService } from './geography-clustering.service';
+import { estimateServiceEffort } from './service-effort';
 
 export type TechnicianAssignedWeeklyWorkload = {
   technicianId: string;
@@ -19,6 +20,9 @@ export type TechnicianAssignedWeeklyWorkload = {
   assignedTowerCount: number;
   assignedTapCount: number;
   assignedSmarttapCount: number;
+  assignedServiceEffortMinMinutes: number;
+  assignedServiceEffortMaxMinutes: number;
+  assignedServiceEffortMidpointMinutes: number;
   assignedLocatedPointCount: number;
   assignedUnlocatedPointCount: number;
   assignedFieldP90RadiusMeters: number | null;
@@ -31,7 +35,6 @@ export type TechnicianAssignedWeeklyWorkload = {
   currentWeekSuspiciousVisitCount?: number;
   currentWeekReviewRecommendedCount?: number;
   currentWeekPaperworkPendingCount?: number;
-  currentWeekPaperworkCompletionP90Minutes?: number | null;
 };
 
 @Injectable()
@@ -94,6 +97,9 @@ export class AssignedWeeklyWorkloadService {
         assignedTowerCount: 0,
         assignedTapCount: 0,
         assignedSmarttapCount: 0,
+        assignedServiceEffortMinMinutes: 0,
+        assignedServiceEffortMaxMinutes: 0,
+        assignedServiceEffortMidpointMinutes: 0,
         assignedLocatedPointCount: 0,
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
@@ -106,7 +112,6 @@ export class AssignedWeeklyWorkloadService {
         currentWeekSuspiciousVisitCount: 0,
         currentWeekReviewRecommendedCount: 0,
         currentWeekPaperworkPendingCount: 0,
-        currentWeekPaperworkCompletionP90Minutes: null,
       };
       rows.set(technicianId, row);
       return row;
@@ -128,6 +133,10 @@ export class AssignedWeeklyWorkloadService {
         row.assignedTowerCount += profile.towerCount ?? 0;
         row.assignedTapCount += profile.tapCount ?? 0;
         row.assignedSmarttapCount += profile.smarttapCount ?? 0;
+        const effort = estimateServiceEffort(profile.towerCount);
+        row.assignedServiceEffortMinMinutes += effort.minMinutes ?? 0;
+        row.assignedServiceEffortMaxMinutes += effort.maxMinutes ?? 0;
+        row.assignedServiceEffortMidpointMinutes += effort.midpointMinutes ?? 0;
       }
       if (profile?.canonicalLatitude !== null && profile?.canonicalLatitude !== undefined && profile?.canonicalLongitude !== null && profile?.canonicalLongitude !== undefined) {
         row.assignedLocatedPointCount += 1;
@@ -140,17 +149,13 @@ export class AssignedWeeklyWorkloadService {
     for (const item of standard) add(item.pointId, item.dueEnd < week.weekStart ? 'standardCarryover' : 'standardCurrent');
     for (const item of smartclean) add(item.pointId, item.state === 'CARRYOVER' ? 'smartcleanCarryover' : 'smartcleanCurrent');
 
-    const visitMetrics = new Map<string, { suspicious: number; review: number; pending: number; completionMinutes: number[] }>();
+    const visitMetrics = new Map<string, { suspicious: number; review: number; pending: number }>();
     for (const visit of currentWeekVisits) {
-      const metric = visitMetrics.get(visit.technicianId) ?? { suspicious: 0, review: 0, pending: 0, completionMinutes: [] };
+      const metric = visitMetrics.get(visit.technicianId) ?? { suspicious: 0, review: 0, pending: 0 };
       if (visit.suspiciousBatch) metric.suspicious += 1;
       if (visit.reviewRecommended) metric.review += 1;
       if (visit.serviceSlipStatus !== 'PRESENT') metric.pending += 1;
       if (visit.confirmationStatus !== 'PRESENT') metric.pending += 1;
-      for (const kind of ['SERVICE_SLIP', 'CONFIRMATION'] as const) {
-        const present = visit.paperworkHistory.find((item) => item.kind === kind && item.newStatus === 'PRESENT');
-        if (present) metric.completionMinutes.push(Math.max(0, (present.changedAt.getTime() - visit.performedAt.getTime()) / 60000));
-      }
       visitMetrics.set(visit.technicianId, metric);
     }
 
@@ -178,12 +183,6 @@ export class AssignedWeeklyWorkloadService {
         row.currentWeekSuspiciousVisitCount = metrics.suspicious;
         row.currentWeekReviewRecommendedCount = metrics.review;
         row.currentWeekPaperworkPendingCount = metrics.pending;
-        const sorted = [...metrics.completionMinutes].sort((a, b) => a - b);
-        if (sorted.length) {
-          const index = (sorted.length - 1) * 0.9;
-          const lo = Math.floor(index), hi = Math.ceil(index);
-          row.currentWeekPaperworkCompletionP90Minutes = lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo);
-        }
       }
     }
 

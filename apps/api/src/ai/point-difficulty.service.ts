@@ -4,6 +4,7 @@ import { EquipmentProfileService } from './equipment-profile.service';
 import { DifficultyCalibrationService } from './difficulty-calibration.service';
 import { PointDifficultyProfile } from './point-difficulty.types';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
+import { estimateServiceEffort } from './service-effort';
 
 @Injectable()
 export class PointDifficultyService {
@@ -36,6 +37,7 @@ export class PointDifficultyService {
       smarttapCount: numberOrNull(latest.smarttapCount),
     };
     const equipmentProfileComplete = Object.values(equipment).every((v) => v !== null);
+    const serviceEffort = estimateServiceEffort(equipment.towerCount);
     const equipmentProfile = this.equipmentProfiles.assessPoint(history, pointId);
     const visits = rows.reduce((s, r) => s + Number(r.features.visitCount ?? 0), 0);
     const attempts = rows.reduce((s, r) => s + Number(r.features.attemptCount ?? 0), 0);
@@ -44,6 +46,7 @@ export class PointDifficultyService {
     const observedPeriods = missed + completed;
     const reasons: string[] = [];
     reasons.push(...equipmentProfile.reasons);
+    reasons.push(...serviceEffort.reasonCodes);
     if (latest.hasCanonicalLocation !== true) reasons.push('LOCATION_MISSING');
     if (history.length < 4) reasons.push('HISTORY_TOO_SHORT');
     if (visits + attempts < 4 && observedPeriods < 4) reasons.push('OUTCOME_EVIDENCE_LOW');
@@ -76,6 +79,7 @@ export class PointDifficultyService {
       equipmentProfileComplete,
       equipmentProfile,
       equipment,
+      serviceEffort,
       geography: {
         located: latest.hasCanonicalLocation === true,
         isolated: latest.geographicIsolated === true,

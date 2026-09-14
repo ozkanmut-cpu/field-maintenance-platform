@@ -91,11 +91,6 @@ export class FeatureStoreService {
       const technicianGeoPoints = [...uniqueGeoByPoint.values()];
       const technicianClusters = this.clustering.clusterAdaptive(technicianGeoPoints);
       const equipmentCompleteVisits = technicianVisits.filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null));
-      const paperworkCompletionMinutes = technicianVisits.flatMap((visit) => ['SERVICE_SLIP', 'CONFIRMATION'].flatMap((kind) => {
-        const present = visit.paperworkHistory.find((item) => item.kind === kind && item.newStatus === 'PRESENT');
-        return present ? [Math.max(0, (present.changedAt.getTime() - visit.performedAt.getTime()) / 60000)] : [];
-      })).sort((a, b) => a - b);
-      const paperworkP90 = paperworkCompletionMinutes.length ? this.percentile(paperworkCompletionMinutes, 0.9) : null;
       const paperworkPendingCount = technicianVisits.reduce((sum, visit) => sum + (visit.serviceSlipStatus === 'PRESENT' ? 0 : 1) + (visit.confirmationStatus === 'PRESENT' ? 0 : 1), 0);
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
@@ -115,7 +110,6 @@ export class FeatureStoreService {
         suspiciousVisitRate: technicianVisits.length ? technicianVisits.filter((v) => v.suspiciousBatch).length / technicianVisits.length : 0,
         averageLateEntryMinutes: technicianVisits.filter((v) => v.lateEntryMinutes !== null).length ? technicianVisits.filter((v) => v.lateEntryMinutes !== null).reduce((sum, v) => sum + Number(v.lateEntryMinutes), 0) / technicianVisits.filter((v) => v.lateEntryMinutes !== null).length : null,
         paperworkPendingCount,
-        paperworkCompletionP90Minutes: paperworkP90,
         gpsSampleCount: technicianGeo.sampleCount,
         fieldCenterLatitude: technicianGeo.centerLatitude,
         fieldCenterLongitude: technicianGeo.centerLongitude,
