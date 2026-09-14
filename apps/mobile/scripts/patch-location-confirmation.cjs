@@ -15,9 +15,9 @@ if (!source.includes(oldCompleteCall)) throw new Error('completeMaintenance call
 source = source.replace(oldCompleteCall, newCompleteCall);
 
 const oldButtons = "        { text: 'Hayır', style: 'cancel' },\n        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },";
-const newButtons = "        { text: 'Hayır, farklı yerdeyim', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, false).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },\n        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, true).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },";
+const newButtons = "        { text: 'İptal et', style: 'cancel' },\n        { text: 'Hayır, ama bakımı yaptım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, false).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },\n        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, true).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },";
 if (!source.includes(oldButtons)) throw new Error('location confirmation buttons not found');
 source = source.replace(oldButtons, newButtons);
 
 fs.writeFileSync(file, source);
-console.log('Location confirmation flow patched: both choices save maintenance; off-site evidence is excluded from location learning.');
+console.log('Location confirmation flow patched: off-site maintenance saves, on-site confirmation saves with location evidence, and cancel does not save.');
