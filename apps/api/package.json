@@ -24,7 +24,8 @@
     "prisma:validate": "cd ../.. && prisma validate --schema apps/api/prisma/schema.prisma",
     "test:point-address-discovery": "node --test --require ts-node/register src/points/point-address-discovery.service.spec.ts",
     "test:risk-engine": "node --test --require ts-node/register src/ai/risk-engine.service.spec.ts",
-    "test:equipment-profile": "node --test --require ts-node/register src/ai/equipment-profile.service.spec.ts"
+    "test:equipment-profile": "node --test --require ts-node/register src/ai/equipment-profile.service.spec.ts",
+    "test:planning-engine": "node --test --require ts-node/register src/ai/planning-engine.service.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

@@ -7,6 +7,7 @@ import { DataMaturityService } from './data-maturity.service';
 import { FeatureStoreService } from './feature-store.service';
 import { FeatureSnapshot } from './feature-store.types';
 import { PointDifficultyService } from './point-difficulty.service';
+import { PlanningEngineService } from './planning-engine.service';
 import { RiskEngineService } from './risk-engine.service';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianBaselineService } from './technician-baseline.service';
@@ -23,6 +24,7 @@ export class AdminAiController {
     private readonly assignedWorkload: AssignedWeeklyWorkloadService,
     private readonly weeklyWorkload: WeeklyWorkloadService,
     private readonly riskEngine: RiskEngineService,
+    private readonly planningEngine: PlanningEngineService,
   ) {}
 
   @Roles(UserRole.ADMIN)
@@ -53,6 +55,7 @@ export class AdminAiController {
 
     const maturity = this.maturity.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
+    const recommendationMaturity = maturity.capabilities.find((item) => item.capability === 'RECOMMENDATION');
     const baselineByTechnician = new Map(this.baselines.assess(history).map((item) => [item.technicianId, item]));
     const workloadByTechnician = new Map(assigned.technicians.map((item) => [item.technicianId, item]));
     const technicianRows = technicians.map((technician) => {
@@ -84,6 +87,11 @@ export class AdminAiController {
       };
     });
 
+    const planning = this.planningEngine.assess(
+      technicianRows.map((item) => ({ technicianId: item.id, assigned: item.workload, workload: item.assessment, risk: item.risk })),
+      recommendationMaturity,
+    );
+
     const pointMeta = new Map(points.map((point) => [point.id, point]));
     const pointDifficulty = this.difficulties.assess(history)
       .map((item) => ({
@@ -102,6 +110,7 @@ export class AdminAiController {
       maturity,
       unassigned: assigned.unassigned,
       technicians: technicianRows,
+      planning,
       pointDifficulty,
     };
   }

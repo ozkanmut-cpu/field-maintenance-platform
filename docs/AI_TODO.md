@@ -54,12 +54,12 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [ ] Technician overload / underload risk
 - [x] Point-level service failure / repeated-attempt risk
 - [ ] Data-quality risk ve yanlış yönlendirme koruması
-- [ ] AI Planning Engine
-- [ ] Technician workload/capacity analysis
+- [x] AI Planning Engine — V1 açıklanabilir, non-mutating öneri motoru
+- [x] Technician workload/capacity analysis
 - [ ] Region health indicators
 - [ ] SmartClean approaching-window risk/priority
 - [ ] Recommendation ranking: equipment-heavy clusters + travel burden + technician capacity
-- [ ] Önerilerde mevcut bölge/görevlendirme/business-rule kısıtlarını hard constraint olarak uygula
+- [x] Önerilerde mevcut bölge/görevlendirme/business-rule kısıtlarını hard constraint olarak uygula
 - [ ] AI önerisinin admin tarafından kabul/red sonucunu audit et
 - [ ] Recommendation feedback dataset oluştur
 
@@ -111,7 +111,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 ## P5 — Test, güvenlik ve gözlemlenebilirlik
 
 - [x] Risk Engine deterministik fixture testleri
-- [ ] Planning Engine deterministik fixture testleri
+- [x] Planning Engine deterministik fixture testleri
 - [ ] Similar Week testleri
 - [ ] What-if simulator testleri
 - [ ] Calibration/backtest testleri
