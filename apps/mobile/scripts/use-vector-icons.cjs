@@ -9,6 +9,11 @@ source = source.replace(
   "import React, { useEffect, useMemo, useState } from 'react';\nimport { Feather as ExpoFeather } from '@expo/vector-icons';\nimport { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';"
 );
 
+source = source.replace(
+  "row('smarttapCount','SmartTap')",
+  "row('smarttapCount','SmartTap','smarttap')"
+);
+
 const start = source.indexOf("const ICON_SPRITE = require('../assets/icons-sprite.png');");
 const endMarker = "\n\nexport default function CorporateApp()";
 const end = source.indexOf(endMarker, start);
