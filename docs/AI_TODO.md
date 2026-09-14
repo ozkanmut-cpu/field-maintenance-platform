@@ -36,10 +36,10 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Equipment-profile stability/change-rate feature per point
 - [x] Equipment-change anomaly detection: olağandışı / tekrarlayan adet sıçramaları
 - [ ] Equipment data-quality brake: difficulty/capacity/risk/recommendation motorlarına ortak güven kapısı
-- [ ] Historical point-difficulty reconstruction: visit-level equipment snapshot kullanarak geçmiş skor üretimi
-- [ ] Cold-start cohortlarını maintenance type + equipment mix + geography ile zenginleştir
-- [ ] Technician capacity modelini equipment mix ile ayarla
-- [ ] Weekly workload'u service workload + travel workload olarak iki bileşene ayır
+- [x] Historical point-difficulty reconstruction: visit-level equipment snapshot kullanarak geçmiş skor üretimi
+- [x] Cold-start cohortlarını maintenance type + equipment mix + geography ile zenginleştir
+- [x] Technician capacity modelini equipment mix ile ayarla
+- [x] Weekly workload'u service workload + travel workload olarak iki bileşene ayır
 - [ ] Travel workload: point-to-point distance, dispersion, isolated points, cluster fragmentation, technician work-area proximity
 - [ ] Route coherence metriği: eşit nokta sayısı yerine rota bütünlüğü + equipment workload dengesini değerlendir
 - [ ] AI maturity gating'i tüm AI çıktılarında zorunlu hale getir
@@ -52,7 +52,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [ ] Period-end delay risk
 - [ ] Bakım gecikme riski: workload mix + equipment difficulty + geography + geçmiş performans
 - [ ] Technician overload / underload risk
-- [ ] Point-level service failure / repeated-attempt risk
+- [x] Point-level service failure / repeated-attempt risk
 - [ ] Data-quality risk ve yanlış yönlendirme koruması
 - [ ] AI Planning Engine
 - [ ] Technician workload/capacity analysis

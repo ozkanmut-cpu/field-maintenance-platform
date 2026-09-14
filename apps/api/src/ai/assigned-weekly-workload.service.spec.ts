@@ -103,4 +103,5 @@ test('derives assigned geographic coverage and field radius from unique assigned
   assert.equal(row.assignedLocatedPointCount, 2);
   assert.equal(row.assignedUnlocatedPointCount, 1);
   assert.ok(row.assignedFieldP90RadiusMeters !== null && row.assignedFieldP90RadiusMeters > 1000);
+  assert.ok(row.assignedRouteEstimateMeters !== null && row.assignedRouteEstimateMeters > 1000);
 });

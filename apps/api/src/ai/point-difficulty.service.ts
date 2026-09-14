@@ -12,6 +12,14 @@ export class PointDifficultyService {
     return [...ids].sort().map((id) => this.assessPoint(ordered, id));
   }
 
+  reconstructPoint(history: FeatureSnapshot[], pointId: string) {
+    const ordered = [...history].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    return ordered.map((snapshot, index) => ({
+      weekKey: snapshot.weekKey,
+      profile: this.assessPoint(ordered.slice(0, index + 1), pointId),
+    }));
+  }
+
   assessPoint(history: FeatureSnapshot[], pointId: string): PointDifficultyProfile {
     const rows = history.flatMap((s) => s.records.filter((r) => r.entityType === 'POINT' && r.entityId === pointId));
     const latest = rows.at(-1)?.features ?? {};

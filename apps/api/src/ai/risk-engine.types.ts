@@ -9,6 +9,16 @@ export type AiRiskSignal = {
   evidence: Record<string, string | number | boolean | null>;
 };
 
+export type PointRiskAssessment = {
+  pointId: string;
+  engineVersion: string;
+  state: AiRiskState;
+  severity: AiRiskSeverity;
+  confidence: 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
+  signals: AiRiskSignal[];
+  reasons: string[];
+};
+
 export type TechnicianRiskAssessment = {
   technicianId: string;
   engineVersion: string;

@@ -35,9 +35,11 @@ export class WeeklyWorkloadService {
       ? this.pressure(assignedRadius, baseline.travel.fieldP90RadiusMeters)
       : 'UNKNOWN';
 
-    // A real route distance needs an ordered/optimized route; do not compare an unordered point set
-    // with the historical performed-route baseline and pretend that it is equivalent evidence.
-    reasons.push('ASSIGNED_ROUTE_ESTIMATE_NOT_AVAILABLE');
+    const routeEstimate = assignedWorkCount === 0 ? 0 : assigned.assignedRouteEstimateMeters;
+    const routePressure = locationUsable && routeEstimate !== null
+      ? this.pressure(routeEstimate, baseline.travel.routeDistanceMeters)
+      : 'UNKNOWN';
+    if (assignedWorkCount > 0 && routeEstimate === null) reasons.push('ASSIGNED_ROUTE_ESTIMATE_NOT_AVAILABLE');
 
     return {
       technicianId: assigned.technicianId,
@@ -52,7 +54,7 @@ export class WeeklyWorkloadService {
       },
       servicePressure,
       travelPressure: {
-        routeDistanceMeters: 'UNKNOWN',
+        routeDistanceMeters: routePressure,
         fieldP90RadiusMeters: fieldRadiusPressure,
       },
       reasons: [...new Set(reasons)],

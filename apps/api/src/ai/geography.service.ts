@@ -82,6 +82,26 @@ export class GeographyService {
     };
   }
 
+
+  estimateOpenRouteMeters(points: Array<GeoPoint & { id: string }>) {
+    if (points.length < 2) return 0;
+    const ordered = [...points].sort((a, b) => a.id.localeCompare(b.id));
+    const center = {
+      latitude: ordered.reduce((sum, p) => sum + p.latitude, 0) / ordered.length,
+      longitude: ordered.reduce((sum, p) => sum + p.longitude, 0) / ordered.length,
+    };
+    let current = [...ordered].sort((a, b) => this.distanceMeters(center, a) - this.distanceMeters(center, b) || a.id.localeCompare(b.id))[0];
+    const remaining = new Map(ordered.filter((p) => p.id !== current.id).map((p) => [p.id, p]));
+    let distance = 0;
+    while (remaining.size) {
+      const next = [...remaining.values()].sort((a, b) => this.distanceMeters(current, a) - this.distanceMeters(current, b) || a.id.localeCompare(b.id))[0];
+      distance += this.distanceMeters(current, next);
+      remaining.delete(next.id);
+      current = next;
+    }
+    return distance;
+  }
+
   areAdjacent(a: GeoPoint, b: GeoPoint, maxMeters: number) {
     if (!Number.isFinite(maxMeters) || maxMeters <= 0) throw new Error('maxMeters must be positive');
     return this.distanceMeters(a, b) <= maxMeters;

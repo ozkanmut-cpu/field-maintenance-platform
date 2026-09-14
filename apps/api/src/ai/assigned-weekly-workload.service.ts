@@ -21,6 +21,7 @@ export type TechnicianAssignedWeeklyWorkload = {
   assignedLocatedPointCount: number;
   assignedUnlocatedPointCount: number;
   assignedFieldP90RadiusMeters: number | null;
+  assignedRouteEstimateMeters: number | null;
 };
 
 @Injectable()
@@ -61,7 +62,7 @@ export class AssignedWeeklyWorkloadService {
     const rows = new Map<string, TechnicianAssignedWeeklyWorkload>();
     const unassigned = { standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0 };
     const seenProfiles = new Set<string>();
-    const locatedByTechnician = new Map<string, GeoPoint[]>();
+    const locatedByTechnician = new Map<string, Array<GeoPoint & { id: string }>>();
 
     const rowFor = (technicianId: string) => {
       const existing = rows.get(technicianId);
@@ -81,6 +82,7 @@ export class AssignedWeeklyWorkloadService {
         assignedLocatedPointCount: 0,
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
+        assignedRouteEstimateMeters: null,
       };
       rows.set(technicianId, row);
       return row;
@@ -106,7 +108,7 @@ export class AssignedWeeklyWorkloadService {
       if (profile?.canonicalLatitude !== null && profile?.canonicalLatitude !== undefined && profile?.canonicalLongitude !== null && profile?.canonicalLongitude !== undefined) {
         row.assignedLocatedPointCount += 1;
         const points = locatedByTechnician.get(technicianId) ?? [];
-        points.push({ latitude: Number(profile.canonicalLatitude), longitude: Number(profile.canonicalLongitude) });
+        points.push({ id: pointId, latitude: Number(profile.canonicalLatitude), longitude: Number(profile.canonicalLongitude) });
         locatedByTechnician.set(technicianId, points);
       } else row.assignedUnlocatedPointCount += 1;
     };
@@ -117,6 +119,7 @@ export class AssignedWeeklyWorkloadService {
     for (const row of rows.values()) {
       const points = locatedByTechnician.get(row.technicianId) ?? [];
       row.assignedFieldP90RadiusMeters = points.length ? this.geography.summarize(points).p90RadiusMeters : null;
+      row.assignedRouteEstimateMeters = points.length ? this.geography.estimateOpenRouteMeters(points) : null;
     }
 
     return { weekKey: week.key, technicians: [...rows.values()].sort((a, b) => a.technicianId.localeCompare(b.technicianId)), unassigned };

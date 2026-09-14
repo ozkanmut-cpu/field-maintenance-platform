@@ -72,6 +72,7 @@ export class AdminAiController {
         assignedLocatedPointCount: 0,
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
+        assignedRouteEstimateMeters: null,
       };
       const assessment = this.weeklyWorkload.assess(workload, baseline);
       return {
@@ -85,7 +86,11 @@ export class AdminAiController {
 
     const pointMeta = new Map(points.map((point) => [point.id, point]));
     const pointDifficulty = this.difficulties.assess(history)
-      .map((item) => ({ ...item, point: pointMeta.get(item.pointId) ?? null }))
+      .map((item) => ({
+        ...item,
+        risk: this.riskEngine.assessPoint(item, riskMaturity),
+        point: pointMeta.get(item.pointId) ?? null,
+      }))
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.history.attempts - a.history.attempts);
 
     return {

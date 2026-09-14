@@ -12,7 +12,7 @@ const assigned = (overrides: Partial<TechnicianAssignedWeeklyWorkload> = {}): Te
   technicianId: 't1', standardCurrent: 4, standardCarryover: 0, smartcleanCurrent: 1, smartcleanCarryover: 0,
   equipmentKnownPointCount: 5, equipmentUnknownPointCount: 0, assignedCoolerCount: 20, assignedTowerCount: 8,
   assignedTapCount: 6, assignedSmarttapCount: 2, assignedLocatedPointCount: 5, assignedUnlocatedPointCount: 0,
-  assignedFieldP90RadiusMeters: 5000, ...overrides,
+  assignedFieldP90RadiusMeters: 5000, assignedRouteEstimateMeters: 12000, ...overrides,
 });
 const baseline: TechnicianWeeklyBaseline = {
   technicianId: 't1', state: 'ACTIVE', confidence: 'MEDIUM', observedWeeks: 8, serviceEvidenceWeeks: 8, travelEvidenceWeeks: 6,
@@ -50,4 +50,27 @@ test('carryover is contextual risk and becomes high only above learned completio
   assert.equal(medium.severity, 'MEDIUM');
   assert.equal(high.severity, 'HIGH');
   assert.ok(high.signals.some((signal) => signal.code === 'CARRYOVER_ABOVE_COMPLETION_P75'));
+});
+
+
+test('route pressure contributes an explainable technician risk signal', () => {
+  const w = workload('WITHIN_BASELINE');
+  w.travelPressure.routeDistanceMeters = 'ABOVE_P90';
+  const result = service.assessTechnician(assigned({ assignedRouteEstimateMeters: 25000 }), baseline, w, maturity);
+  assert.equal(result.severity, 'HIGH');
+  assert.ok(result.signals.some((signal) => signal.code === 'ROUTE_BURDEN_ABOVE_P90'));
+});
+
+test('point risk exposes repeated attempt risk without inventing a score when evidence is ready', () => {
+  const profile: any = {
+    pointId: 'p1', state: 'ACTIVE', confidence: 'MEDIUM', score: 50, equipmentProfileComplete: true,
+    equipmentProfile: { confidence: 'HIGH', anomalyCodes: [], confidenceScore: 90 },
+    equipment: { coolerCount: 2, towerCount: 1, tapCount: 3, smarttapCount: 0 },
+    geography: { located: true, isolated: false, nearestNeighborMeters: 100 },
+    history: { visits: 1, attempts: 3, missed: 0, completed: 1, observedPeriods: 1 }, reasons: [],
+  };
+  const result = service.assessPoint(profile, maturity);
+  assert.equal(result.state, 'READY');
+  assert.equal(result.severity, 'HIGH');
+  assert.ok(result.signals.some((signal) => signal.code === 'REPEATED_ATTEMPTS_DOMINATE_VISITS'));
 });

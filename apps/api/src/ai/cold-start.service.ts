@@ -12,6 +12,28 @@ export class ColdStartService {
     const regionId = this.string(latest?.features.regionId);
     const maintenanceType = this.string(latest?.features.maintenanceType);
     const maintenanceWeek = this.number(latest?.features.maintenanceWeek);
+    const equipmentSignature = this.equipmentSignature(latest);
+    const geographicIsolated = typeof latest?.features.geographicIsolated === 'boolean' ? latest.features.geographicIsolated : null;
+
+    if (maintenanceType && equipmentSignature) {
+      const sameEquipmentAndGeo = (r: FeatureRecord) =>
+        this.string(r.features.maintenanceType) === maintenanceType &&
+        this.equipmentSignature(r) === equipmentSignature &&
+        (geographicIsolated === null || r.features.geographicIsolated === geographicIsolated);
+
+      if (regionId) {
+        const cohort = this.pointCohort(history, pointId, metric, (r) =>
+          this.string(r.features.regionId) === regionId && sameEquipmentAndGeo(r));
+        if (cohort.samples.length >= 4 && cohort.entities >= 2) {
+          return this.result('POINT', pointId, metric, cohort.samples, 'REGION_TYPE_EQUIPMENT_GEO_COHORT', cohort.entities, 'Aynı bölge, bakım tipi, ekipman karması ve coğrafi profildeki noktalardan tahmin');
+        }
+      }
+
+      const cohort = this.pointCohort(history, pointId, metric, sameEquipmentAndGeo);
+      if (cohort.samples.length >= 6 && cohort.entities >= 3) {
+        return this.result('POINT', pointId, metric, cohort.samples, 'TYPE_EQUIPMENT_GEO_COHORT', cohort.entities, 'Aynı bakım tipi, ekipman karması ve coğrafi profildeki şirket noktalarından tahmin');
+      }
+    }
 
     if (maintenanceType === 'SMARTCLEAN' && regionId && maintenanceWeek !== null) {
       const cohort = this.pointCohort(history, pointId, metric, (r) =>
@@ -102,6 +124,14 @@ export class ColdStartService {
     return this.insufficient('REGION', regionId, metric, own.length);
   }
 
+
+  private equipmentSignature(record?: FeatureRecord) {
+    if (!record) return null;
+    const values = ['coolerCount', 'towerCount', 'tapCount', 'smarttapCount'].map((key) => this.number(record.features[key]));
+    if (values.some((value) => value === null)) return null;
+    return values.join(':');
+  }
+
   private pointCohort(history: FeatureSnapshot[], targetId: string, metric: string, predicate: (record: FeatureRecord) => boolean) {
     return this.genericCohort(history, 'POINT', targetId, metric, predicate);
   }
@@ -142,7 +172,7 @@ export class ColdStartService {
   private result(entityType: 'POINT' | 'TECHNICIAN' | 'REGION', entityId: string, metric: string, samples: number[], source: ColdStartSource, entityCount: number, reason: string): ColdStartEstimate {
     const weeksUsed = samples.length;
     const value = this.median(samples);
-    const confidence = source === 'ENTITY_HISTORY' ? (samples.length >= 6 ? 'HIGH' : 'MEDIUM') : source === 'REGION_TYPE_WEEK_COHORT' || source === 'REGION_TYPE_COHORT' || source === 'SIMILAR_REGION_COHORT' ? 'MEDIUM' : 'LOW';
+    const confidence = source === 'ENTITY_HISTORY' ? (samples.length >= 6 ? 'HIGH' : 'MEDIUM') : source === 'REGION_TYPE_EQUIPMENT_GEO_COHORT' || source === 'TYPE_EQUIPMENT_GEO_COHORT' || source === 'REGION_TYPE_WEEK_COHORT' || source === 'REGION_TYPE_COHORT' || source === 'SIMILAR_REGION_COHORT' ? 'MEDIUM' : 'LOW';
     return { entityType, entityId, metric, value, source, confidence, sampleSize: samples.length, entityCount, weeksUsed, reasons: [reason] };
   }
 

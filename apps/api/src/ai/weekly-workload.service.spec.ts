@@ -22,6 +22,7 @@ function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): Technic
     assignedLocatedPointCount: 0,
     assignedUnlocatedPointCount: 0,
     assignedFieldP90RadiusMeters: null,
+    assignedRouteEstimateMeters: null,
     ...overrides,
   };
 }
@@ -62,6 +63,7 @@ test('compares complete assigned equipment and geography against learned baselin
       assignedSmarttapCount: 3,
       assignedLocatedPointCount: 5,
       assignedFieldP90RadiusMeters: 8000,
+      assignedRouteEstimateMeters: 18000,
     }),
     baseline('ACTIVE'),
   );
@@ -72,8 +74,8 @@ test('compares complete assigned equipment and geography against learned baselin
   assert.equal(result.servicePressure.tapCount, 'WITHIN_BASELINE');
   assert.equal(result.servicePressure.smarttapCount, 'WITHIN_BASELINE');
   assert.equal(result.travelPressure.fieldP90RadiusMeters, 'ABOVE_P75');
-  assert.equal(result.travelPressure.routeDistanceMeters, 'UNKNOWN');
-  assert.deepEqual(result.reasons, ['ASSIGNED_ROUTE_ESTIMATE_NOT_AVAILABLE']);
+  assert.equal(result.travelPressure.routeDistanceMeters, 'ABOVE_P75');
+  assert.deepEqual(result.reasons, []);
 });
 
 test('brakes equipment pressure when any assigned point has an incomplete profile', () => {

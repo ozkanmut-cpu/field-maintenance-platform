@@ -75,3 +75,15 @@ test('keeps geography as evidence without arbitrary distance weight', () => {
   assert.equal(p.geography.nearestNeighborMeters, 4200);
   assert.equal(p.score, null);
 });
+
+
+test('historical reconstruction keeps visit-level equipment snapshots separated by week', () => {
+  const base = { equipmentProfileComplete: true, equipmentVerificationAgeDays: 10, equipmentConfirmedVisitCount: 1, hasCanonicalLocation: true, visitCount: 1, completedObligationCount: 1, missedObligationCount: 0 };
+  const history = [
+    snap(1, { ...base, coolerCount: 1, towerCount: 1, tapCount: 2, smarttapCount: 0, equipmentSnapshotCoolerCount: 1, equipmentSnapshotTowerCount: 1, equipmentSnapshotTapCount: 2, equipmentSnapshotSmarttapCount: 0 }),
+    snap(2, { ...base, coolerCount: 3, towerCount: 1, tapCount: 4, smarttapCount: 0, equipmentSnapshotCoolerCount: 3, equipmentSnapshotTowerCount: 1, equipmentSnapshotTapCount: 4, equipmentSnapshotSmarttapCount: 0 }),
+  ];
+  const trend = service.reconstructPoint(history, 'p1');
+  assert.equal(trend[0].profile.equipment.coolerCount, 1);
+  assert.equal(trend[1].profile.equipment.coolerCount, 3);
+});
