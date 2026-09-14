@@ -56,15 +56,15 @@ export class GeographyService {
     );
   }
 
-  async technicianWorkProfile(technicianId: string, lookbackDays = 90) {
-    const since = new Date(Date.now() - Math.max(1, lookbackDays) * 86_400_000);
+  async technicianWorkProfile(technicianId: string, lookbackDays = 90, asOf = new Date()) {
+    const since = new Date(asOf.getTime() - Math.max(1, lookbackDays) * 86_400_000);
     const visits = await this.prisma.maintenanceVisit.findMany({
       where: {
         technicianId,
         status: VisitStatus.VALID,
         suspiciousBatch: false,
         enteredLate: false,
-        performedAt: { gte: since },
+        performedAt: { gte: since, lt: asOf },
       },
       select: { pointId: true, latitude: true, longitude: true, accuracyMeters: true },
     });
@@ -100,6 +100,18 @@ export class GeographyService {
       current = next;
     }
     return distance;
+  }
+
+  routeCoherenceRatio(points: Array<GeoPoint & { id: string }>) {
+    if (points.length < 2) return 1;
+    const route = this.estimateOpenRouteMeters(points);
+    let span = 0;
+    for (let i = 0; i < points.length; i += 1) {
+      for (let j = i + 1; j < points.length; j += 1) {
+        span = Math.max(span, this.distanceMeters(points[i], points[j]));
+      }
+    }
+    return span > 0 ? route / span : 1;
   }
 
   areAdjacent(a: GeoPoint, b: GeoPoint, maxMeters: number) {

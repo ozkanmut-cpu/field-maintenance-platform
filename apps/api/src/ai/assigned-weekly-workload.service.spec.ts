@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
 import { GeographyService } from './geography.service';
+import { GeographyClusteringService } from './geography-clustering.service';
 
 type PointProfile = { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null; canonicalLatitude?: number | null; canonicalLongitude?: number | null };
 
@@ -13,6 +14,7 @@ function sutFor(options: {
 }) {
   const prisma = {
     maintenanceObligation: { findMany: async () => options.standard },
+    maintenanceVisit: { findMany: async () => [] },
     point: {
       findMany: async ({ where }: any) => (where.id.in as string[]).map((id) => ({ id, ...(options.equipment?.[id] ?? { coolerCount: null, towerCount: null, tapCount: null, smarttapCount: null }) })),
     },
@@ -23,7 +25,8 @@ function sutFor(options: {
     ),
   } as any;
   const effectiveWorkload = { smartcleanForWeek: async () => options.smartclean } as any;
-  return new AssignedWeeklyWorkloadService(prisma, assignments, effectiveWorkload, new GeographyService({} as any));
+  const geography = new GeographyService(prisma);
+  return new AssignedWeeklyWorkloadService(prisma, assignments, effectiveWorkload, geography, new GeographyClusteringService(geography));
 }
 
 test('splits current and carryover workload by effective technician assignment', async () => {

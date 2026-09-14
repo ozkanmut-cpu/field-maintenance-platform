@@ -5,9 +5,10 @@ import { DataMaturityService } from './data-maturity.service';
 import { PointDifficultyService } from './point-difficulty.service';
 import { RiskEngineService } from './risk-engine.service';
 import { EquipmentProfileService } from './equipment-profile.service';
+import { DifficultyCalibrationService } from './difficulty-calibration.service';
 import { FeatureSnapshot } from './feature-store.types';
 
-const service = new BacktestService(new DataMaturityService(), new PointDifficultyService(new EquipmentProfileService()), new RiskEngineService());
+const service = new BacktestService(new DataMaturityService(), new PointDifficultyService(new EquipmentProfileService(), new DifficultyCalibrationService()), new RiskEngineService());
 function snap(week: number, attempt: number, missed: number): FeatureSnapshot {
   const point = { hasRegion: true, hasCanonicalLocation: true, canonicalLatitude: 38.4, canonicalLongitude: 27.1, locationConfidence: 95, maintenanceType: 'STANDARD', maintenanceWeek: 1, coolerCount: 2, towerCount: 1, tapCount: 2, smarttapCount: 0, equipmentProfileComplete: true, equipmentVerifiedAt: '2026-01-01T00:00:00Z', equipmentVerificationAgeDays: 1, equipmentConfirmedVisitCount: 1, equipmentSnapshotCoolerCount: 2, equipmentSnapshotTowerCount: 1, equipmentSnapshotTapCount: 2, equipmentSnapshotSmarttapCount: 0, visitCount: 1, attemptCount: attempt, completedObligationCount: 1, missedObligationCount: missed };
   return { weekKey: `2026-W${String(week).padStart(2,'0')}`, isoYear: 2026, isoWeek: week, weekStart: '2026-01-01', weekEnd: '2026-01-07', startInstant: '2026-01-01T00:00:00Z', endExclusiveInstant: '2026-01-08T00:00:00Z', sourceDataThrough: null, sourceHash: String(week), generatedAt: '2026-01-08T00:00:00Z', records: [

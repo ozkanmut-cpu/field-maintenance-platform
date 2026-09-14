@@ -20,6 +20,7 @@
     "test:data-maturity": "node --test --require ts-node/register src/ai/data-maturity.service.spec.ts",
     "test:cold-start": "node --test --require ts-node/register src/ai/cold-start.service.spec.ts",
     "test:point-difficulty": "node --test --require ts-node/register src/ai/point-difficulty.service.spec.ts",
+    "test:difficulty-calibration": "node --test --require ts-node/register src/ai/difficulty-calibration.service.spec.ts",
     "test:technician-baseline": "node --test --require ts-node/register src/ai/technician-baseline.service.spec.ts",
     "prisma:validate": "cd ../.. && prisma validate --schema apps/api/prisma/schema.prisma",
     "test:point-address-discovery": "node --test --require ts-node/register src/points/point-address-discovery.service.spec.ts",
@@ -32,6 +33,7 @@
     "test:trends": "node --test --require ts-node/register src/ai/trend.service.spec.ts",
     "test:equipment-profile": "node --test --require ts-node/register src/ai/equipment-profile.service.spec.ts",
     "test:planning-engine": "node --test --require ts-node/register src/ai/planning-engine.service.spec.ts",
+    "test:recommendation-feedback": "node --test --require ts-node/register src/ai/recommendation-feedback.service.spec.ts",
     "test:similar-week": "node --test --require ts-node/register src/ai/similar-week.service.spec.ts",
     "test:what-if": "node --test --require ts-node/register src/ai/what-if.service.spec.ts"
   },

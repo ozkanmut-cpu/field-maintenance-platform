@@ -25,6 +25,9 @@ export type WeeklyWorkloadAssessment = {
   travelPressure: {
     routeDistanceMeters: WorkloadPressureBand;
     fieldP90RadiusMeters: WorkloadPressureBand;
+    routeCoherenceRatio: WorkloadPressureBand;
+    fragmentationRatio: WorkloadPressureBand;
+    workAreaProximity: WorkloadPressureBand;
   };
   reasons: string[];
 };

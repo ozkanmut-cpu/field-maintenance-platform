@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import { PointDifficultyService } from './point-difficulty.service';
 import { EquipmentProfileService } from './equipment-profile.service';
 import { FeatureSnapshot, FeatureValue } from './feature-store.types';
+import { DifficultyCalibrationService } from './difficulty-calibration.service';
 
-const service = new PointDifficultyService(new EquipmentProfileService());
+const service = new PointDifficultyService(new EquipmentProfileService(), new DifficultyCalibrationService());
 
 function snap(week: number, features: Record<string, FeatureValue>): FeatureSnapshot {
   return {

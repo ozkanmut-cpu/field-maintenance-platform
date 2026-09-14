@@ -1,3 +1,4 @@
+import { DifficultyCalibrationResult } from './difficulty-calibration.service';
 import { EquipmentProfileAssessment } from './equipment-profile.types';
 export type PointDifficultyState = 'WARMING_UP' | 'ACTIVE';
 export type PointDifficultyConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
@@ -7,6 +8,8 @@ export type PointDifficultyProfile = {
   state: PointDifficultyState;
   confidence: PointDifficultyConfidence;
   score: number | null;
+  rawOutcomeScore: number | null;
+  calibration: DifficultyCalibrationResult;
   equipmentProfileComplete: boolean;
   equipmentProfile: EquipmentProfileAssessment;
   equipment: { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null };

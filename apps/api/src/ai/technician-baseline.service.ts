@@ -40,6 +40,8 @@ export class TechnicianBaselineService {
       travel: {
         routeDistanceMeters: this.band(travelRows, 'fieldRouteDistanceMeters'),
         fieldP90RadiusMeters: this.band(travelRows, 'fieldP90RadiusMeters'),
+        routeCoherenceRatio: this.band(travelRows, 'routeCoherenceRatio'),
+        fragmentationRatio: this.band(travelRows, 'routeFragmentationRatio'),
       },
       context: { uniqueVisitedPoints: this.band(serviceRows, 'uniqueVisitedPointCount') },
       reasons,

@@ -32,6 +32,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 ## P0 — Mevcut AI temelini üretim seviyesine çıkar
 
 - [ ] Point Difficulty Score'u ekipman + geçmiş süre/sonuç + coğrafya ile yeniden kalibre et
+  - [x] Ekipman karması + outcome + coğrafya için empirical cohort calibration; gerçek servis süresi alanı henüz veri modelinde olmadığı için duration bileşeni açık kalır.
 - [x] Equipment-profile confidence: completeness, verification age, verification history
 - [x] Equipment-profile stability/change-rate feature per point
 - [x] Equipment-change anomaly detection: olağandışı / tekrarlayan adet sıçramaları
@@ -40,8 +41,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Cold-start cohortlarını maintenance type + equipment mix + geography ile zenginleştir
 - [x] Technician capacity modelini equipment mix ile ayarla
 - [x] Weekly workload'u service workload + travel workload olarak iki bileşene ayır
-- [ ] Travel workload: point-to-point distance, dispersion, isolated points, cluster fragmentation, technician work-area proximity
-- [ ] Route coherence metriği: eşit nokta sayısı yerine rota bütünlüğü + equipment workload dengesini değerlendir
+- [x] Travel workload: point-to-point distance, dispersion, isolated points, cluster fragmentation, technician work-area proximity
+- [x] Route coherence metriği: eşit nokta sayısı yerine rota bütünlüğü + equipment workload dengesini değerlendir
 - [ ] AI maturity gating'i tüm AI çıktılarında zorunlu hale getir
 - [ ] Her skor/öneri için confidence + reason codes üret
 - [x] Admin AI Dashboard'da “neden bu skor?” açıklaması göster
@@ -58,10 +59,10 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Technician workload/capacity analysis
 - [x] Region health indicators
 - [x] SmartClean approaching-window risk/priority
-- [ ] Recommendation ranking: equipment-heavy clusters + travel burden + technician capacity
+- [x] Recommendation ranking: equipment-heavy clusters + travel burden + technician capacity
 - [x] Önerilerde mevcut bölge/görevlendirme/business-rule kısıtlarını hard constraint olarak uygula
-- [ ] AI önerisinin admin tarafından kabul/red sonucunu audit et
-- [ ] Recommendation feedback dataset oluştur
+- [x] AI önerisinin admin tarafından kabul/red sonucunu audit et
+- [x] Recommendation feedback dataset oluştur
 
 ## P2 — Benzer dönem, simülasyon ve kalibrasyon
 

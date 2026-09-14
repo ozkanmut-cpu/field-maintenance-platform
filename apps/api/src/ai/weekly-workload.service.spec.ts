@@ -23,6 +23,11 @@ function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): Technic
     assignedUnlocatedPointCount: 0,
     assignedFieldP90RadiusMeters: null,
     assignedRouteEstimateMeters: null,
+    assignedRouteCoherenceRatio: null,
+    assignedClusterCount: 0,
+    assignedIsolatedPointCount: 0,
+    assignedFragmentationRatio: null,
+    workAreaCenterDistanceMeters: null,
     ...overrides,
   };
 }
@@ -45,6 +50,8 @@ function baseline(state: 'WARMING_UP' | 'ACTIVE'): TechnicianWeeklyBaseline {
     travel: {
       routeDistanceMeters: { median: 10000, p75: 15000, p90: 20000 },
       fieldP90RadiusMeters: { median: 5000, p75: 7000, p90: 9000 },
+      routeCoherenceRatio: { median: 1.2, p75: 1.5, p90: 2 },
+      fragmentationRatio: { median: 0.2, p75: 0.4, p90: 0.6 },
     },
     context: { uniqueVisitedPoints: { median: 9, p75: 11, p90: 13 } },
     reasons: state === 'ACTIVE' ? [] : ['SERVICE_HISTORY_TOO_SHORT'],

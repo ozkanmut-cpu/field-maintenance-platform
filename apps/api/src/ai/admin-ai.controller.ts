@@ -1,5 +1,7 @@
 import { Body, Controller, Get, NotFoundException, Post, Query } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { AuthenticatedUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
@@ -7,12 +9,14 @@ import { BacktestService } from './backtest.service';
 import { DataMaturityService } from './data-maturity.service';
 import { DataQualityEngineService } from './data-quality-engine.service';
 import { WhatIfDto } from './dto/what-if.dto';
+import { RecommendationFeedbackDto } from './dto/recommendation-feedback.dto';
 import { FeatureStoreService } from './feature-store.service';
 import { FeatureSnapshot } from './feature-store.types';
 import { PointDifficultyService } from './point-difficulty.service';
 import { LocationIntelligenceService } from './location-intelligence.service';
 import { PlanningEngineService } from './planning-engine.service';
 import { RegionHealthService } from './region-health.service';
+import { RecommendationFeedbackService } from './recommendation-feedback.service';
 import { RiskEngineService } from './risk-engine.service';
 import { SimilarWeekService } from './similar-week.service';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
@@ -38,6 +42,7 @@ export class AdminAiController {
     private readonly riskEngine: RiskEngineService,
     private readonly planningEngine: PlanningEngineService,
     private readonly regionHealth: RegionHealthService,
+    private readonly recommendationFeedback: RecommendationFeedbackService,
     private readonly similarWeeks: SimilarWeekService,
     private readonly whatIf: WhatIfService,
   ) {}
@@ -91,6 +96,8 @@ export class AdminAiController {
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
         assignedRouteEstimateMeters: null,
+        assignedRouteCoherenceRatio: null, assignedClusterCount: 0, assignedIsolatedPointCount: 0,
+        assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
       };
       const assessment = this.weeklyWorkload.assess(workload, baseline);
       return {
@@ -158,13 +165,27 @@ export class AdminAiController {
       equipmentKnownPointCount: 0, equipmentUnknownPointCount: 0,
       assignedCoolerCount: 0, assignedTowerCount: 0, assignedTapCount: 0, assignedSmarttapCount: 0,
       assignedLocatedPointCount: 0, assignedUnlocatedPointCount: 0,
-      assignedFieldP90RadiusMeters: null, assignedRouteEstimateMeters: null,
+      assignedFieldP90RadiusMeters: null, assignedRouteEstimateMeters: null, assignedRouteCoherenceRatio: null,
+      assignedClusterCount: 0, assignedIsolatedPointCount: 0, assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
     };
     const baseline = this.baselines.assessTechnician(history, dto.technicianId);
     const maturity = this.maturity.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
     const { technicianId: _technicianId, ...change } = dto;
     return this.whatIf.simulate(workload, baseline, riskMaturity, change);
+  }
+
+
+  @Roles(UserRole.ADMIN)
+  @Post('recommendation-feedback')
+  recordRecommendationFeedback(@CurrentUser() user: AuthenticatedUser, @Body() dto: RecommendationFeedbackDto) {
+    return this.recommendationFeedback.record(user.id, dto);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('recommendation-feedback')
+  recommendationFeedbackHistory(@Query('limit') limit?: string) {
+    return this.recommendationFeedback.list(limit ? Number(limit) : 100);
   }
 
 }

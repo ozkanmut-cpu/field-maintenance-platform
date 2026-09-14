@@ -5,6 +5,7 @@ import { businessWeek } from '../common/business-week';
 import { PrismaService } from '../prisma/prisma.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService, GeoPoint } from './geography.service';
+import { GeographyClusteringService } from './geography-clustering.service';
 
 export type TechnicianAssignedWeeklyWorkload = {
   technicianId: string;
@@ -22,6 +23,11 @@ export type TechnicianAssignedWeeklyWorkload = {
   assignedUnlocatedPointCount: number;
   assignedFieldP90RadiusMeters: number | null;
   assignedRouteEstimateMeters: number | null;
+  assignedRouteCoherenceRatio: number | null;
+  assignedClusterCount: number;
+  assignedIsolatedPointCount: number;
+  assignedFragmentationRatio: number | null;
+  workAreaCenterDistanceMeters: number | null;
 };
 
 @Injectable()
@@ -31,6 +37,7 @@ export class AssignedWeeklyWorkloadService {
     private readonly assignments: AssignmentsService,
     private readonly effectiveWorkload: EffectiveWorkloadService,
     private readonly geography: GeographyService,
+    private readonly clustering: GeographyClusteringService,
   ) {}
 
   async forWeek(asOf = new Date()) {
@@ -83,6 +90,11 @@ export class AssignedWeeklyWorkloadService {
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
         assignedRouteEstimateMeters: null,
+        assignedRouteCoherenceRatio: null,
+        assignedClusterCount: 0,
+        assignedIsolatedPointCount: 0,
+        assignedFragmentationRatio: null,
+        workAreaCenterDistanceMeters: null,
       };
       rows.set(technicianId, row);
       return row;
@@ -118,8 +130,23 @@ export class AssignedWeeklyWorkloadService {
 
     for (const row of rows.values()) {
       const points = locatedByTechnician.get(row.technicianId) ?? [];
-      row.assignedFieldP90RadiusMeters = points.length ? this.geography.summarize(points).p90RadiusMeters : null;
+      const summary = this.geography.summarize(points);
+      row.assignedFieldP90RadiusMeters = points.length ? summary.p90RadiusMeters : null;
       row.assignedRouteEstimateMeters = points.length ? this.geography.estimateOpenRouteMeters(points) : null;
+      row.assignedRouteCoherenceRatio = points.length ? this.geography.routeCoherenceRatio(points) : null;
+      if (points.length) {
+        const clustered = this.clustering.clusterAdaptive(points);
+        row.assignedClusterCount = clustered.clusterCount;
+        row.assignedIsolatedPointCount = clustered.isolatedPointCount;
+        row.assignedFragmentationRatio = clustered.fragmentationRatio;
+        const workArea = await this.geography.technicianWorkProfile(row.technicianId, 90, asOf);
+        if (summary.centerLatitude !== null && summary.centerLongitude !== null && workArea.centerLatitude !== null && workArea.centerLongitude !== null) {
+          row.workAreaCenterDistanceMeters = this.geography.distanceMeters(
+            { latitude: summary.centerLatitude, longitude: summary.centerLongitude },
+            { latitude: workArea.centerLatitude, longitude: workArea.centerLongitude },
+          );
+        }
+      }
     }
 
     return { weekKey: week.key, technicians: [...rows.values()].sort((a, b) => a.technicianId.localeCompare(b.technicianId)), unassigned };

@@ -85,6 +85,10 @@ export class FeatureStoreService {
       const technicianGeo = this.geography.summarize(technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
       const orderedGeoVisits = technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).sort((a, b) => a.performedAt.getTime() - b.performedAt.getTime());
       const fieldRouteDistanceMeters = orderedGeoVisits.slice(1).reduce((sum, visit, index) => sum + this.geography.distanceMeters({ latitude: Number(orderedGeoVisits[index].latitude), longitude: Number(orderedGeoVisits[index].longitude) }, { latitude: Number(visit.latitude), longitude: Number(visit.longitude) }), 0);
+      const uniqueGeoByPoint = new Map<string, { id: string; latitude: number; longitude: number }>();
+      for (const visit of orderedGeoVisits) if (!uniqueGeoByPoint.has(visit.pointId)) uniqueGeoByPoint.set(visit.pointId, { id: visit.pointId, latitude: Number(visit.latitude), longitude: Number(visit.longitude) });
+      const technicianGeoPoints = [...uniqueGeoByPoint.values()];
+      const technicianClusters = this.clustering.clusterAdaptive(technicianGeoPoints);
       const equipmentCompleteVisits = technicianVisits.filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null));
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
@@ -106,6 +110,8 @@ export class FeatureStoreService {
         fieldCenterLongitude: technicianGeo.centerLongitude,
         fieldP90RadiusMeters: technicianGeo.p90RadiusMeters,
         fieldRouteDistanceMeters: orderedGeoVisits.length >= 2 ? fieldRouteDistanceMeters : null,
+        routeCoherenceRatio: technicianGeoPoints.length >= 2 ? this.geography.routeCoherenceRatio(technicianGeoPoints) : null,
+        routeFragmentationRatio: technicianGeoPoints.length ? technicianClusters.fragmentationRatio : null,
         equipmentSnapshotCompleteVisitCount: equipmentCompleteVisits.length,
         equipmentSnapshotCoverage: technicianVisits.length ? equipmentCompleteVisits.length / technicianVisits.length : 0,
         servicedCoolerCount: equipmentCompleteVisits.reduce((sum, v) => sum + Number(v.coolerCount), 0),

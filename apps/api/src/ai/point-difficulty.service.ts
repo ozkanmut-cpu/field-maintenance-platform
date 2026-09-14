@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
 import { EquipmentProfileService } from './equipment-profile.service';
+import { DifficultyCalibrationService } from './difficulty-calibration.service';
 import { PointDifficultyProfile } from './point-difficulty.types';
 
 @Injectable()
 export class PointDifficultyService {
-  constructor(private readonly equipmentProfiles: EquipmentProfileService) {}
+  constructor(
+    private readonly equipmentProfiles: EquipmentProfileService,
+    private readonly calibration: DifficultyCalibrationService,
+  ) {}
   assess(history: FeatureSnapshot[]): PointDifficultyProfile[] {
     const ordered = [...history].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
     const ids = new Set(ordered.flatMap((s) => s.records.filter((r) => r.entityType === 'POINT').map((r) => r.entityId)));
@@ -48,7 +52,14 @@ export class PointDifficultyService {
     const adverse = attempts + missed;
     const favorable = visits + completed;
     const total = adverse + favorable;
-    const score = active && total > 0 ? Math.round((adverse / total) * 1000) / 10 : null;
+    const rawOutcomeScore = active && total > 0 ? Math.round((adverse / total) * 1000) / 10 : null;
+    const calibration = this.calibration.estimate(history, pointId);
+    const calibratedRate = active && total > 0 && calibration.estimatedRate !== null && calibration.effectiveEvidence > 0
+      ? (adverse + calibration.estimatedRate * calibration.effectiveEvidence) / (total + calibration.effectiveEvidence)
+      : active && total > 0 ? adverse / total : null;
+    const score = calibratedRate === null ? null : Math.round(calibratedRate * 1000) / 10;
+    if (calibration.estimatedRate === null) reasons.push(...calibration.reasonCodes);
+    else reasons.push('DIFFICULTY_SCORE_EMPIRICALLY_CALIBRATED');
     const outcomeConfidence = !active ? 'LOW' : history.length >= 12 && total >= 12 ? 'HIGH' : total >= 6 ? 'MEDIUM' : 'LOW';
     const confidence = !active ? 'LOW' : equipmentProfile.confidence === 'HIGH' ? outcomeConfidence : outcomeConfidence === 'HIGH' ? 'MEDIUM' : outcomeConfidence;
     return {
@@ -56,6 +67,8 @@ export class PointDifficultyService {
       state: active ? 'ACTIVE' : 'WARMING_UP',
       confidence,
       score,
+      rawOutcomeScore,
+      calibration,
       equipmentProfileComplete,
       equipmentProfile,
       equipment,

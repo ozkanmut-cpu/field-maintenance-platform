@@ -24,6 +24,8 @@ export type TechnicianWeeklyBaseline = {
   travel: {
     routeDistanceMeters: BaselineBand;
     fieldP90RadiusMeters: BaselineBand;
+    routeCoherenceRatio: BaselineBand;
+    fragmentationRatio: BaselineBand;
   };
   context: { uniqueVisitedPoints: BaselineBand };
   reasons: string[];

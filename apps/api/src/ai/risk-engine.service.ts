@@ -21,7 +21,8 @@ export class RiskEngineService {
     if (baseline.state !== 'ACTIVE') reasons.push('TECHNICIAN_BASELINE_NOT_READY');
 
     const serviceValues = Object.values(workload.servicePressure);
-    const pressureEvidenceKnown = serviceValues.some((value) => value !== 'UNKNOWN') || workload.travelPressure.fieldP90RadiusMeters !== 'UNKNOWN';
+    const travelValues = Object.values(workload.travelPressure);
+    const pressureEvidenceKnown = serviceValues.some((value) => value !== 'UNKNOWN') || travelValues.some((value) => value !== 'UNKNOWN');
     if (!pressureEvidenceKnown) reasons.push('WORKLOAD_PRESSURE_UNKNOWN');
 
     if (reasons.length) {
@@ -47,6 +48,15 @@ export class RiskEngineService {
     const route = workload.travelPressure.routeDistanceMeters;
     if (route === 'ABOVE_P90') signals.push({ code: 'ROUTE_BURDEN_ABOVE_P90', severity: 'HIGH', evidence: { band: route, assignedRouteEstimateMeters: assigned.assignedRouteEstimateMeters } });
     else if (route === 'ABOVE_P75') signals.push({ code: 'ROUTE_BURDEN_ABOVE_P75', severity: 'MEDIUM', evidence: { band: route, assignedRouteEstimateMeters: assigned.assignedRouteEstimateMeters } });
+    const coherence = workload.travelPressure.routeCoherenceRatio;
+    if (coherence === 'ABOVE_P90') signals.push({ code: 'ROUTE_COHERENCE_POOR', severity: 'HIGH', evidence: { band: coherence, ratio: assigned.assignedRouteCoherenceRatio } });
+    else if (coherence === 'ABOVE_P75') signals.push({ code: 'ROUTE_COHERENCE_DEGRADED', severity: 'MEDIUM', evidence: { band: coherence, ratio: assigned.assignedRouteCoherenceRatio } });
+    const fragmentation = workload.travelPressure.fragmentationRatio;
+    if (fragmentation === 'ABOVE_P90') signals.push({ code: 'ROUTE_FRAGMENTATION_HIGH', severity: 'HIGH', evidence: { band: fragmentation, fragmentationRatio: assigned.assignedFragmentationRatio } });
+    else if (fragmentation === 'ABOVE_P75') signals.push({ code: 'ROUTE_FRAGMENTATION_ELEVATED', severity: 'MEDIUM', evidence: { band: fragmentation, fragmentationRatio: assigned.assignedFragmentationRatio } });
+    const workArea = workload.travelPressure.workAreaProximity;
+    if (workArea === 'ABOVE_P90') signals.push({ code: 'WORK_AREA_DEVIATION_HIGH', severity: 'HIGH', evidence: { band: workArea, centerDistanceMeters: assigned.workAreaCenterDistanceMeters } });
+    else if (workArea === 'ABOVE_P75') signals.push({ code: 'WORK_AREA_DEVIATION_ELEVATED', severity: 'MEDIUM', evidence: { band: workArea, centerDistanceMeters: assigned.workAreaCenterDistanceMeters } });
 
     const carryover = assigned.standardCarryover + assigned.smartcleanCarryover;
     if (carryover > 0) {

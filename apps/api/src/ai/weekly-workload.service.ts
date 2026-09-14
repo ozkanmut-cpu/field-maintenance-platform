@@ -39,6 +39,15 @@ export class WeeklyWorkloadService {
     const routePressure = locationUsable && routeEstimate !== null
       ? this.pressure(routeEstimate, baseline.travel.routeDistanceMeters)
       : 'UNKNOWN';
+    const coherencePressure = locationUsable && assigned.assignedRouteCoherenceRatio !== null
+      ? this.pressure(assigned.assignedRouteCoherenceRatio, baseline.travel.routeCoherenceRatio)
+      : 'UNKNOWN';
+    const fragmentationPressure = locationUsable && assigned.assignedFragmentationRatio !== null
+      ? this.pressure(assigned.assignedFragmentationRatio, baseline.travel.fragmentationRatio)
+      : 'UNKNOWN';
+    const workAreaPressure = locationUsable && assigned.workAreaCenterDistanceMeters !== null
+      ? this.pressure(assigned.workAreaCenterDistanceMeters, baseline.travel.fieldP90RadiusMeters)
+      : 'UNKNOWN';
     if (assignedWorkCount > 0 && routeEstimate === null) reasons.push('ASSIGNED_ROUTE_ESTIMATE_NOT_AVAILABLE');
 
     return {
@@ -56,6 +65,9 @@ export class WeeklyWorkloadService {
       travelPressure: {
         routeDistanceMeters: routePressure,
         fieldP90RadiusMeters: fieldRadiusPressure,
+        routeCoherenceRatio: coherencePressure,
+        fragmentationRatio: fragmentationPressure,
+        workAreaProximity: workAreaPressure,
       },
       reasons: [...new Set(reasons)],
     };

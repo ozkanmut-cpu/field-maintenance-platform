@@ -21,7 +21,8 @@ export class PlanningEngineService {
     }
 
     const recommendations = technicians.flatMap((input) => this.forTechnician(input))
-      .sort((a, b) => b.priority - a.priority || a.technicianId.localeCompare(b.technicianId) || a.type.localeCompare(b.type));
+      .sort((a, b) => this.compareRank(a, b))
+      .map((item, index, all) => ({ ...item, priority: Math.max(1, 100 - index) }));
     return { engineVersion: AI_ENGINE_VERSION, state: 'READY', recommendations, reasons: [] };
   }
 
@@ -30,34 +31,62 @@ export class PlanningEngineService {
     const result: PlanningRecommendation[] = [];
     const carryover = assigned.standardCarryover + assigned.smartcleanCarryover;
     if (carryover > 0) {
-      result.push(this.recommend('PRIORITIZE_CARRYOVER', input, carryover >= 3 ? 90 : 70, ['CARRYOVER_PRESENT'], { carryover }));
+      result.push(this.recommend('PRIORITIZE_CARRYOVER', input, 0, ['CARRYOVER_PRESENT'], { carryover }));
     }
 
     if (risk.state === 'READY' && (risk.severity === 'HIGH' || risk.severity === 'MEDIUM')) {
-      result.push(this.recommend('REVIEW_WORKLOAD_BALANCE', input, risk.severity === 'HIGH' ? 95 : 75, risk.reasons, {
+      result.push(this.recommend('REVIEW_WORKLOAD_BALANCE', input, 0, risk.reasons, {
         standardCurrent: assigned.standardCurrent,
         smartcleanCurrent: assigned.smartcleanCurrent,
+        carryover,
+        totalEquipment: assigned.assignedCoolerCount + assigned.assignedTowerCount + assigned.assignedTapCount + assigned.assignedSmarttapCount,
+        servicePressureRank: this.maxPressureRank(Object.values(workload.servicePressure)),
+        travelPressureRank: this.maxPressureRank(Object.values(workload.travelPressure)),
+        fragmentationRatio: assigned.assignedFragmentationRatio,
       }));
     }
 
     const route = workload.travelPressure.routeDistanceMeters;
     const radius = workload.travelPressure.fieldP90RadiusMeters;
-    if (route === 'ABOVE_P90' || route === 'ABOVE_P75' || radius === 'ABOVE_P90' || radius === 'ABOVE_P75') {
-      result.push(this.recommend('REVIEW_ROUTE', input, route === 'ABOVE_P90' || radius === 'ABOVE_P90' ? 85 : 65, ['TRAVEL_PRESSURE_HIGH'], {
-        routeBand: route,
-        radiusBand: radius,
+    const travelPressureRank = this.maxPressureRank(Object.values(workload.travelPressure));
+    if (travelPressureRank >= 1) {
+      result.push(this.recommend('REVIEW_ROUTE', input, 0, ['TRAVEL_PRESSURE_HIGH'], {
+        routeBand: route, radiusBand: radius, travelPressureRank,
         routeEstimateMeters: assigned.assignedRouteEstimateMeters,
-        fieldP90RadiusMeters: assigned.assignedFieldP90RadiusMeters,
+        routeCoherenceRatio: assigned.assignedRouteCoherenceRatio,
+        fragmentationRatio: assigned.assignedFragmentationRatio,
+        workAreaCenterDistanceMeters: assigned.workAreaCenterDistanceMeters,
       }));
     }
 
     if (assigned.equipmentUnknownPointCount > 0 || assigned.assignedUnlocatedPointCount > 0) {
-      result.push(this.recommend('FIX_DATA_QUALITY', input, 60, ['ASSIGNED_DATA_QUALITY_INCOMPLETE'], {
+      result.push(this.recommend('FIX_DATA_QUALITY', input, 0, ['ASSIGNED_DATA_QUALITY_INCOMPLETE'], {
         equipmentUnknownPointCount: assigned.equipmentUnknownPointCount,
         unlocatedPointCount: assigned.assignedUnlocatedPointCount,
       }));
     }
     return result;
+  }
+
+  private compareRank(a: PlanningRecommendation, b: PlanningRecommendation) {
+    const av = this.rankVector(a), bv = this.rankVector(b);
+    for (let i = 0; i < av.length; i += 1) if (av[i] !== bv[i]) return bv[i] - av[i];
+    return a.technicianId.localeCompare(b.technicianId) || a.type.localeCompare(b.type);
+  }
+
+  private rankVector(item: PlanningRecommendation) {
+    const severity = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3 }[item.severity];
+    const type = { REVIEW_WORKLOAD_BALANCE: 4, PRIORITIZE_CARRYOVER: 3, REVIEW_ROUTE: 2, FIX_DATA_QUALITY: 1 }[item.type];
+    const service = Number(item.evidence.servicePressureRank ?? 0);
+    const travel = Number(item.evidence.travelPressureRank ?? 0);
+    const carryover = Number(item.evidence.carryover ?? 0);
+    const equipment = Number(item.evidence.totalEquipment ?? 0);
+    return [severity, Math.max(service, travel), type, carryover, equipment];
+  }
+
+  private maxPressureRank(values: Array<'UNKNOWN' | 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90'>) {
+    const rank = { UNKNOWN: 0, WITHIN_BASELINE: 0, ABOVE_P75: 1, ABOVE_P90: 2 } as const;
+    return values.reduce((max, value) => Math.max(max, rank[value]), 0);
   }
 
   private recommend(type: PlanningRecommendationType, input: PlanningTechnicianInput, priority: number, reasonCodes: string[], evidence: PlanningRecommendation['evidence']): PlanningRecommendation {
