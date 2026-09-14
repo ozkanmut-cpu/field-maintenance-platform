@@ -38,8 +38,9 @@ jobs:
         run: |
           node -e "const r=require('./node_modules/react/package.json').version; const rn=require('./node_modules/react-native/package.json').version; console.log('react='+r+' react-native='+rn); if(r!=='19.1.0') process.exit(1); if(rn!=='0.81.4') process.exit(1);"
 
-      - name: Replace sprite icons with vector icons
+      - name: Apply mobile build patches
         run: |
+          node apps/mobile/scripts/patch-location-confirmation.cjs
           node apps/mobile/scripts/use-vector-icons.cjs
           npx tsc -p apps/mobile/tsconfig.json --noEmit
           if grep -q "icons-sprite.png" apps/mobile/src/CorporateApp.tsx; then
