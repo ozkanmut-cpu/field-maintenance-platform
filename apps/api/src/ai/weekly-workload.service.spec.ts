@@ -6,6 +6,16 @@ import { WeeklyWorkloadService } from './weekly-workload.service';
 
 const service = new WeeklyWorkloadService();
 
+const calibration:any = {
+  confidence:'HIGH',
+  equipment:[
+    { code:'COOLER_RELATIVE_WORKLOAD', relativeImpact:0.15, confidence:'HIGH' },
+    { code:'TOWER_RELATIVE_WORKLOAD', relativeImpact:0.20, confidence:'HIGH' },
+    { code:'TAP_RELATIVE_WORKLOAD', relativeImpact:0.10, confidence:'HIGH' },
+    { code:'SMARTTAP_RELATIVE_WORKLOAD', relativeImpact:0.05, confidence:'HIGH' },
+  ],
+};
+
 function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): TechnicianAssignedWeeklyWorkload {
   return {
     technicianId: 't1',
@@ -19,9 +29,6 @@ function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): Technic
     assignedTowerCount: 0,
     assignedTapCount: 0,
     assignedSmarttapCount: 0,
-    assignedServiceEffortMinMinutes: 0,
-    assignedServiceEffortMaxMinutes: 0,
-    assignedServiceEffortMidpointMinutes: 0,
     assignedLocatedPointCount: 0,
     assignedUnlocatedPointCount: 0,
     assignedFieldP90RadiusMeters: null,
@@ -49,7 +56,6 @@ function baseline(state: 'WARMING_UP' | 'ACTIVE'): TechnicianWeeklyBaseline {
       towerCount: { median: 8, p75: 10, p90: 12 },
       tapCount: { median: 6, p75: 8, p90: 10 },
       smarttapCount: { median: 2, p75: 3, p90: 4 },
-      estimatedServiceEffortMidpointMinutes: { median: 180, p75: 225, p90: 270 },
     },
     travel: {
       routeDistanceMeters: { median: 10000, p75: 15000, p90: 20000 },
@@ -72,14 +78,12 @@ test('compares complete assigned equipment and geography against learned baselin
       assignedTowerCount: 11,
       assignedTapCount: 7,
       assignedSmarttapCount: 3,
-      assignedServiceEffortMinMinutes: 165,
-      assignedServiceEffortMaxMinutes: 330,
-      assignedServiceEffortMidpointMinutes: 247.5,
       assignedLocatedPointCount: 5,
       assignedFieldP90RadiusMeters: 8000,
       assignedRouteEstimateMeters: 18000,
     }),
     baseline('ACTIVE'),
+    calibration,
   );
 
   assert.equal(result.evidenceState, 'READY');
@@ -87,7 +91,8 @@ test('compares complete assigned equipment and geography against learned baselin
   assert.equal(result.servicePressure.towerCount, 'ABOVE_P75');
   assert.equal(result.servicePressure.tapCount, 'WITHIN_BASELINE');
   assert.equal(result.servicePressure.smarttapCount, 'WITHIN_BASELINE');
-  assert.equal(result.servicePressure.estimatedServiceEffortMidpointMinutes, 'ABOVE_P75');
+  assert.equal(result.serviceWorkload.state, 'READY');
+  assert.ok((result.serviceWorkload.index ?? 0) > 100);
   assert.equal(result.travelPressure.fieldP90RadiusMeters, 'ABOVE_P75');
   assert.equal(result.travelPressure.routeDistanceMeters, 'ABOVE_P75');
   assert.deepEqual(result.reasons, []);

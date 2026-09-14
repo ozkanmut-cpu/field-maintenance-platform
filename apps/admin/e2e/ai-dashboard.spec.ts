@@ -4,8 +4,8 @@ const dashboard = {
   weeks: 12,
   currentWeek: '2026-W37',
   generatedAt: '2026-09-14T12:00:00.000Z',
-  engineVersion: 'field-stat-v1.1',
-  featureSchemaVersion: '2026-09-14.1',
+  engineVersion: 'field-stat-v1.2',
+  featureSchemaVersion: '2026-09-14.2',
   maturity: {
     overallState: 'ACTIVE', overallScore: 82,
     evidence: { weeks: 12, visits: 120, attempts: 8, activePoints: 40, locatedPoints: 38, locationCoverage: 0.95, equipmentProfileCoverage: 0.9 },
@@ -38,7 +38,7 @@ test('AI dashboard renders through the real browser shell and exports KPI CSV', 
   await expect(page.getByText('AI olgunluk skoru')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'AI Çıktı Dağılım Drift' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Geçmiş Risk Backtest' })).toBeVisible();
-  await expect(page.getByText('field-stat-v1.1')).toBeVisible();
+  await expect(page.getByText('field-stat-v1.2')).toBeVisible();
 
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'KPI CSV' }).click();

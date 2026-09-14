@@ -22,7 +22,6 @@ export type TechnicianWeeklyBaseline = {
     towerCount: BaselineBand;
     tapCount: BaselineBand;
     smarttapCount: BaselineBand;
-    estimatedServiceEffortMidpointMinutes: BaselineBand;
   };
   travel: {
     routeDistanceMeters: BaselineBand;

@@ -3,12 +3,15 @@ import { TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.ser
 import { BaselineBand, TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { WeeklyWorkloadAssessment, WorkloadPressureBand } from './weekly-workload.types';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
+import { WorkloadCalibrationAssessment } from './workload-calibration.service';
+import { buildServiceWorkloadIndex } from './service-workload-index';
 
 @Injectable()
 export class WeeklyWorkloadService {
   assess(
     assigned: TechnicianAssignedWeeklyWorkload,
     baseline: TechnicianWeeklyBaseline,
+    calibration?: WorkloadCalibrationAssessment,
   ): WeeklyWorkloadAssessment {
     const evidenceReady = baseline.state === 'ACTIVE';
     const reasons = [...baseline.reasons];
@@ -29,8 +32,19 @@ export class WeeklyWorkloadService {
       towerCount: equipmentUsable ? this.pressure(assigned.assignedTowerCount, baseline.service.towerCount) : 'UNKNOWN' as WorkloadPressureBand,
       tapCount: equipmentUsable ? this.pressure(assigned.assignedTapCount, baseline.service.tapCount) : 'UNKNOWN' as WorkloadPressureBand,
       smarttapCount: equipmentUsable ? this.pressure(assigned.assignedSmarttapCount, baseline.service.smarttapCount) : 'UNKNOWN' as WorkloadPressureBand,
-      estimatedServiceEffortMidpointMinutes: equipmentUsable ? this.pressure(assigned.assignedServiceEffortMidpointMinutes, baseline.service.estimatedServiceEffortMidpointMinutes) : 'UNKNOWN' as WorkloadPressureBand,
     };
+
+    const serviceWorkload = equipmentUsable && calibration
+      ? buildServiceWorkloadIndex(
+          { coolerCount: assigned.assignedCoolerCount, towerCount: assigned.assignedTowerCount, tapCount: assigned.assignedTapCount, smarttapCount: assigned.assignedSmarttapCount },
+          { coolerCount: baseline.service.coolerCount.median, towerCount: baseline.service.towerCount.median, tapCount: baseline.service.tapCount.median, smarttapCount: baseline.service.smarttapCount.median },
+          calibration.equipment, calibration.confidence,
+        )
+      : buildServiceWorkloadIndex(
+          { coolerCount: null, towerCount: null, tapCount: null, smarttapCount: null },
+          { coolerCount: null, towerCount: null, tapCount: null, smarttapCount: null }, [], 'LOW',
+        );
+    if (equipmentUsable && (!calibration || serviceWorkload.state !== 'READY')) reasons.push('SERVICE_WORKLOAD_MODEL_WARMING_UP');
 
     const assignedRadius = assignedWorkCount === 0 ? 0 : assigned.assignedFieldP90RadiusMeters;
     const fieldRadiusPressure = locationUsable && assignedRadius !== null
@@ -68,6 +82,7 @@ export class WeeklyWorkloadService {
         smartcleanCarryover: assigned.smartcleanCarryover,
       },
       servicePressure,
+      serviceWorkload,
       travelPressure: {
         routeDistanceMeters: routePressure,
         fieldP90RadiusMeters: fieldRadiusPressure,

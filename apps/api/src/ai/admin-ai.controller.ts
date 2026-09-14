@@ -4,7 +4,7 @@ import { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
+import { AssignedWeeklyWorkloadService, TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.service';
 import { AiSummaryService } from './ai-summary.service';
 import { BacktestService } from './backtest.service';
 import { DataMaturityService } from './data-maturity.service';
@@ -89,13 +89,14 @@ export class AdminAiController {
 
     const maturity = this.maturity.assess(history);
     const dataQuality = this.dataQuality.assess(history);
+    const workloadCalibration = this.calibration.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
     const recommendationMaturity = maturity.capabilities.find((item) => item.capability === 'RECOMMENDATION');
     const baselineByTechnician = new Map(this.baselines.assess(history).map((item) => [item.technicianId, item]));
     const workloadByTechnician = new Map(assigned.technicians.map((item) => [item.technicianId, item]));
     const technicianRows = technicians.map((technician) => {
       const baseline = baselineByTechnician.get(technician.id) ?? this.baselines.assessTechnician(history, technician.id);
-      const workload = workloadByTechnician.get(technician.id) ?? {
+      const workload: TechnicianAssignedWeeklyWorkload = workloadByTechnician.get(technician.id) ?? {
         technicianId: technician.id,
         standardCurrent: 0,
         standardCarryover: 0,
@@ -107,7 +108,6 @@ export class AdminAiController {
         assignedTowerCount: 0,
         assignedTapCount: 0,
         assignedSmarttapCount: 0,
-        assignedServiceEffortMinMinutes: 0, assignedServiceEffortMaxMinutes: 0, assignedServiceEffortMidpointMinutes: 0,
         assignedLocatedPointCount: 0,
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
@@ -115,7 +115,7 @@ export class AdminAiController {
         assignedRouteCoherenceRatio: null, assignedClusterCount: 0, assignedIsolatedPointCount: 0,
         assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
       };
-      const assessment = this.weeklyWorkload.assess(workload, baseline);
+      const assessment = this.weeklyWorkload.assess(workload, baseline, workloadCalibration);
       return {
         ...technician,
         baseline,
@@ -177,7 +177,7 @@ export class AdminAiController {
       regionHealth,
       summaries,
       trends: this.trends.assess(history),
-      calibration: this.calibration.assess(history),
+      calibration: workloadCalibration,
       telemetry: this.telemetry.snapshot(),
       outputDistributionDrift,
       dataQuality,
@@ -221,7 +221,6 @@ export class AdminAiController {
       standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0,
       equipmentKnownPointCount: 0, equipmentUnknownPointCount: 0,
       assignedCoolerCount: 0, assignedTowerCount: 0, assignedTapCount: 0, assignedSmarttapCount: 0,
-      assignedServiceEffortMinMinutes: 0, assignedServiceEffortMaxMinutes: 0, assignedServiceEffortMidpointMinutes: 0,
       assignedLocatedPointCount: 0, assignedUnlocatedPointCount: 0,
       assignedFieldP90RadiusMeters: null, assignedRouteEstimateMeters: null, assignedRouteCoherenceRatio: null,
       assignedClusterCount: 0, assignedIsolatedPointCount: 0, assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
@@ -229,6 +228,7 @@ export class AdminAiController {
     const baseline = this.baselines.assessTechnician(history, dto.technicianId);
     const maturity = this.maturity.assess(history);
     const dataQuality = this.dataQuality.assess(history);
+    const workloadCalibration = this.calibration.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
     const { technicianId: _technicianId, targetTechnicianId: _targetTechnicianId, regionId: _regionId, ...change } = dto;
     if (dto.regionId) {
@@ -252,22 +252,21 @@ export class AdminAiController {
       const targetId = dto.targetTechnicianId ?? dto.technicianId;
       const targetWorkload = assigned.technicians.find((item) => item.technicianId === targetId) ?? { ...workload, technicianId: targetId };
       const targetBaseline = this.baselines.assessTechnician(history, targetId);
-      return this.whatIf.simulateRegionPlacement(vector, typeof f.assignedTechnicianId === 'string' ? f.assignedTechnicianId : null, targetWorkload, targetBaseline, riskMaturity, dataQuality);
+      return this.whatIf.simulateRegionPlacement(vector, typeof f.assignedTechnicianId === 'string' ? f.assignedTechnicianId : null, targetWorkload, targetBaseline, riskMaturity, dataQuality, workloadCalibration);
     }
-    if (!dto.targetTechnicianId) return this.whatIf.simulate(workload, baseline, riskMaturity, change, dataQuality);
+    if (!dto.targetTechnicianId) return this.whatIf.simulate(workload, baseline, riskMaturity, change, dataQuality, workloadCalibration);
 
     const targetWorkload = assigned.technicians.find((item) => item.technicianId === dto.targetTechnicianId) ?? {
       technicianId: dto.targetTechnicianId,
       standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0,
       equipmentKnownPointCount: 0, equipmentUnknownPointCount: 0,
       assignedCoolerCount: 0, assignedTowerCount: 0, assignedTapCount: 0, assignedSmarttapCount: 0,
-      assignedServiceEffortMinMinutes: 0, assignedServiceEffortMaxMinutes: 0, assignedServiceEffortMidpointMinutes: 0,
       assignedLocatedPointCount: 0, assignedUnlocatedPointCount: 0,
       assignedFieldP90RadiusMeters: null, assignedRouteEstimateMeters: null, assignedRouteCoherenceRatio: null,
       assignedClusterCount: 0, assignedIsolatedPointCount: 0, assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
     };
     const targetBaseline = this.baselines.assessTechnician(history, dto.targetTechnicianId);
-    return this.whatIf.comparePlacement(workload, baseline, targetWorkload, targetBaseline, riskMaturity, change, dataQuality);
+    return this.whatIf.comparePlacement(workload, baseline, targetWorkload, targetBaseline, riskMaturity, change, dataQuality, workloadCalibration);
   }
 
 

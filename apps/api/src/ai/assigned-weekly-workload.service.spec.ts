@@ -71,9 +71,6 @@ test('aggregates complete equipment profiles once per assigned point and preserv
   assert.equal(row.assignedTowerCount, 2);
   assert.equal(row.assignedTapCount, 4);
   assert.equal(row.assignedSmarttapCount, 1);
-  assert.equal(row.assignedServiceEffortMinMinutes, 30);
-  assert.equal(row.assignedServiceEffortMaxMinutes, 60);
-  assert.equal(row.assignedServiceEffortMidpointMinutes, 45);
 });
 
 test('counts workload without an effective assignment as unassigned', async () => {

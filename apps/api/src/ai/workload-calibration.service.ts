@@ -25,6 +25,7 @@ export type WorkloadCalibrationAssessment = {
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
   maturityState: 'WARMING_UP' | 'ACTIVE';
   equipment: CalibrationImpact[];
+  equipmentReference: { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null };
   travel: CalibrationImpact[];
   drift: CalibrationDrift[];
   reasonCodes: string[];
@@ -51,6 +52,12 @@ export class WorkloadCalibrationService {
       this.numericImpact(rows, 'tap', 'TAP_RELATIVE_WORKLOAD'),
       this.numericImpact(rows, 'smarttap', 'SMARTTAP_RELATIVE_WORKLOAD'),
     ];
+    const equipmentReference = {
+      coolerCount: this.median(rows.map((row) => row.cooler)),
+      towerCount: this.median(rows.map((row) => row.tower)),
+      tapCount: this.median(rows.map((row) => row.tap)),
+      smarttapCount: this.median(rows.map((row) => row.smarttap)),
+    };
     const travel = [
       this.numericImpact(rows, 'separation', 'GEOGRAPHIC_SEPARATION_BURDEN'),
       this.booleanImpact(rows, 'isolated', 'GEOGRAPHIC_ISOLATION_BURDEN'),
@@ -76,7 +83,7 @@ export class WorkloadCalibrationService {
     if (evidence < 40) reasonCodes.push('CALIBRATION_EVIDENCE_LOW');
     if (drift.some((item) => item.state === 'DRIFT')) reasonCodes.push('CALIBRATION_DRIFT_DETECTED');
     if (!reasonCodes.length) reasonCodes.push('CALIBRATION_WITHIN_STABLE_BANDS');
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, confidence, maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE', equipment, travel, drift, reasonCodes };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, confidence, maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE', equipment, equipmentReference, travel, drift, reasonCodes };
   }
 
   private rows(history: FeatureSnapshot[]): CalibrationRow[] {
@@ -133,6 +140,11 @@ export class WorkloadCalibrationService {
     const index = (sorted.length - 1) * p;
     const lo = Math.floor(index), hi = Math.ceil(index);
     return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo);
+  }
+
+  private median(values: number[]) {
+    const sorted = [...values].sort((a, b) => a - b);
+    return this.percentile(sorted, 0.5);
   }
 
   private optional(value: unknown) { return typeof value === 'number' && Number.isFinite(value) ? value : null; }

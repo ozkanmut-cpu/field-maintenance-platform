@@ -31,8 +31,9 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 ## P0 — Mevcut AI temelini üretim seviyesine çıkar
 
-- [x] Point Difficulty Score'u ekipman + beklenen servis emeği + geçmiş sonuç + coğrafya ile yeniden kalibre et
-  - [x] Servis emeği kullanıcıdan başlangıç/bitiş istemeden kule başına 15–30 dk normatif aralık olarak hesaplanır; ölçülmüş süre diye sunulmaz.
+- [x] Point Difficulty Score'u ekipman karması + öğrenilmiş servis iş yükü + geçmiş sonuç + coğrafya ile yeniden kalibre et
+  - [x] Dakika tahmini kaldırıldı; soğutucu/kule/musluk/SmartTap etkileri gözlenen sonuçlardan öğrenilen göreli Service Workload Index ile modellenir. Yeterli veri yoksa index üretilmez (WARMING_UP).
+  - [x] Kullanıcıdan bakım başlangıç/bitiş girişi istenmez; bakım ekranı zamanı gerçek servis süresi kabul edilmez.
   - [x] Ekipman karması + outcome + coğrafya empirical cohort calibration ile birlikte kullanılır.
 - [x] Equipment-profile confidence: completeness, verification age, verification history
 - [x] Equipment-profile stability/change-rate feature per point
@@ -135,7 +136,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 AI V1 tamamlanmış sayılabilmesi için:
 
 - [ ] Point difficulty, technician capacity ve travel burden üretimde birlikte çalışmalı
-  - [x] Production veritabanıyla read-only dry-run: service effort + travel evidence + point-difficulty pipeline aynı dashboard hesaplamasında birlikte çalıştı.
+  - [x] Production veritabanıyla read-only dry-run: equipment mix + travel evidence + point-difficulty pipeline aynı dashboard hesaplamasında birlikte çalıştı; süre uydurulmadı.
   - [ ] Canlı API/Admin deploy sonrası health + authenticated AI Dashboard doğrulaması.
 - [x] Risk Engine gerçek operasyonel risk skoru üretmeli
 - [x] Planning Engine açıklanabilir öneriler üretmeli

@@ -26,6 +26,8 @@ test('learns relative equipment and travel impact from observed outcomes', () =>
   assert.ok((cooler.relativeImpact ?? 0) > 0);
   assert.ok((travel.relativeImpact ?? 0) > 0);
   assert.equal(result.confidence, 'MEDIUM');
+  assert.equal(result.equipmentReference.coolerCount, 5);
+  assert.equal(result.equipmentReference.towerCount, 2.5);
 });
 test('flags calibration drift when recent impact moves materially', () => {
   const quiet = [1,2,3,4].map((week) => snapshot(week, [

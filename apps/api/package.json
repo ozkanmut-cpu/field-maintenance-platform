@@ -37,7 +37,7 @@
     "test:similar-week": "node --test --require ts-node/register src/ai/similar-week.service.spec.ts",
     "test:what-if": "node --test --require ts-node/register src/ai/what-if.service.spec.ts",
     "test:workload-calibration": "node --test --require ts-node/register src/ai/workload-calibration.service.spec.ts",
-    "test:ai": "npm run test:rut-schedule && npm run test:effective-workload && npm run test:assigned-workload && npm run test:weekly-workload && npm run test:geography && npm run test:geography-clustering && npm run test:business-week && npm run test:data-maturity && npm run test:ai-output-policy && npm run test:ai-telemetry && npm run test:ai-distribution-drift && npm run test:cold-start && npm run test:point-difficulty && npm run test:difficulty-calibration && npm run test:technician-baseline && npm run test:point-address-discovery && npm run test:risk-engine && npm run test:location-intelligence && npm run test:identity-confidence && npm run test:data-quality-engine && npm run test:backtest && npm run test:region-health && npm run test:trends && npm run test:equipment-profile && npm run test:planning-engine && npm run test:recommendation-feedback && npm run test:similar-week && npm run test:what-if && npm run test:ai-summary && npm run test:feature-store && npm run test:workload-calibration && npm run test:ai-kpi-export && npm run test:ai-module && npm run test:ai-output-contract && npm run test:ai-contract",
+    "test:ai": "npm run test:rut-schedule && npm run test:effective-workload && npm run test:assigned-workload && npm run test:weekly-workload && npm run test:geography && npm run test:geography-clustering && npm run test:business-week && npm run test:data-maturity && npm run test:ai-output-policy && npm run test:ai-telemetry && npm run test:ai-distribution-drift && npm run test:cold-start && npm run test:point-difficulty && npm run test:difficulty-calibration && npm run test:technician-baseline && npm run test:point-address-discovery && npm run test:risk-engine && npm run test:location-intelligence && npm run test:identity-confidence && npm run test:data-quality-engine && npm run test:backtest && npm run test:region-health && npm run test:trends && npm run test:equipment-profile && npm run test:planning-engine && npm run test:recommendation-feedback && npm run test:similar-week && npm run test:what-if && npm run test:ai-summary && npm run test:feature-store && npm run test:workload-calibration && npm run test:service-workload-index && npm run test:ai-kpi-export && npm run test:ai-module && npm run test:ai-output-contract && npm run test:ai-contract",
     "test:ai-summary": "node --test --require ts-node/register src/ai/ai-summary.service.spec.ts",
     "test:feature-store": "node --test --require ts-node/register src/ai/feature-store.service.spec.ts",
     "test:ai-contract": "node --test --require ts-node/register src/ai/admin-ai.controller.contract.spec.ts",
@@ -46,7 +46,8 @@
     "test:ai-distribution-drift": "node --test --require ts-node/register src/ai/ai-distribution-drift.service.spec.ts",
     "test:ai-kpi-export": "node --test --require ts-node/register src/ai/ai-kpi-export.service.spec.ts",
     "test:ai-output-contract": "node --test --require ts-node/register src/ai/ai-output-contract.spec.ts",
-    "test:ai-module": "node --test --require ts-node/register src/ai/ai.module.spec.ts"
+    "test:ai-module": "node --test --require ts-node/register src/ai/ai.module.spec.ts",
+    "test:service-workload-index": "node --test --require ts-node/register src/ai/service-workload-index.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

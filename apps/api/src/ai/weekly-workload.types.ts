@@ -1,4 +1,5 @@
 import { TechnicianBaselineConfidence, TechnicianBaselineState } from './technician-baseline.types';
+import { ServiceWorkloadIndex } from './service-workload-index';
 
 export type WorkloadEvidenceState = 'INSUFFICIENT_DATA' | 'READY';
 export type WorkloadPressureBand = 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90' | 'UNKNOWN';
@@ -25,8 +26,8 @@ export type WeeklyWorkloadAssessment = {
     towerCount: WorkloadPressureBand;
     tapCount: WorkloadPressureBand;
     smarttapCount: WorkloadPressureBand;
-    estimatedServiceEffortMidpointMinutes: WorkloadPressureBand;
   };
+  serviceWorkload: ServiceWorkloadIndex;
   travelPressure: {
     routeDistanceMeters: WorkloadPressureBand;
     fieldP90RadiusMeters: WorkloadPressureBand;

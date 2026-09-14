@@ -8,7 +8,7 @@ test('AI dashboard keeps the production backend contract and core decision-suppo
   assert.match(source, /\/api\/backend\/ai\/admin-dashboard\?weeks=12/);
   assert.match(source, /\/api\/backend\/ai\/kpi-report\?weeks=12/);
   for (const label of [
-    'Sanal İstatistikçi', 'Teknisyen Kapasitesi', 'AI Tarihsel Karşılaştırma',
+    'Sanal İstatistikçi', 'Teknisyen Kapasitesi', 'Servis iş yükü indeksi', 'AI Tarihsel Karşılaştırma',
     'Bölge Sağlığı', 'Geçmiş Risk Backtest', 'Veri Kalitesi Öncelik Kuyruğu',
     'Kalibrasyon ve Drift', 'AI Çalışma Sağlığı', 'AI Çıktı Dağılım Drift', 'Benzer Haftalar', 'AI Planlama Önerileri', 'Nokta Zorluk Profili',
   ]) assert.ok(source.includes(label), `missing dashboard section: ${label}`);

@@ -6,7 +6,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService, GeoPoint } from './geography.service';
 import { GeographyClusteringService } from './geography-clustering.service';
-import { estimateServiceEffort } from './service-effort';
 
 export type TechnicianAssignedWeeklyWorkload = {
   technicianId: string;
@@ -20,9 +19,6 @@ export type TechnicianAssignedWeeklyWorkload = {
   assignedTowerCount: number;
   assignedTapCount: number;
   assignedSmarttapCount: number;
-  assignedServiceEffortMinMinutes: number;
-  assignedServiceEffortMaxMinutes: number;
-  assignedServiceEffortMidpointMinutes: number;
   assignedLocatedPointCount: number;
   assignedUnlocatedPointCount: number;
   assignedFieldP90RadiusMeters: number | null;
@@ -97,9 +93,6 @@ export class AssignedWeeklyWorkloadService {
         assignedTowerCount: 0,
         assignedTapCount: 0,
         assignedSmarttapCount: 0,
-        assignedServiceEffortMinMinutes: 0,
-        assignedServiceEffortMaxMinutes: 0,
-        assignedServiceEffortMidpointMinutes: 0,
         assignedLocatedPointCount: 0,
         assignedUnlocatedPointCount: 0,
         assignedFieldP90RadiusMeters: null,
@@ -133,10 +126,6 @@ export class AssignedWeeklyWorkloadService {
         row.assignedTowerCount += profile.towerCount ?? 0;
         row.assignedTapCount += profile.tapCount ?? 0;
         row.assignedSmarttapCount += profile.smarttapCount ?? 0;
-        const effort = estimateServiceEffort(profile.towerCount);
-        row.assignedServiceEffortMinMinutes += effort.minMinutes ?? 0;
-        row.assignedServiceEffortMaxMinutes += effort.maxMinutes ?? 0;
-        row.assignedServiceEffortMidpointMinutes += effort.midpointMinutes ?? 0;
       }
       if (profile?.canonicalLatitude !== null && profile?.canonicalLatitude !== undefined && profile?.canonicalLongitude !== null && profile?.canonicalLongitude !== undefined) {
         row.assignedLocatedPointCount += 1;

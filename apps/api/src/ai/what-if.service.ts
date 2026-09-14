@@ -6,7 +6,7 @@ import { RiskEngineService } from './risk-engine.service';
 import { TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 import { DataQualityAssessment } from './data-quality-engine.types';
-import { estimateServiceEffort } from './service-effort';
+import { WorkloadCalibrationAssessment } from './workload-calibration.service';
 
 
 export type RegionWorkloadVector = {
@@ -47,11 +47,11 @@ export type WhatIfChange = Partial<{
 export class WhatIfService {
   constructor(private readonly workloadEngine: WeeklyWorkloadService, private readonly riskEngine: RiskEngineService) {}
 
-  simulate(assigned: TechnicianAssignedWeeklyWorkload, baseline: TechnicianWeeklyBaseline, riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange, dataQuality?: DataQualityAssessment) {
-    const beforeWorkload = this.workloadEngine.assess(assigned, baseline);
+  simulate(assigned: TechnicianAssignedWeeklyWorkload, baseline: TechnicianWeeklyBaseline, riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange, dataQuality?: DataQualityAssessment, calibration?: WorkloadCalibrationAssessment) {
+    const beforeWorkload = this.workloadEngine.assess(assigned, baseline, calibration);
     const beforeRisk = this.riskEngine.assessTechnician(assigned, baseline, beforeWorkload, riskMaturity, dataQuality);
     const after = this.apply(assigned, change);
-    const afterWorkload = this.workloadEngine.assess(after, baseline);
+    const afterWorkload = this.workloadEngine.assess(after, baseline, calibration);
     const afterRisk = this.riskEngine.assessTechnician(after, baseline, afterWorkload, riskMaturity, dataQuality);
     return {
       engineVersion: AI_ENGINE_VERSION,
@@ -71,10 +71,10 @@ export class WhatIfService {
   comparePlacement(
     source: TechnicianAssignedWeeklyWorkload, sourceBaseline: TechnicianWeeklyBaseline,
     target: TechnicianAssignedWeeklyWorkload, targetBaseline: TechnicianWeeklyBaseline,
-    riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange, dataQuality?: DataQualityAssessment,
+    riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange, dataQuality?: DataQualityAssessment, calibration?: WorkloadCalibrationAssessment,
   ) {
-    const sourceScenario = this.simulate(source, sourceBaseline, riskMaturity, change, dataQuality);
-    const targetScenario = this.simulate(target, targetBaseline, riskMaturity, change, dataQuality);
+    const sourceScenario = this.simulate(source, sourceBaseline, riskMaturity, change, dataQuality, calibration);
+    const targetScenario = this.simulate(target, targetBaseline, riskMaturity, change, dataQuality, calibration);
     const sourceRank = this.riskRank(sourceScenario.after.risk.severity);
     const targetRank = this.riskRank(targetScenario.after.risk.severity);
     const preferredTechnicianId = sourceRank < targetRank ? source.technicianId
@@ -100,6 +100,7 @@ export class WhatIfService {
     targetBaseline: TechnicianWeeklyBaseline,
     riskMaturity: CapabilityMaturity | undefined,
     dataQuality?: DataQualityAssessment,
+    calibration?: WorkloadCalibrationAssessment,
   ) {
     const change: WhatIfChange = {
       standardCurrentDelta: region.standardCurrent,
@@ -114,7 +115,7 @@ export class WhatIfService {
       locatedPointDelta: region.locatedPointCount,
       unlocatedPointDelta: region.unlocatedPointCount,
     };
-    const scenario = this.simulate(target, targetBaseline, riskMaturity, change, dataQuality);
+    const scenario = this.simulate(target, targetBaseline, riskMaturity, change, dataQuality, calibration);
     return {
       engineVersion: AI_ENGINE_VERSION,
       featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
@@ -133,8 +134,6 @@ export class WhatIfService {
 
   private apply(source: TechnicianAssignedWeeklyWorkload, change: WhatIfChange): TechnicianAssignedWeeklyWorkload {
     const add = (value: number, delta?: number) => Math.max(0, value + (delta ?? 0));
-    const towerCount = add(source.assignedTowerCount, change.towerDelta);
-    const effort = estimateServiceEffort(towerCount);
     return {
       ...source,
       standardCurrent: add(source.standardCurrent, change.standardCurrentDelta),
@@ -142,10 +141,7 @@ export class WhatIfService {
       smartcleanCurrent: add(source.smartcleanCurrent, change.smartcleanCurrentDelta),
       smartcleanCarryover: add(source.smartcleanCarryover, change.smartcleanCarryoverDelta),
       assignedCoolerCount: add(source.assignedCoolerCount, change.coolerDelta),
-      assignedTowerCount: towerCount,
-      assignedServiceEffortMinMinutes: effort.minMinutes ?? 0,
-      assignedServiceEffortMaxMinutes: effort.maxMinutes ?? 0,
-      assignedServiceEffortMidpointMinutes: effort.midpointMinutes ?? 0,
+      assignedTowerCount: add(source.assignedTowerCount, change.towerDelta),
       assignedTapCount: add(source.assignedTapCount, change.tapDelta),
       assignedSmarttapCount: add(source.assignedSmarttapCount, change.smarttapDelta),
       equipmentUnknownPointCount: add(source.equipmentUnknownPointCount, change.equipmentUnknownPointDelta),
