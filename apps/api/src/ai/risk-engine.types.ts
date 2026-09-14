@@ -22,6 +22,7 @@ export type PointRiskAssessment = {
   confidence: 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
   signals: AiRiskSignal[];
   reasons: string[];
+  reasonCodes: string[];
 };
 
 export type TechnicianRiskAssessment = {
@@ -35,4 +36,5 @@ export type TechnicianRiskAssessment = {
   confidence: TechnicianBaselineConfidence | 'UNKNOWN';
   signals: AiRiskSignal[];
   reasons: string[];
+  reasonCodes: string[];
 };

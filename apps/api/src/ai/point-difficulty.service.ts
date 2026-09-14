@@ -69,6 +69,7 @@ export class PointDifficultyService {
       pointId,
       state: active ? 'ACTIVE' : 'WARMING_UP',
       confidence,
+      maturityState: active ? 'ACTIVE' : 'WARMING_UP',
       score,
       rawOutcomeScore,
       calibration,
@@ -82,6 +83,7 @@ export class PointDifficultyService {
       },
       history: { visits, attempts, missed, completed, observedPeriods },
       reasons,
+      reasonCodes: [...new Set(reasons)],
     };
   }
 }

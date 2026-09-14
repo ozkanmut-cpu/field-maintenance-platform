@@ -23,6 +23,7 @@ export type WorkloadCalibrationAssessment = {
   engineVersion: string;
   featureSchemaVersion: string;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   equipment: CalibrationImpact[];
   travel: CalibrationImpact[];
   drift: CalibrationDrift[];
@@ -75,7 +76,7 @@ export class WorkloadCalibrationService {
     if (evidence < 40) reasonCodes.push('CALIBRATION_EVIDENCE_LOW');
     if (drift.some((item) => item.state === 'DRIFT')) reasonCodes.push('CALIBRATION_DRIFT_DETECTED');
     if (!reasonCodes.length) reasonCodes.push('CALIBRATION_WITHIN_STABLE_BANDS');
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, confidence, equipment, travel, drift, reasonCodes };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, confidence, maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE', equipment, travel, drift, reasonCodes };
   }
 
   private rows(history: FeatureSnapshot[]): CalibrationRow[] {

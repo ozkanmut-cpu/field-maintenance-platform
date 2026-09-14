@@ -15,7 +15,7 @@ export class DataQualityEngineService {
   ) {}
 
   assess(history: FeatureSnapshot[]): DataQualityAssessment {
-    if (!history.length) return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, score: 0, confidence: 'LOW', issues: [], reasonCodes: ['NO_SNAPSHOTS'] };
+    if (!history.length) return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, score: 0, confidence: 'LOW', maturityState: 'WARMING_UP', issues: [], reasonCodes: ['NO_SNAPSHOTS'] };
     const ordered = [...history].sort((a, b) => a.weekKey.localeCompare(b.weekKey));
     const latest = ordered.at(-1)!;
     const issues: DataQualityIssue[] = [];
@@ -51,7 +51,7 @@ export class DataQualityEngineService {
     const penalty = issues.reduce((sum, issue) => sum + ({ LOW: 2, MEDIUM: 5, HIGH: 10, CRITICAL: 20 }[issue.severity]), 0);
     const score = pointCount ? Math.max(0, Math.round(100 - penalty / pointCount)) : 0;
     const confidence = ordered.length >= 8 ? 'HIGH' : ordered.length >= 4 ? 'MEDIUM' : 'LOW';
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, score, confidence, issues, reasonCodes: [...new Set(issues.map((x) => x.code))] };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, score, confidence, maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE', issues, reasonCodes: [...new Set(issues.map((x) => x.code))] };
   }
 
   private add(issues: DataQualityIssue[], code: string, severity: DataQualitySeverity, entityId: string, evidence: DataQualityIssue['evidence']) {

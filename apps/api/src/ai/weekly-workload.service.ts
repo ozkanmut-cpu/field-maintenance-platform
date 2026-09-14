@@ -55,6 +55,8 @@ export class WeeklyWorkloadService {
       engineVersion: AI_ENGINE_VERSION,
       featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       technicianId: assigned.technicianId,
+      maturityState: evidenceReady ? 'ACTIVE' : 'WARMING_UP',
+      confidence: baseline.confidence,
       evidenceState: evidenceReady ? 'READY' : 'INSUFFICIENT_DATA',
       baselineState: baseline.state,
       baselineConfidence: baseline.confidence,
@@ -73,6 +75,7 @@ export class WeeklyWorkloadService {
         workAreaProximity: workAreaPressure,
       },
       reasons: [...new Set(reasons)],
+      reasonCodes: [...new Set(reasons)],
     };
   }
 

@@ -28,4 +28,5 @@ export type PlanningAssessment = {
   confidence?: 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
   recommendations: PlanningRecommendation[];
   reasons: string[];
+  reasonCodes: string[];
 };

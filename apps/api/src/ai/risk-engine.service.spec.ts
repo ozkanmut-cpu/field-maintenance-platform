@@ -25,10 +25,10 @@ const baseline: TechnicianWeeklyBaseline = {
   context: { uniqueVisitedPoints: { median: 8, p75: 10, p90: 12 }, paperworkCompletionMinutes: { median: 60, p75: 120, p90: 240 }, suspiciousVisitRate: { median: 0, p75: 0, p90: 0.1 }, lateEntryMinutes: { median: 0, p75: 10, p90: 30 } }, reasons: [],
 };
 const workload = (serviceBand: 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90' | 'UNKNOWN', geoBand: 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90' | 'UNKNOWN' = 'WITHIN_BASELINE'): WeeklyWorkloadAssessment => ({
-  technicianId: 't1', evidenceState: 'READY', baselineState: 'ACTIVE', baselineConfidence: 'MEDIUM',
+  technicianId: 't1', maturityState: 'ACTIVE', confidence: 'MEDIUM', evidenceState: 'READY', baselineState: 'ACTIVE', baselineConfidence: 'MEDIUM',
   assigned: { standardCurrent: 4, standardCarryover: 0, smartcleanCurrent: 1, smartcleanCarryover: 0 },
   servicePressure: { coolerCount: serviceBand, towerCount: 'WITHIN_BASELINE', tapCount: 'WITHIN_BASELINE', smarttapCount: 'WITHIN_BASELINE' },
-  travelPressure: { routeDistanceMeters: 'UNKNOWN', fieldP90RadiusMeters: geoBand, routeCoherenceRatio: 'WITHIN_BASELINE', fragmentationRatio: 'WITHIN_BASELINE', workAreaProximity: 'WITHIN_BASELINE' }, reasons: [],
+  travelPressure: { routeDistanceMeters: 'UNKNOWN', fieldP90RadiusMeters: geoBand, routeCoherenceRatio: 'WITHIN_BASELINE', fragmentationRatio: 'WITHIN_BASELINE', workAreaProximity: 'WITHIN_BASELINE' }, reasons: [], reasonCodes: [],
 });
 
 test('maturity gate prevents a confident risk when the risk capability is not active', () => {

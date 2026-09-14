@@ -14,6 +14,7 @@ export type DataQualityAssessment = {
   featureSchemaVersion?: string;
   score: number;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   issues: DataQualityIssue[];
   reasonCodes: string[];
 };

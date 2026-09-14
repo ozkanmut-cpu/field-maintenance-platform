@@ -27,6 +27,8 @@ export class DataMaturityService {
       latestWeekKey: snapshots.at(-1)?.weekKey ?? null,
       overallState: this.stateForScore(overallScore),
       overallScore,
+      confidence: overallScore >= 75 ? 'HIGH' : overallScore >= 45 ? 'MEDIUM' : 'LOW',
+      reasonCodes: [...new Set(capabilities.flatMap((item) => item.reasons))],
       evidence,
       capabilities,
     };

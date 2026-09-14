@@ -14,6 +14,8 @@ export type WeeklyWorkloadAssessment = {
   engineVersion?: string;
   featureSchemaVersion?: string;
   technicianId: string;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
+  confidence: TechnicianBaselineConfidence;
   evidenceState: WorkloadEvidenceState;
   baselineState: TechnicianBaselineState;
   baselineConfidence: TechnicianBaselineConfidence;
@@ -32,4 +34,5 @@ export type WeeklyWorkloadAssessment = {
     workAreaProximity: WorkloadPressureBand;
   };
   reasons: string[];
+  reasonCodes: string[];
 };

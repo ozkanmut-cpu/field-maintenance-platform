@@ -43,8 +43,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Weekly workload'u service workload + travel workload olarak iki bileşene ayır
 - [x] Travel workload: point-to-point distance, dispersion, isolated points, cluster fragmentation, technician work-area proximity
 - [x] Route coherence metriği: eşit nokta sayısı yerine rota bütünlüğü + equipment workload dengesini değerlendir
-- [ ] AI maturity gating'i tüm AI çıktılarında zorunlu hale getir
-- [ ] Her skor/öneri için confidence + reason codes üret
+- [x] AI maturity gating'i tüm AI çıktılarında zorunlu hale getir
+- [x] Her skor/öneri için confidence + reason codes üret
 - [x] Admin AI Dashboard'da “neden bu skor?” açıklaması göster
 
 ## P1 — Risk ve planlama motorları
@@ -134,13 +134,13 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 AI V1 tamamlanmış sayılabilmesi için:
 
 - [ ] Point difficulty, technician capacity ve travel burden üretimde birlikte çalışmalı
-- [ ] Risk Engine gerçek operasyonel risk skoru üretmeli
-- [ ] Planning Engine açıklanabilir öneriler üretmeli
-- [ ] Tüm AI çıktılarında maturity/confidence/reason codes bulunmalı
+- [x] Risk Engine gerçek operasyonel risk skoru üretmeli
+- [x] Planning Engine açıklanabilir öneriler üretmeli
+- [x] Tüm AI çıktılarında maturity/confidence/reason codes bulunmalı
 - [x] Düşük veri kalitesinde sistem güvenli biçimde öneriyi kısmalı
-- [ ] Similar Week ve What-if en az temel sürümde çalışmalı
-- [ ] Geçmiş veriyle backtest yapılabilmeli
-- [ ] Admin AI Dashboard sonuçları tarihsel olarak karşılaştırabilmeli
+- [x] Similar Week ve What-if en az temel sürümde çalışmalı
+- [x] Geçmiş veriyle backtest yapılabilmeli
+- [x] Admin AI Dashboard sonuçları tarihsel olarak karşılaştırabilmeli
 - [x] Kritik AI motorlarının otomatik testleri CI'da çalışmalı
 
 ## AI kapsamı dışında

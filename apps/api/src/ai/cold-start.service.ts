@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
 import { ColdStartEstimate, ColdStartHistory, ColdStartSource } from './cold-start.types';
 
@@ -173,11 +174,11 @@ export class ColdStartService {
     const weeksUsed = samples.length;
     const value = this.median(samples);
     const confidence = source === 'ENTITY_HISTORY' ? (samples.length >= 6 ? 'HIGH' : 'MEDIUM') : source === 'REGION_TYPE_EQUIPMENT_GEO_COHORT' || source === 'TYPE_EQUIPMENT_GEO_COHORT' || source === 'REGION_TYPE_WEEK_COHORT' || source === 'REGION_TYPE_COHORT' || source === 'SIMILAR_REGION_COHORT' ? 'MEDIUM' : 'LOW';
-    return { entityType, entityId, metric, value, source, confidence, sampleSize: samples.length, entityCount, weeksUsed, reasons: [reason] };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, maturityState: confidence === 'HIGH' || confidence === 'MEDIUM' ? 'ACTIVE' : 'WARMING_UP', entityType, entityId, metric, value, source, confidence, sampleSize: samples.length, entityCount, weeksUsed, reasons: [reason], reasonCodes: [reason] };
   }
 
   private insufficient(entityType: 'POINT' | 'TECHNICIAN' | 'REGION', entityId: string, metric: string, sampleSize: number): ColdStartEstimate {
-    return { entityType, entityId, metric, value: null, source: 'INSUFFICIENT', confidence: 'UNKNOWN', sampleSize, entityCount: 0, weeksUsed: sampleSize, reasons: ['Güvenilir kişisel veya cohort geçmişi henüz yok'] };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, maturityState: 'WARMING_UP', entityType, entityId, metric, value: null, source: 'INSUFFICIENT', confidence: 'UNKNOWN', sampleSize, entityCount: 0, weeksUsed: sampleSize, reasons: ['COLD_START_EVIDENCE_INSUFFICIENT'], reasonCodes: ['COLD_START_EVIDENCE_INSUFFICIENT'] };
   }
 
   private median(values: number[]) {

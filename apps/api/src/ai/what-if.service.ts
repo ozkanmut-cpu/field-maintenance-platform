@@ -61,7 +61,9 @@ export class WhatIfService {
       after: { assigned: after, workload: afterWorkload, risk: afterRisk },
       riskDelta: this.riskRank(afterRisk.severity) - this.riskRank(beforeRisk.severity),
       confidence: afterRisk.confidence,
+      maturityState: afterRisk.state === 'READY' ? 'ACTIVE' : 'WARMING_UP',
       reasons: [...new Set([...afterWorkload.reasons, ...afterRisk.reasons])],
+      reasonCodes: [...new Set([...afterWorkload.reasons, ...afterRisk.reasons])],
     };
   }
 
@@ -84,6 +86,7 @@ export class WhatIfService {
       confidence: sourceScenario.confidence === 'UNKNOWN' || targetScenario.confidence === 'UNKNOWN' ? 'UNKNOWN'
         : sourceScenario.confidence === 'LOW' || targetScenario.confidence === 'LOW' ? 'LOW'
         : sourceScenario.confidence === 'MEDIUM' || targetScenario.confidence === 'MEDIUM' ? 'MEDIUM' : 'HIGH',
+      maturityState: sourceScenario.maturityState === 'ACTIVE' && targetScenario.maturityState === 'ACTIVE' ? 'ACTIVE' : 'WARMING_UP',
       reasonCodes: preferredTechnicianId ? ['LOWER_POST_CHANGE_RISK'] : ['POST_CHANGE_RISK_TIED'],
       constraints: ['SIMULATION_ONLY', 'NO_AUTOMATIC_ASSIGNMENT_CHANGE'],
     };
@@ -121,6 +124,7 @@ export class WhatIfService {
       regionVector: region,
       scenario,
       confidence: scenario.confidence,
+      maturityState: scenario.maturityState,
       reasonCodes: [...new Set(['REGION_REAL_WORKLOAD_VECTOR_APPLIED', ...scenario.reasons])],
       constraints: ['SIMULATION_ONLY', 'NO_AUTOMATIC_REGION_ASSIGNMENT_CHANGE', 'COMBINED_ROUTE_REQUIRES_POINT_LEVEL_RECALCULATION'],
     };

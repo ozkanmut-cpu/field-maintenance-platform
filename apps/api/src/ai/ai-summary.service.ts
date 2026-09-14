@@ -20,6 +20,7 @@ export type AiSummary = {
   scope: 'TECHNICIAN_DAILY' | 'ADMIN_DAILY' | 'PERIOD';
   entityId: string;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   headlineCode: string;
   reasonCodes: string[];
   metrics: Record<string, string | number | boolean | null>;
@@ -109,6 +110,7 @@ export class AiSummaryService {
       scope,
       entityId,
       confidence: confidence === 'HIGH' ? 'HIGH' : confidence === 'MEDIUM' ? 'MEDIUM' : 'LOW',
+      maturityState: confidence === 'HIGH' || confidence === 'MEDIUM' ? 'ACTIVE' : 'WARMING_UP',
       headlineCode,
       reasonCodes: [...new Set(reasonCodes)],
       metrics,

@@ -15,6 +15,9 @@ export type ColdStartSource =
 export type ColdStartConfidence = 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type ColdStartEstimate = {
+  engineVersion: string;
+  featureSchemaVersion: string;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   entityType: Exclude<FeatureEntityType, 'SYSTEM'>;
   entityId: string;
   metric: string;
@@ -25,6 +28,7 @@ export type ColdStartEstimate = {
   entityCount: number;
   weeksUsed: number;
   reasons: string[];
+  reasonCodes: string[];
 };
 
 export type ColdStartHistory = FeatureSnapshot[];

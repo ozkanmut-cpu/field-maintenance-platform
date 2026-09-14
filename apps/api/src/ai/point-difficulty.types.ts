@@ -9,6 +9,7 @@ export type PointDifficultyProfile = {
   pointId: string;
   state: PointDifficultyState;
   confidence: PointDifficultyConfidence;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   score: number | null;
   rawOutcomeScore: number | null;
   calibration: DifficultyCalibrationResult;
@@ -18,4 +19,5 @@ export type PointDifficultyProfile = {
   geography: { located: boolean; isolated: boolean; nearestNeighborMeters: number | null };
   history: { visits: number; attempts: number; missed: number; completed: number; observedPeriods: number };
   reasons: string[];
+  reasonCodes: string[];
 };

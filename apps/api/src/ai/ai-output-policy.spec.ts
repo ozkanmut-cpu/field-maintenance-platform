@@ -11,13 +11,13 @@ test('blocks AI output when maturity is not ready', () => {
 });
 
 test('blocks AI output when shared data quality is below safe threshold', () => {
-  const policy = evaluateAiOutputPolicy(maturity, { score:40, confidence:'MEDIUM', issues:[], reasonCodes:[] });
+  const policy = evaluateAiOutputPolicy(maturity, { score:40, confidence:'MEDIUM', maturityState:'WARMING_UP', issues:[], reasonCodes:[] });
   assert.equal(policy.allowed, false);
   assert.equal(policy.dataQualityState, 'BLOCKED');
 });
 
 test('caps confidence when data quality is usable but limited', () => {
-  const policy = evaluateAiOutputPolicy(maturity, { score:65, confidence:'MEDIUM', issues:[], reasonCodes:[] });
+  const policy = evaluateAiOutputPolicy(maturity, { score:65, confidence:'MEDIUM', maturityState:'ACTIVE', issues:[], reasonCodes:[] });
   assert.equal(policy.allowed, true);
   assert.equal(policy.confidenceCap, 'LOW');
   assert.equal(policy.dataQualityState, 'LIMITED');

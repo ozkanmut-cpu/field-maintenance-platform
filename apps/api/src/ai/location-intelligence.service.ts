@@ -45,7 +45,7 @@ export class LocationIntelligenceService {
     score = Math.max(0, Math.min(100, Math.round(score)));
     const state = contradictionCount > 0 ? 'CONTRADICTORY' : !hasLocation ? 'UNKNOWN' : score >= 80 ? 'STRONG' : score >= 50 ? 'SUPPORTED' : 'WEAK';
     const confidence = score >= 80 ? 'HIGH' : score >= 50 ? 'MEDIUM' : 'LOW';
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, pointId, state, confidenceScore: score, confidence, evidenceVisits, contradictionCount, reasonCodes };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, pointId, state, confidenceScore: score, confidence, maturityState: confidence === 'LOW' || state === 'UNKNOWN' ? 'WARMING_UP' : 'ACTIVE', evidenceVisits, contradictionCount, reasonCodes };
   }
 
   private num(value: unknown) {

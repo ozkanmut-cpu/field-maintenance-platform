@@ -40,6 +40,8 @@ export type DataMaturityAssessment = {
   latestWeekKey: string | null;
   overallState: AiMaturityState;
   overallScore: number;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  reasonCodes: string[];
   evidence: MaturityEvidence;
   capabilities: CapabilityMaturity[];
 };

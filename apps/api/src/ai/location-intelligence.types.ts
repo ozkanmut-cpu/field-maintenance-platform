@@ -7,6 +7,7 @@ export type AiLocationAssessment = {
   state: AiLocationState;
   confidenceScore: number;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   evidenceVisits: number;
   contradictionCount: number;
   reasonCodes: string[];

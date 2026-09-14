@@ -9,6 +9,7 @@ export type RegionHealth = {
   score: number;
   state: 'GREEN' | 'AMBER' | 'RED';
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   trend: 'IMPROVING' | 'STABLE' | 'WORSENING' | 'UNKNOWN';
   reasonCodes: string[];
   evidence: Record<string, string | number | boolean | null>;
@@ -27,13 +28,15 @@ export class RegionHealthService {
       const previousScore = prev ? this.score(prev) : null;
       const points = this.num(row.features.pointCount);
       const reasons = this.reasons(row.features);
+      const confidence = points >= 20 && ordered.length >= 8 ? 'HIGH' : points >= 5 && ordered.length >= 4 ? 'MEDIUM' : 'LOW';
       return {
         regionId: row.entityId,
         engineVersion: AI_ENGINE_VERSION,
         featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
         score: currentScore,
         state: currentScore >= 80 ? 'GREEN' : currentScore >= 55 ? 'AMBER' : 'RED',
-        confidence: points >= 20 && ordered.length >= 8 ? 'HIGH' : points >= 5 && ordered.length >= 4 ? 'MEDIUM' : 'LOW',
+        confidence,
+        maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE',
         trend: previousScore === null ? 'UNKNOWN' : currentScore >= previousScore + 5 ? 'IMPROVING' : currentScore <= previousScore - 5 ? 'WORSENING' : 'STABLE',
         reasonCodes: reasons,
         evidence: {

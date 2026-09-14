@@ -40,6 +40,7 @@ export class RiskEngineService {
         confidence: 'UNKNOWN',
         signals: [],
         reasons,
+        reasonCodes: [...new Set(reasons)],
       };
     }
 
@@ -124,6 +125,7 @@ export class RiskEngineService {
       confidence,
       signals,
       reasons: [...new Set([...policy.reasonCodes, ...signals.map((signal) => signal.code)])],
+      reasonCodes: [...new Set([...policy.reasonCodes, ...signals.map((signal) => signal.code)])],
     };
   }
 
@@ -134,7 +136,7 @@ export class RiskEngineService {
     if (maturity?.state !== 'ACTIVE' && maturity?.state !== 'RELIABLE') reasons.push('RISK_MATURITY_GATE_NOT_READY');
     if (profile.state !== 'ACTIVE') reasons.push('POINT_DIFFICULTY_NOT_READY');
     if (profile.equipmentProfile.confidence === 'UNKNOWN' || profile.equipmentProfile.confidence === 'LOW') reasons.push('POINT_EQUIPMENT_CONFIDENCE_LOW');
-    if (reasons.length) return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'INSUFFICIENT_DATA', maturityState: policy.maturityState, dataQualityState: policy.dataQualityState, severity: 'UNKNOWN', confidence: 'UNKNOWN', signals: [], reasons };
+    if (reasons.length) return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'INSUFFICIENT_DATA', maturityState: policy.maturityState, dataQualityState: policy.dataQualityState, severity: 'UNKNOWN', confidence: 'UNKNOWN', signals: [], reasons, reasonCodes: [...new Set(reasons)] };
 
     const signals: AiRiskSignal[] = [];
     if (profile.history.attempts > profile.history.visits && profile.history.attempts >= 2) {
@@ -149,7 +151,7 @@ export class RiskEngineService {
       signals.push({ code: 'EQUIPMENT_PROFILE_UNSTABLE', severity: 'MEDIUM', evidence: { anomalyCount: profile.equipmentProfile.anomalyCodes.length } });
     }
     const severity = signals.length ? this.maxSeverity(signals.map((signal) => signal.severity)) : 'LOW';
-    return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'READY', maturityState: policy.maturityState, dataQualityState: policy.dataQualityState, severity, confidence: policy.confidenceCap === 'LOW' ? 'LOW' : profile.confidence, signals, reasons: [...new Set([...policy.reasonCodes, ...signals.map((signal) => signal.code)])] };
+    return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'READY', maturityState: policy.maturityState, dataQualityState: policy.dataQualityState, severity, confidence: policy.confidenceCap === 'LOW' ? 'LOW' : profile.confidence, signals, reasons: [...new Set([...policy.reasonCodes, ...signals.map((signal) => signal.code)])], reasonCodes: [...new Set([...policy.reasonCodes, ...signals.map((signal) => signal.code)])] };
   }
 
   private maxPressure(values: WorkloadPressureBand[]): WorkloadPressureBand {

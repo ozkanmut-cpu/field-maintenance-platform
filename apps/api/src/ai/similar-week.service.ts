@@ -8,8 +8,10 @@ export type SimilarWeekMatch = {
   weekKey: string;
   similarity: number;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   dimensionsUsed: number;
   reasons: string[];
+  reasonCodes: string[];
 };
 
 @Injectable()
@@ -40,7 +42,7 @@ export class SimilarWeekService {
     const similarity = Math.round((1 - distance) * 1000) / 10;
     const closest = [...deltas].sort((a, b) => a.delta - b.delta || a.key.localeCompare(b.key)).slice(0, 3).map((item) => `SIMILAR_${item.key.toUpperCase()}`);
     const confidence = deltas.length >= 9 ? 'HIGH' : deltas.length >= 6 ? 'MEDIUM' : 'LOW';
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, weekKey: candidate.weekKey, similarity, confidence, dimensionsUsed: deltas.length, reasons: closest };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, weekKey: candidate.weekKey, similarity, confidence, maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE', dimensionsUsed: deltas.length, reasons: closest, reasonCodes: closest };
   }
 
   private vector(snapshot: FeatureSnapshot): Record<string, number | null> {

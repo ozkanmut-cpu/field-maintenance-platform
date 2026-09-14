@@ -2,6 +2,9 @@ export type EquipmentProfileConfidence = 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
 export type EquipmentProfileStability = 'UNKNOWN' | 'STABLE' | 'CHANGING' | 'VOLATILE';
 
 export type EquipmentProfileAssessment = {
+  engineVersion: string;
+  featureSchemaVersion: string;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   pointId: string;
   confidence: EquipmentProfileConfidence;
   confidenceScore: number;
@@ -15,4 +18,5 @@ export type EquipmentProfileAssessment = {
   stability: EquipmentProfileStability;
   anomalyCodes: string[];
   reasons: string[];
+  reasonCodes: string[];
 };

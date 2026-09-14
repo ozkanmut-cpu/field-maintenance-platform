@@ -9,6 +9,8 @@ export type BacktestResult = {
   engineVersion: string;
   featureSchemaVersion?: string;
   state: 'INSUFFICIENT_DATA' | 'READY';
+  maturityState: 'WARMING_UP' | 'ACTIVE';
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
   evaluatedPredictions: number;
   skippedPredictions: number;
   truePositive: number;
@@ -62,6 +64,8 @@ export class BacktestService {
       engineVersion: AI_ENGINE_VERSION,
       featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       state: evaluated ? 'READY' : 'INSUFFICIENT_DATA',
+      maturityState: evaluated >= 20 ? 'ACTIVE' : 'WARMING_UP',
+      confidence: evaluated >= 50 ? 'HIGH' : evaluated >= 20 ? 'MEDIUM' : 'LOW',
       evaluatedPredictions: evaluated,
       skippedPredictions: skipped,
       truePositive: tp, falsePositive: fp, trueNegative: tn, falseNegative: fn,

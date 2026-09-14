@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
 import { EquipmentProfileAssessment, EquipmentProfileConfidence, EquipmentProfileStability } from './equipment-profile.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 type EquipmentVector = [number, number, number, number];
 
@@ -30,10 +31,13 @@ export class EquipmentProfileService {
     else if (verificationAgeDays > 90) reasons.push('EQUIPMENT_VERIFICATION_STALE');
     if (vectors.length < 2) reasons.push('EQUIPMENT_STABILITY_HISTORY_SHORT');
     reasons.push(...anomalyCodes);
+    const uniqueReasons = [...new Set(reasons)];
     return {
+      engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
+      maturityState: confidence === 'UNKNOWN' || confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE',
       pointId, confidence, confidenceScore, complete, verifiedVisitCount, lastVerifiedAt, verificationAgeDays,
       observedSnapshotCount: vectors.length, changeCount, changeRate: changeRate === null ? null : Number(changeRate.toFixed(4)),
-      stability, anomalyCodes, reasons: [...new Set(reasons)],
+      stability, anomalyCodes, reasons: uniqueReasons, reasonCodes: uniqueReasons,
     };
   }
 

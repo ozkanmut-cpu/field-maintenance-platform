@@ -10,6 +10,9 @@ import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 export type AiTrendAssessment = {
   engineVersion?: string;
   featureSchemaVersion?: string;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  reasonCodes: string[];
   weekly: Array<{ weekKey: string; maturityScore: number; dataQualityScore: number; locationCoverage: number; equipmentCoverage: number }>;
   regions: Array<{ regionId: string; currentScore: number; trend: string }>;
   technicians: Array<{ technicianId: string; currentCapacityP75: number | null; previousCapacityP75: number | null; delta: number | null }>;
@@ -55,7 +58,9 @@ export class TrendService {
       return { pointId, currentDifficulty: current, previousDifficulty: previous, delta: this.delta(current, previous) };
     });
 
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, weekly, regions, technicians, points };
+    const confidence = ordered.length >= 8 ? 'HIGH' : ordered.length >= 4 ? 'MEDIUM' : 'LOW';
+    const reasonCodes = ordered.length >= 2 ? ['HISTORICAL_TREND_AVAILABLE'] : ['HISTORICAL_TREND_HISTORY_SHORT'];
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, maturityState: confidence === 'LOW' ? 'WARMING_UP' : 'ACTIVE', confidence, reasonCodes, weekly, regions, technicians, points };
   }
 
   private delta(current: number | null, previous: number | null) {
