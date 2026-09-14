@@ -6,6 +6,7 @@ const source = readFileSync(new URL('./ai-dashboard.tsx', import.meta.url), 'utf
 
 test('AI dashboard keeps the production backend contract and core decision-support sections', () => {
   assert.match(source, /\/api\/backend\/ai\/admin-dashboard\?weeks=12/);
+  assert.match(source, /\/api\/backend\/ai\/kpi-report\?weeks=12/);
   for (const label of [
     'Sanal İstatistikçi', 'Teknisyen Kapasitesi', 'AI Tarihsel Karşılaştırma',
     'Bölge Sağlığı', 'Geçmiş Risk Backtest', 'Veri Kalitesi Öncelik Kuyruğu',

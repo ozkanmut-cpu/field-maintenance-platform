@@ -27,6 +27,7 @@ import { TrendService } from './trend.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 import { WhatIfService } from './what-if.service';
 import { AiTelemetryService } from './ai-telemetry.service';
+import { AiKpiExportService } from './ai-kpi-export.service';
 import { AiDistributionDriftService } from './ai-distribution-drift.service';
 import { WorkloadCalibrationService } from './workload-calibration.service';
 

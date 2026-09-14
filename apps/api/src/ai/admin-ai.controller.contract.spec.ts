@@ -48,8 +48,9 @@ function controller() {
   const feedback:any = { record:async () => ({}), list:async () => [] };
   const calibration:any = { assess:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,confidence:'LOW',equipment:[],travel:[],drift:[],reasonCodes:[]}) };
   const telemetry:any = { measure: async (_name:string, fn:any) => fn(), snapshot:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,generatedAt:'2026-09-14T00:00:00.000Z',operations:[]}) };
+  const kpiExport:any = { build:(dashboard:any) => ({filename:'ai-kpi-2026-09-14.csv',contentType:'text/csv; charset=utf-8',content:`SECTION;KEY;VALUE;DETAIL\r\nMETA;generatedAt;${dashboard.generatedAt};${dashboard.engineVersion}\r\n`}) };
   const distributionDrift:any = { observe:() => undefined, snapshot:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,observationCount:4,state:'STABLE',maxAbsoluteDelta:0,risk:{},recommendation:{},reasonCodes:['AI_OUTPUT_DISTRIBUTION_STABLE']}) };
-  return new AdminAiController(prisma,summaries,simple,featureStore,maturity,simple,location,baselines,simple,difficulty,assignedWorkload,weekly,risk,planning,simple,feedback,simple,simple,calibration,telemetry,distributionDrift);
+  return new AdminAiController(prisma,summaries,simple,featureStore,maturity,simple,location,baselines,simple,difficulty,assignedWorkload,weekly,risk,planning,simple,feedback,simple,simple,calibration,telemetry,kpiExport,distributionDrift);
 }
 test('admin dashboard endpoint contract exposes versioned explainable AI sections', async () => {
   const c:any = controller();
@@ -80,4 +81,17 @@ test('what-if endpoint contract stays simulation-only and returns comparable ris
   assert.equal(result.technicianId, 't1');
   assert.equal(typeof result.riskDelta, 'number');
   assert.equal(result.confidence, 'MEDIUM');
+});
+
+test('kpi report endpoint returns downloadable csv contract', async () => {
+  const c:any = controller();
+  c.dataQuality = { assess:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,score:100,confidence:'HIGH',issues:[],reasonCodes:[]}) };
+  c.regionHealth = { assess:() => [] };
+  c.trends = { assess:() => ({engineVersion:AI_ENGINE_VERSION,featureSchemaVersion:AI_FEATURE_SCHEMA_VERSION,weekly:[],regions:[],technicians:[],points:[]}) };
+  c.backtest = { evaluate:() => ({engineVersion:AI_ENGINE_VERSION,state:'READY',evaluatedPredictions:0,skippedPredictions:0,truePositive:0,falsePositive:0,trueNegative:0,falseNegative:0,precision:null,recall:null,accuracy:null,reasonCodes:[]}) };
+  c.similarWeeks = { find:() => [] };
+  const result = await c.kpiReport('4');
+  assert.equal(result.contentType, 'text/csv; charset=utf-8');
+  assert.match(result.filename, /^ai-kpi-/);
+  assert.match(result.content, /SECTION;KEY;VALUE;DETAIL/);
 });

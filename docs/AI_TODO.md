@@ -110,7 +110,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Equipment data-quality trend
 - [x] Paperwork completion-time analitiğini risk sinyali olarak ekle
 - [x] AI Dashboard tarihsel karşılaştırma
-- [ ] Export edilebilir AI/KPI raporu
+- [x] Export edilebilir AI/KPI raporu
 
 ## P5 — Test, güvenlik ve gözlemlenebilirlik
 

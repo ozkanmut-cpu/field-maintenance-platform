@@ -27,6 +27,7 @@ import { WeeklyWorkloadService } from './weekly-workload.service';
 import { RegionWorkloadVector, WhatIfService } from './what-if.service';
 import { WorkloadCalibrationService } from './workload-calibration.service';
 import { AiTelemetryService } from './ai-telemetry.service';
+import { AiKpiExportService } from './ai-kpi-export.service';
 import { AiDistributionDriftService } from './ai-distribution-drift.service';
 
 @Controller('ai')
@@ -52,6 +53,7 @@ export class AdminAiController {
     private readonly whatIf: WhatIfService,
     private readonly calibration: WorkloadCalibrationService,
     private readonly telemetry: AiTelemetryService,
+    private readonly kpiExport: AiKpiExportService,
     private readonly distributionDrift: AiDistributionDriftService,
   ) {}
 
@@ -181,6 +183,13 @@ export class AdminAiController {
       similarWeeks: this.similarWeeks.find(history),
       pointDifficulty,
     };
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('kpi-report')
+  async kpiReport(@Query('weeks') weeksQuery?: string) {
+    const dashboard = await this.buildAdminDashboard(weeksQuery);
+    return this.kpiExport.build(dashboard);
   }
 
   @Roles(UserRole.ADMIN)
