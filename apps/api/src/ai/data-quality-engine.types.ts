@@ -10,6 +10,8 @@ export type DataQualityIssue = {
 };
 
 export type DataQualityAssessment = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   score: number;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
   issues: DataQualityIssue[];

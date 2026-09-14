@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.service';
 import { BaselineBand, TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { WeeklyWorkloadAssessment, WorkloadPressureBand } from './weekly-workload.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 @Injectable()
 export class WeeklyWorkloadService {
@@ -51,6 +52,8 @@ export class WeeklyWorkloadService {
     if (assignedWorkCount > 0 && routeEstimate === null) reasons.push('ASSIGNED_ROUTE_ESTIMATE_NOT_AVAILABLE');
 
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       technicianId: assigned.technicianId,
       evidenceState: evidenceReady ? 'READY' : 'INSUFFICIENT_DATA',
       baselineState: baseline.state,

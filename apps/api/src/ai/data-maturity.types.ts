@@ -34,6 +34,8 @@ export type CapabilityMaturity = {
 };
 
 export type DataMaturityAssessment = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   generatedAt: string;
   latestWeekKey: string | null;
   overallState: AiMaturityState;

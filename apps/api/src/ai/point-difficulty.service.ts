@@ -3,6 +3,7 @@ import { FeatureSnapshot } from './feature-store.types';
 import { EquipmentProfileService } from './equipment-profile.service';
 import { DifficultyCalibrationService } from './difficulty-calibration.service';
 import { PointDifficultyProfile } from './point-difficulty.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 @Injectable()
 export class PointDifficultyService {
@@ -63,6 +64,8 @@ export class PointDifficultyService {
     const outcomeConfidence = !active ? 'LOW' : history.length >= 12 && total >= 12 ? 'HIGH' : total >= 6 ? 'MEDIUM' : 'LOW';
     const confidence = !active ? 'LOW' : equipmentProfile.confidence === 'HIGH' ? outcomeConfidence : outcomeConfidence === 'HIGH' ? 'MEDIUM' : outcomeConfidence;
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       pointId,
       state: active ? 'ACTIVE' : 'WARMING_UP',
       confidence,

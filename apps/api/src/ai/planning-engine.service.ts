@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AI_ENGINE_VERSION } from './ai-version';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.service';
 import { CapabilityMaturity } from './data-maturity.types';
 import { PlanningAssessment, PlanningRecommendation, PlanningRecommendationType } from './planning-engine.types';
@@ -17,13 +17,13 @@ export type PlanningTechnicianInput = {
 export class PlanningEngineService {
   assess(technicians: PlanningTechnicianInput[], maturity?: CapabilityMaturity): PlanningAssessment {
     if (maturity?.state !== 'ACTIVE' && maturity?.state !== 'RELIABLE') {
-      return { engineVersion: AI_ENGINE_VERSION, state: 'INSUFFICIENT_DATA', recommendations: [], reasons: ['RECOMMENDATION_MATURITY_GATE_NOT_READY'] };
+      return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'INSUFFICIENT_DATA', recommendations: [], reasons: ['RECOMMENDATION_MATURITY_GATE_NOT_READY'] };
     }
 
     const recommendations = technicians.flatMap((input) => this.forTechnician(input))
       .sort((a, b) => this.compareRank(a, b))
       .map((item, index, all) => ({ ...item, priority: Math.max(1, 100 - index) }));
-    return { engineVersion: AI_ENGINE_VERSION, state: 'READY', recommendations, reasons: [] };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'READY', recommendations, reasons: [] };
   }
 
   private forTechnician(input: PlanningTechnicianInput): PlanningRecommendation[] {

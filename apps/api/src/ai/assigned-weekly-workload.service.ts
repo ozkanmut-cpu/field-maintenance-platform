@@ -28,6 +28,10 @@ export type TechnicianAssignedWeeklyWorkload = {
   assignedIsolatedPointCount: number;
   assignedFragmentationRatio: number | null;
   workAreaCenterDistanceMeters: number | null;
+  currentWeekSuspiciousVisitCount?: number;
+  currentWeekReviewRecommendedCount?: number;
+  currentWeekPaperworkPendingCount?: number;
+  currentWeekPaperworkCompletionP90Minutes?: number | null;
 };
 
 @Injectable()
@@ -56,7 +60,7 @@ export class AssignedWeeklyWorkloadService {
     ]);
 
     const pointIds = [...new Set([...standard.map((x) => x.pointId), ...smartclean.map((x) => x.pointId)])];
-    const [effective, pointProfiles] = await Promise.all([
+    const [effective, pointProfiles, currentWeekVisits] = await Promise.all([
       this.assignments.resolveMany(pointIds, asOf),
       pointIds.length
         ? this.prisma.point.findMany({
@@ -64,6 +68,10 @@ export class AssignedWeeklyWorkloadService {
             select: { id: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, canonicalLatitude: true, canonicalLongitude: true },
           })
         : [],
+      this.prisma.maintenanceVisit.findMany({
+        where: { status: 'VALID', performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } },
+        select: { technicianId: true, performedAt: true, suspiciousBatch: true, reviewRecommended: true, serviceSlipStatus: true, confirmationStatus: true, paperworkHistory: { where: { changedAt: { lt: week.endExclusiveInstant } }, select: { kind: true, newStatus: true, changedAt: true }, orderBy: { changedAt: 'asc' } } },
+      }),
     ]);
     const profileByPoint = new Map(pointProfiles.map((point) => [point.id, point]));
     const rows = new Map<string, TechnicianAssignedWeeklyWorkload>();
@@ -95,6 +103,10 @@ export class AssignedWeeklyWorkloadService {
         assignedIsolatedPointCount: 0,
         assignedFragmentationRatio: null,
         workAreaCenterDistanceMeters: null,
+        currentWeekSuspiciousVisitCount: 0,
+        currentWeekReviewRecommendedCount: 0,
+        currentWeekPaperworkPendingCount: 0,
+        currentWeekPaperworkCompletionP90Minutes: null,
       };
       rows.set(technicianId, row);
       return row;
@@ -128,6 +140,20 @@ export class AssignedWeeklyWorkloadService {
     for (const item of standard) add(item.pointId, item.dueEnd < week.weekStart ? 'standardCarryover' : 'standardCurrent');
     for (const item of smartclean) add(item.pointId, item.state === 'CARRYOVER' ? 'smartcleanCarryover' : 'smartcleanCurrent');
 
+    const visitMetrics = new Map<string, { suspicious: number; review: number; pending: number; completionMinutes: number[] }>();
+    for (const visit of currentWeekVisits) {
+      const metric = visitMetrics.get(visit.technicianId) ?? { suspicious: 0, review: 0, pending: 0, completionMinutes: [] };
+      if (visit.suspiciousBatch) metric.suspicious += 1;
+      if (visit.reviewRecommended) metric.review += 1;
+      if (visit.serviceSlipStatus !== 'PRESENT') metric.pending += 1;
+      if (visit.confirmationStatus !== 'PRESENT') metric.pending += 1;
+      for (const kind of ['SERVICE_SLIP', 'CONFIRMATION'] as const) {
+        const present = visit.paperworkHistory.find((item) => item.kind === kind && item.newStatus === 'PRESENT');
+        if (present) metric.completionMinutes.push(Math.max(0, (present.changedAt.getTime() - visit.performedAt.getTime()) / 60000));
+      }
+      visitMetrics.set(visit.technicianId, metric);
+    }
+
     for (const row of rows.values()) {
       const points = locatedByTechnician.get(row.technicianId) ?? [];
       const summary = this.geography.summarize(points);
@@ -145,6 +171,18 @@ export class AssignedWeeklyWorkloadService {
             { latitude: summary.centerLatitude, longitude: summary.centerLongitude },
             { latitude: workArea.centerLatitude, longitude: workArea.centerLongitude },
           );
+        }
+      }
+      const metrics = visitMetrics.get(row.technicianId);
+      if (metrics) {
+        row.currentWeekSuspiciousVisitCount = metrics.suspicious;
+        row.currentWeekReviewRecommendedCount = metrics.review;
+        row.currentWeekPaperworkPendingCount = metrics.pending;
+        const sorted = [...metrics.completionMinutes].sort((a, b) => a - b);
+        if (sorted.length) {
+          const index = (sorted.length - 1) * 0.9;
+          const lo = Math.floor(index), hi = Math.ceil(index);
+          row.currentWeekPaperworkCompletionP90Minutes = lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo);
         }
       }
     }

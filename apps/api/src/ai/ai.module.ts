@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AssignmentsModule } from '../assignments/assignments.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
+import { AiSummaryService } from './ai-summary.service';
 import { BacktestService } from './backtest.service';
 import { AdminAiController } from './admin-ai.controller';
 import { ColdStartService } from './cold-start.service';
@@ -29,7 +30,7 @@ import { WhatIfService } from './what-if.service';
 @Module({
   imports: [PrismaModule, AssignmentsModule],
   controllers: [AdminAiController],
-  providers: [BacktestService, EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, LocationIntelligenceService, IdentityConfidenceService, FeatureStoreService, EquipmentProfileService, DifficultyCalibrationService, DataQualityEngineService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, RecommendationFeedbackService, RegionHealthService, TechnicianBaselineService, TrendService, WeeklyWorkloadService, RiskEngineService, SimilarWeekService, WhatIfService],
-  exports: [BacktestService, EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, LocationIntelligenceService, IdentityConfidenceService, FeatureStoreService, EquipmentProfileService, DifficultyCalibrationService, DataQualityEngineService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, RecommendationFeedbackService, RegionHealthService, TechnicianBaselineService, TrendService, WeeklyWorkloadService, RiskEngineService, SimilarWeekService, WhatIfService],
+  providers: [AiSummaryService, BacktestService, EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, LocationIntelligenceService, IdentityConfidenceService, FeatureStoreService, EquipmentProfileService, DifficultyCalibrationService, DataQualityEngineService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, RecommendationFeedbackService, RegionHealthService, TechnicianBaselineService, TrendService, WeeklyWorkloadService, RiskEngineService, SimilarWeekService, WhatIfService],
+  exports: [AiSummaryService, BacktestService, EffectiveWorkloadService, AssignedWeeklyWorkloadService, GeographyService, GeographyClusteringService, LocationIntelligenceService, IdentityConfidenceService, FeatureStoreService, EquipmentProfileService, DifficultyCalibrationService, DataQualityEngineService, DataMaturityService, ColdStartService, PointDifficultyService, PlanningEngineService, RecommendationFeedbackService, RegionHealthService, TechnicianBaselineService, TrendService, WeeklyWorkloadService, RiskEngineService, SimilarWeekService, WhatIfService],
 })
 export class AiModule {}

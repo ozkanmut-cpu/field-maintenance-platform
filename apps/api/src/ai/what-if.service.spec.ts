@@ -29,3 +29,14 @@ test('point removal style negative deltas are clamped safely at zero', () => {
   assert.equal(result.after.assigned.standardCurrent, 0);
   assert.equal(result.after.assigned.assignedCoolerCount, 0);
 });
+
+test('technician placement comparison prefers the lower post-change risk and never mutates assignments', () => {
+  const targetBaseline:any = { ...baseline, technicianId:'t2', service:{ ...baseline.service, completedVisits:{median:16,p75:20,p90:24}, coolerCount:{median:30,p75:40,p90:50} } };
+  const target:any = { ...assigned, technicianId:'t2', standardCurrent:2, smartcleanCurrent:0, assignedCoolerCount:8 };
+  const result = service.comparePlacement(assigned, baseline, target, targetBaseline, maturity, { standardCurrentDelta:6, coolerDelta:20 });
+  assert.equal(result.mode, 'TECHNICIAN_PLACEMENT_COMPARISON');
+  assert.equal(result.preferredTechnicianId, 't2');
+  assert.ok(result.constraints.includes('NO_AUTOMATIC_ASSIGNMENT_CHANGE'));
+  assert.equal(assigned.standardCurrent, 4);
+  assert.equal(target.standardCurrent, 2);
+});

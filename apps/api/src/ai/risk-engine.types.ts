@@ -12,6 +12,7 @@ export type AiRiskSignal = {
 export type PointRiskAssessment = {
   pointId: string;
   engineVersion: string;
+  featureSchemaVersion?: string;
   state: AiRiskState;
   severity: AiRiskSeverity;
   confidence: 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -22,6 +23,7 @@ export type PointRiskAssessment = {
 export type TechnicianRiskAssessment = {
   technicianId: string;
   engineVersion: string;
+  featureSchemaVersion?: string;
   state: AiRiskState;
   severity: AiRiskSeverity;
   confidence: TechnicianBaselineConfidence | 'UNKNOWN';

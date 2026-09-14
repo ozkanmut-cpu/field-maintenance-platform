@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CapabilityMaturity } from './data-maturity.types';
-import { AI_ENGINE_VERSION } from './ai-version';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.service';
 import { AiRiskSeverity, AiRiskSignal, PointRiskAssessment, TechnicianRiskAssessment } from './risk-engine.types';
 import { PointDifficultyProfile } from './point-difficulty.types';
@@ -29,6 +29,7 @@ export class RiskEngineService {
       return {
         technicianId: assigned.technicianId,
         engineVersion: AI_ENGINE_VERSION,
+        featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
         state: 'INSUFFICIENT_DATA',
         severity: 'UNKNOWN',
         confidence: 'UNKNOWN',
@@ -88,11 +89,28 @@ export class RiskEngineService {
       signals.push({ code: 'SMARTCLEAN_WINDOW_PRESSURE', severity: 'MEDIUM', evidence: { smartcleanCurrent: assigned.smartcleanCurrent, totalAssigned, completionP75 } });
     }
 
+    const suspiciousVisits = assigned.currentWeekSuspiciousVisitCount ?? 0;
+    if (suspiciousVisits > 0) {
+      signals.push({ code: 'SUSPICIOUS_TRAVEL_OR_BATCH_EVIDENCE', severity: 'MEDIUM', evidence: { suspiciousVisits, reviewRecommended: assigned.currentWeekReviewRecommendedCount ?? 0 } });
+    }
+
+    const paperworkMinutes = assigned.currentWeekPaperworkCompletionP90Minutes;
+    const paperworkBand = baseline.context.paperworkCompletionMinutes;
+    if (paperworkMinutes !== null && paperworkMinutes !== undefined && paperworkBand?.p90 !== null && paperworkBand?.p90 !== undefined && paperworkMinutes > paperworkBand.p90) {
+      signals.push({ code: 'PAPERWORK_COMPLETION_ABOVE_P90', severity: 'HIGH', evidence: { paperworkCompletionP90Minutes: paperworkMinutes, baselineP90Minutes: paperworkBand.p90 } });
+    } else if (paperworkMinutes !== null && paperworkMinutes !== undefined && paperworkBand?.p75 !== null && paperworkBand?.p75 !== undefined && paperworkMinutes > paperworkBand.p75) {
+      signals.push({ code: 'PAPERWORK_COMPLETION_ABOVE_P75', severity: 'MEDIUM', evidence: { paperworkCompletionP90Minutes: paperworkMinutes, baselineP75Minutes: paperworkBand.p75 } });
+    }
+    if ((assigned.currentWeekPaperworkPendingCount ?? 0) > 0) {
+      signals.push({ code: 'PAPERWORK_BACKLOG_PRESENT', severity: 'MEDIUM', evidence: { pendingItems: assigned.currentWeekPaperworkPendingCount ?? 0 } });
+    }
+
     const severity = signals.length ? this.maxSeverity(signals.map((signal) => signal.severity)) : 'LOW';
     const confidence = maturity?.state === 'RELIABLE' && baseline.confidence === 'HIGH' ? 'HIGH' : baseline.confidence === 'LOW' ? 'LOW' : 'MEDIUM';
     return {
       technicianId: assigned.technicianId,
       engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       state: 'READY',
       severity,
       confidence,
@@ -108,7 +126,7 @@ export class RiskEngineService {
     if (!maturityReady) reasons.push('RISK_MATURITY_GATE_NOT_READY');
     if (profile.state !== 'ACTIVE') reasons.push('POINT_DIFFICULTY_NOT_READY');
     if (profile.equipmentProfile.confidence === 'UNKNOWN' || profile.equipmentProfile.confidence === 'LOW') reasons.push('POINT_EQUIPMENT_CONFIDENCE_LOW');
-    if (reasons.length) return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, state: 'INSUFFICIENT_DATA', severity: 'UNKNOWN', confidence: 'UNKNOWN', signals: [], reasons };
+    if (reasons.length) return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'INSUFFICIENT_DATA', severity: 'UNKNOWN', confidence: 'UNKNOWN', signals: [], reasons };
 
     const signals: AiRiskSignal[] = [];
     if (profile.history.attempts > profile.history.visits && profile.history.attempts >= 2) {
@@ -123,7 +141,7 @@ export class RiskEngineService {
       signals.push({ code: 'EQUIPMENT_PROFILE_UNSTABLE', severity: 'MEDIUM', evidence: { anomalyCount: profile.equipmentProfile.anomalyCodes.length } });
     }
     const severity = signals.length ? this.maxSeverity(signals.map((signal) => signal.severity)) : 'LOW';
-    return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, state: 'READY', severity, confidence: profile.confidence, signals, reasons: signals.map((signal) => signal.code) };
+    return { pointId: profile.pointId, engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'READY', severity, confidence: profile.confidence, signals, reasons: signals.map((signal) => signal.code) };
   }
 
   private maxPressure(values: WorkloadPressureBand[]): WorkloadPressureBand {

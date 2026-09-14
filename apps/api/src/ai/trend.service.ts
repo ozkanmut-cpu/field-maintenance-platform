@@ -5,8 +5,11 @@ import { FeatureSnapshot } from './feature-store.types';
 import { PointDifficultyService } from './point-difficulty.service';
 import { RegionHealthService } from './region-health.service';
 import { TechnicianBaselineService } from './technician-baseline.service';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 export type AiTrendAssessment = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   weekly: Array<{ weekKey: string; maturityScore: number; dataQualityScore: number; locationCoverage: number; equipmentCoverage: number }>;
   regions: Array<{ regionId: string; currentScore: number; trend: string }>;
   technicians: Array<{ technicianId: string; currentCapacityP75: number | null; previousCapacityP75: number | null; delta: number | null }>;
@@ -52,7 +55,7 @@ export class TrendService {
       return { pointId, currentDifficulty: current, previousDifficulty: previous, delta: this.delta(current, previous) };
     });
 
-    return { weekly, regions, technicians, points };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, weekly, regions, technicians, points };
   }
 
   private delta(current: number | null, previous: number | null) {

@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
+import { AiSummaryService } from './ai-summary.service';
 import { BacktestService } from './backtest.service';
 import { DataMaturityService } from './data-maturity.service';
 import { DataQualityEngineService } from './data-quality-engine.service';
@@ -29,6 +30,7 @@ import { WhatIfService } from './what-if.service';
 export class AdminAiController {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly summaries: AiSummaryService,
     private readonly backtest: BacktestService,
     private readonly featureStore: FeatureStoreService,
     private readonly maturity: DataMaturityService,
@@ -125,6 +127,22 @@ export class AdminAiController {
       }))
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.history.attempts - a.history.attempts);
 
+    const regionHealth = this.regionHealth.assess(history);
+    const summaryInputs = technicianRows.map((item) => ({
+      technicianId: item.id,
+      name: item.name,
+      currentWork: item.workload.standardCurrent + item.workload.smartcleanCurrent,
+      carryover: item.workload.standardCarryover + item.workload.smartcleanCarryover,
+      risk: item.risk,
+      suspiciousVisits: item.workload.currentWeekSuspiciousVisitCount ?? 0,
+      paperworkPending: item.workload.currentWeekPaperworkPendingCount ?? 0,
+    }));
+    const summaries = {
+      technicians: summaryInputs.map((item) => this.summaries.technicianDaily(item)),
+      adminDaily: this.summaries.adminDaily(summaryInputs, regionHealth, planning),
+      period: this.summaries.period(history.at(-1)?.weekKey ?? null, summaryInputs, regionHealth),
+    };
+
     return {
       weeks,
       generatedAt: new Date().toISOString(),
@@ -136,7 +154,8 @@ export class AdminAiController {
       technicians: technicianRows,
       planning,
       backtest: this.backtest.evaluate(history),
-      regionHealth: this.regionHealth.assess(history),
+      regionHealth,
+      summaries,
       trends: this.trends.assess(history),
       dataQuality: this.dataQuality.assess(history),
       similarWeeks: this.similarWeeks.find(history),
@@ -154,11 +173,15 @@ export class AdminAiController {
       asOf.setUTCDate(asOf.getUTCDate() - offset * 7);
       history.push(await this.featureStore.buildWeeklySnapshot(asOf));
     }
-    const [assigned, technician] = await Promise.all([
+    const [assigned, technician, targetTechnician] = await Promise.all([
       this.assignedWorkload.forWeek(now),
       this.prisma.user.findFirst({ where: { id: dto.technicianId, role: UserRole.TECHNICIAN, active: true }, select: { id: true } }),
+      dto.targetTechnicianId
+        ? this.prisma.user.findFirst({ where: { id: dto.targetTechnicianId, role: UserRole.TECHNICIAN, active: true }, select: { id: true } })
+        : Promise.resolve(null),
     ]);
     if (!technician) throw new NotFoundException('Aktif teknisyen bulunamadı');
+    if (dto.targetTechnicianId && !targetTechnician) throw new NotFoundException('Hedef aktif teknisyen bulunamadı');
     const workload = assigned.technicians.find((item) => item.technicianId === dto.technicianId) ?? {
       technicianId: dto.technicianId,
       standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0,
@@ -171,8 +194,20 @@ export class AdminAiController {
     const baseline = this.baselines.assessTechnician(history, dto.technicianId);
     const maturity = this.maturity.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
-    const { technicianId: _technicianId, ...change } = dto;
-    return this.whatIf.simulate(workload, baseline, riskMaturity, change);
+    const { technicianId: _technicianId, targetTechnicianId: _targetTechnicianId, ...change } = dto;
+    if (!dto.targetTechnicianId) return this.whatIf.simulate(workload, baseline, riskMaturity, change);
+
+    const targetWorkload = assigned.technicians.find((item) => item.technicianId === dto.targetTechnicianId) ?? {
+      technicianId: dto.targetTechnicianId,
+      standardCurrent: 0, standardCarryover: 0, smartcleanCurrent: 0, smartcleanCarryover: 0,
+      equipmentKnownPointCount: 0, equipmentUnknownPointCount: 0,
+      assignedCoolerCount: 0, assignedTowerCount: 0, assignedTapCount: 0, assignedSmarttapCount: 0,
+      assignedLocatedPointCount: 0, assignedUnlocatedPointCount: 0,
+      assignedFieldP90RadiusMeters: null, assignedRouteEstimateMeters: null, assignedRouteCoherenceRatio: null,
+      assignedClusterCount: 0, assignedIsolatedPointCount: 0, assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
+    };
+    const targetBaseline = this.baselines.assessTechnician(history, dto.targetTechnicianId);
+    return this.whatIf.comparePlacement(workload, baseline, targetWorkload, targetBaseline, riskMaturity, change);
   }
 
 

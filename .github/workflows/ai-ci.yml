@@ -1,0 +1,37 @@
+name: AI CI
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/ai/**'
+      - 'apps/api/package.json'
+      - 'apps/admin/app/ai-dashboard.tsx'
+      - '.github/workflows/ai-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/api/src/ai/**'
+      - 'apps/api/package.json'
+      - 'apps/admin/app/ai-dashboard.tsx'
+      - '.github/workflows/ai-ci.yml'
+
+jobs:
+  ai-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: AI deterministic tests
+        run: npm --prefix apps/api run test:ai
+      - name: API typecheck
+        run: npm --prefix apps/api run lint
+      - name: API build
+        run: npm --prefix apps/api run build
+      - name: Admin typecheck
+        run: npm --prefix apps/admin run lint
+      - name: Admin build
+        run: npm --prefix apps/admin run build

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import {
   AiCapability,
   AiMaturityState,
@@ -20,6 +21,8 @@ export class DataMaturityService {
       : 0;
 
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       generatedAt: new Date().toISOString(),
       latestWeekKey: snapshots.at(-1)?.weekKey ?? null,
       overallState: this.stateForScore(overallScore),

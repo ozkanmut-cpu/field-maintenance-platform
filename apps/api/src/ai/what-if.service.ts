@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AI_ENGINE_VERSION } from './ai-version';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianAssignedWeeklyWorkload } from './assigned-weekly-workload.service';
 import { CapabilityMaturity } from './data-maturity.types';
 import { RiskEngineService } from './risk-engine.service';
@@ -34,6 +34,7 @@ export class WhatIfService {
     const afterRisk = this.riskEngine.assessTechnician(after, baseline, afterWorkload, riskMaturity);
     return {
       engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       technicianId: assigned.technicianId,
       change,
       before: { assigned, workload: beforeWorkload, risk: beforeRisk },
@@ -41,6 +42,30 @@ export class WhatIfService {
       riskDelta: this.riskRank(afterRisk.severity) - this.riskRank(beforeRisk.severity),
       confidence: afterRisk.confidence,
       reasons: [...new Set([...afterWorkload.reasons, ...afterRisk.reasons])],
+    };
+  }
+
+  comparePlacement(
+    source: TechnicianAssignedWeeklyWorkload, sourceBaseline: TechnicianWeeklyBaseline,
+    target: TechnicianAssignedWeeklyWorkload, targetBaseline: TechnicianWeeklyBaseline,
+    riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange,
+  ) {
+    const sourceScenario = this.simulate(source, sourceBaseline, riskMaturity, change);
+    const targetScenario = this.simulate(target, targetBaseline, riskMaturity, change);
+    const sourceRank = this.riskRank(sourceScenario.after.risk.severity);
+    const targetRank = this.riskRank(targetScenario.after.risk.severity);
+    const preferredTechnicianId = sourceRank < targetRank ? source.technicianId
+      : targetRank < sourceRank ? target.technicianId : null;
+    return {
+      engineVersion: AI_ENGINE_VERSION,
+      mode: 'TECHNICIAN_PLACEMENT_COMPARISON',
+      sourceTechnicianId: source.technicianId, targetTechnicianId: target.technicianId,
+      change, sourceScenario, targetScenario, preferredTechnicianId,
+      confidence: sourceScenario.confidence === 'UNKNOWN' || targetScenario.confidence === 'UNKNOWN' ? 'UNKNOWN'
+        : sourceScenario.confidence === 'LOW' || targetScenario.confidence === 'LOW' ? 'LOW'
+        : sourceScenario.confidence === 'MEDIUM' || targetScenario.confidence === 'MEDIUM' ? 'MEDIUM' : 'HIGH',
+      reasonCodes: preferredTechnicianId ? ['LOWER_POST_CHANGE_RISK'] : ['POST_CHANGE_RISK_TIED'],
+      constraints: ['SIMULATION_ONLY', 'NO_AUTOMATIC_ASSIGNMENT_CHANGE'],
     };
   }
 

@@ -3,10 +3,11 @@ import { DataMaturityService } from './data-maturity.service';
 import { FeatureSnapshot } from './feature-store.types';
 import { PointDifficultyService } from './point-difficulty.service';
 import { RiskEngineService } from './risk-engine.service';
-import { AI_ENGINE_VERSION } from './ai-version';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 export type BacktestResult = {
   engineVersion: string;
+  featureSchemaVersion?: string;
   state: 'INSUFFICIENT_DATA' | 'READY';
   evaluatedPredictions: number;
   skippedPredictions: number;
@@ -59,6 +60,7 @@ export class BacktestService {
     if (skipped) reasonCodes.push('SOME_PREDICTIONS_SKIPPED_BY_MATURITY_GATE');
     return {
       engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       state: evaluated ? 'READY' : 'INSUFFICIENT_DATA',
       evaluatedPredictions: evaluated,
       skippedPredictions: skipped,

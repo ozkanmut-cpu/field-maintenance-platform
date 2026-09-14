@@ -3,6 +3,7 @@ import { IsInt, IsNumber, IsOptional, IsUUID, Max, Min } from 'class-validator';
 
 export class WhatIfDto {
   @IsUUID() technicianId!: string;
+  @IsOptional() @IsUUID() targetTechnicianId?: string;
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(-10000) @Max(10000) standardCurrentDelta?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(-10000) @Max(10000) standardCarryoverDelta?: number;

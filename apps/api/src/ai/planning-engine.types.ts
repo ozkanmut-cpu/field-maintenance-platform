@@ -21,6 +21,7 @@ export type PlanningRecommendation = {
 
 export type PlanningAssessment = {
   engineVersion: string;
+  featureSchemaVersion?: string;
   state: 'INSUFFICIENT_DATA' | 'READY';
   recommendations: PlanningRecommendation[];
   reasons: string[];

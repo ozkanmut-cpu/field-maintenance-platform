@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
 import { BaselineBand, TechnicianWeeklyBaseline } from './technician-baseline.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 @Injectable()
 export class TechnicianBaselineService {
@@ -24,6 +25,8 @@ export class TechnicianBaselineService {
     const state = serviceRows.length >= 4 ? 'ACTIVE' : 'WARMING_UP';
     const confidence = state === 'WARMING_UP' ? 'LOW' : serviceRows.length >= 12 && travelRows.length >= 8 ? 'HIGH' : serviceRows.length >= 8 ? 'MEDIUM' : 'LOW';
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       technicianId,
       state,
       confidence,
@@ -43,7 +46,12 @@ export class TechnicianBaselineService {
         routeCoherenceRatio: this.band(travelRows, 'routeCoherenceRatio'),
         fragmentationRatio: this.band(travelRows, 'routeFragmentationRatio'),
       },
-      context: { uniqueVisitedPoints: this.band(serviceRows, 'uniqueVisitedPointCount') },
+      context: {
+        uniqueVisitedPoints: this.band(serviceRows, 'uniqueVisitedPointCount'),
+        paperworkCompletionMinutes: this.band(rows, 'paperworkCompletionP90Minutes'),
+        suspiciousVisitRate: this.band(rows, 'suspiciousVisitRate'),
+        lateEntryMinutes: this.band(rows, 'averageLateEntryMinutes'),
+      },
       reasons,
     };
   }

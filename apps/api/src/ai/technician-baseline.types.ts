@@ -8,6 +8,8 @@ export type BaselineBand = {
 };
 
 export type TechnicianWeeklyBaseline = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   technicianId: string;
   state: TechnicianBaselineState;
   confidence: TechnicianBaselineConfidence;
@@ -27,6 +29,11 @@ export type TechnicianWeeklyBaseline = {
     routeCoherenceRatio: BaselineBand;
     fragmentationRatio: BaselineBand;
   };
-  context: { uniqueVisitedPoints: BaselineBand };
+  context: {
+    uniqueVisitedPoints: BaselineBand;
+    paperworkCompletionMinutes?: BaselineBand;
+    suspiciousVisitRate?: BaselineBand;
+    lateEntryMinutes?: BaselineBand;
+  };
   reasons: string[];
 };

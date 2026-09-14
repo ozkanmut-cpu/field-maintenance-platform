@@ -22,7 +22,7 @@ const baseline: TechnicianWeeklyBaseline = {
     towerCount: { median: 8, p75: 10, p90: 12 }, tapCount: { median: 6, p75: 8, p90: 10 }, smarttapCount: { median: 2, p75: 3, p90: 4 },
   },
   travel: { routeDistanceMeters: { median: 10000, p75: 15000, p90: 20000 }, fieldP90RadiusMeters: { median: 5000, p75: 7000, p90: 9000 }, routeCoherenceRatio: { median: 1.2, p75: 1.5, p90: 2 }, fragmentationRatio: { median: 0.2, p75: 0.4, p90: 0.6 } },
-  context: { uniqueVisitedPoints: { median: 8, p75: 10, p90: 12 } }, reasons: [],
+  context: { uniqueVisitedPoints: { median: 8, p75: 10, p90: 12 }, paperworkCompletionMinutes: { median: 60, p75: 120, p90: 240 }, suspiciousVisitRate: { median: 0, p75: 0, p90: 0.1 }, lateEntryMinutes: { median: 0, p75: 10, p90: 30 } }, reasons: [],
 };
 const workload = (serviceBand: 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90' | 'UNKNOWN', geoBand: 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90' | 'UNKNOWN' = 'WITHIN_BASELINE'): WeeklyWorkloadAssessment => ({
   technicianId: 't1', evidenceState: 'READY', baselineState: 'ACTIVE', baselineConfidence: 'MEDIUM',
@@ -87,4 +87,16 @@ test('period-end capacity excess creates explicit delay and overload signals', (
 test('SmartClean carryover is surfaced as an overdue window risk', () => {
   const result = service.assessTechnician(assigned({ smartcleanCarryover: 1 }), baseline, workload('WITHIN_BASELINE'), maturity);
   assert.ok(result.signals.some((signal) => signal.code === 'SMARTCLEAN_WINDOW_OVERDUE'));
+});
+
+
+test('suspicious batch evidence is surfaced as an explainable geography risk signal', () => {
+  const result = service.assessTechnician(assigned({ currentWeekSuspiciousVisitCount: 1, currentWeekReviewRecommendedCount: 1 }), baseline, workload('WITHIN_BASELINE'), maturity);
+  assert.ok(result.signals.some((signal) => signal.code === 'SUSPICIOUS_TRAVEL_OR_BATCH_EVIDENCE'));
+});
+
+test('paperwork completion time is compared with learned technician baseline', () => {
+  const result = service.assessTechnician(assigned({ currentWeekPaperworkCompletionP90Minutes: 300 }), baseline, workload('WITHIN_BASELINE'), maturity);
+  assert.equal(result.severity, 'HIGH');
+  assert.ok(result.signals.some((signal) => signal.code === 'PAPERWORK_COMPLETION_ABOVE_P90'));
 });

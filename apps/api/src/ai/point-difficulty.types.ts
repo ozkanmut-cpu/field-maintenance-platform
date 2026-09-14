@@ -4,6 +4,8 @@ export type PointDifficultyState = 'WARMING_UP' | 'ACTIVE';
 export type PointDifficultyConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type PointDifficultyProfile = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   pointId: string;
   state: PointDifficultyState;
   confidence: PointDifficultyConfidence;

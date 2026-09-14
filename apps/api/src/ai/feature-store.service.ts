@@ -4,6 +4,7 @@ import { PointStatus, UserRole, VisitStatus } from '@prisma/client';
 import { businessWeek } from '../common/business-week';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService } from './geography.service';
@@ -29,7 +30,7 @@ export class FeatureStoreService {
       this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, code: true, name: true, address: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, googlePlaceId: true, googleBusinessName: true, aliases: { select: { alias: true } }, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentVerifiedAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
-      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
+      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, lateEntryMinutes: true, suspiciousBatch: true, reviewRecommended: true, serviceSlipStatus: true, confirmationStatus: true, paperworkHistory: { where: { changedAt: { lt: week.endExclusiveInstant } }, select: { kind: true, newStatus: true, changedAt: true }, orderBy: { changedAt: 'asc' } }, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceAttempt.findMany({ where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceObligation.findMany({ where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } }, select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true }, orderBy: { id: 'asc' } }),
     ]);
@@ -90,6 +91,12 @@ export class FeatureStoreService {
       const technicianGeoPoints = [...uniqueGeoByPoint.values()];
       const technicianClusters = this.clustering.clusterAdaptive(technicianGeoPoints);
       const equipmentCompleteVisits = technicianVisits.filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null));
+      const paperworkCompletionMinutes = technicianVisits.flatMap((visit) => ['SERVICE_SLIP', 'CONFIRMATION'].flatMap((kind) => {
+        const present = visit.paperworkHistory.find((item) => item.kind === kind && item.newStatus === 'PRESENT');
+        return present ? [Math.max(0, (present.changedAt.getTime() - visit.performedAt.getTime()) / 60000)] : [];
+      })).sort((a, b) => a - b);
+      const paperworkP90 = paperworkCompletionMinutes.length ? this.percentile(paperworkCompletionMinutes, 0.9) : null;
+      const paperworkPendingCount = technicianVisits.reduce((sum, visit) => sum + (visit.serviceSlipStatus === 'PRESENT' ? 0 : 1) + (visit.confirmationStatus === 'PRESENT' ? 0 : 1), 0);
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
         assignedStandardCurrentCount: assigned?.standardCurrent ?? 0,
@@ -105,6 +112,10 @@ export class FeatureStoreService {
         lateEntryCount: technicianVisits.filter((v) => v.enteredLate).length,
         suspiciousVisitCount: technicianVisits.filter((v) => v.suspiciousBatch).length,
         reviewRecommendedCount: technicianVisits.filter((v) => v.reviewRecommended).length,
+        suspiciousVisitRate: technicianVisits.length ? technicianVisits.filter((v) => v.suspiciousBatch).length / technicianVisits.length : 0,
+        averageLateEntryMinutes: technicianVisits.filter((v) => v.lateEntryMinutes !== null).length ? technicianVisits.filter((v) => v.lateEntryMinutes !== null).reduce((sum, v) => sum + Number(v.lateEntryMinutes), 0) / technicianVisits.filter((v) => v.lateEntryMinutes !== null).length : null,
+        paperworkPendingCount,
+        paperworkCompletionP90Minutes: paperworkP90,
         gpsSampleCount: technicianGeo.sampleCount,
         fieldCenterLatitude: technicianGeo.centerLatitude,
         fieldCenterLongitude: technicianGeo.centerLongitude,
@@ -221,7 +232,14 @@ export class FeatureStoreService {
     const timestamps = [...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt), ...visits.map((x) => x.recordedAtServer), ...attempts.map((x) => x.attemptedAt), ...obligations.map((x) => x.createdAt)];
     const sourceDataThrough = timestamps.length ? new Date(Math.max(...timestamps.map((d) => d.getTime()))).toISOString() : null;
     records.sort((a, b) => `${a.entityType}:${a.entityId}`.localeCompare(`${b.entityType}:${b.entityId}`));
-    return { weekKey: week.key, isoYear: week.isoYear, isoWeek: week.isoWeek, weekStart: week.weekStart.toISOString().slice(0, 10), weekEnd: week.weekEnd.toISOString().slice(0, 10), startInstant: week.startInstant.toISOString(), endExclusiveInstant: week.endExclusiveInstant.toISOString(), sourceDataThrough, sourceHash, generatedAt: new Date().toISOString(), records };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, weekKey: week.key, isoYear: week.isoYear, isoWeek: week.isoWeek, weekStart: week.weekStart.toISOString().slice(0, 10), weekEnd: week.weekEnd.toISOString().slice(0, 10), startInstant: week.startInstant.toISOString(), endExclusiveInstant: week.endExclusiveInstant.toISOString(), sourceDataThrough, sourceHash, generatedAt: new Date().toISOString(), records };
+  }
+
+  private percentile(sorted: number[], p: number) {
+    if (!sorted.length) return null;
+    const index = (sorted.length - 1) * p;
+    const lo = Math.floor(index), hi = Math.ceil(index);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo);
   }
 
   private stableStringify(value: unknown): string {

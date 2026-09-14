@@ -71,14 +71,16 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] What-if: equipment adet değişikliği
 - [x] What-if: nokta ekleme/çıkarma — workload delta üzerinden
 - [ ] What-if: bölge/teknisyen değişikliği
+  - [x] Teknisyen yerleşim karşılaştırması: aynı önerilen yük iki teknisyende simüle edilir; düşük post-change risk tercih sinyali olur, otomatik atama yapılmaz.
+  - [ ] Bölge değişikliği: bölgenin gerçek workload/equipment/geography vektörünü hedef teknisyene taşıyarak simüle et.
 - [x] What-if: route/geography değişikliği
 - [x] What-if çıktısı: workload delta + risk delta + confidence
 - [x] Outcome validation pipeline
 - [ ] Equipment-type relative workload etkilerini gözlenen sonuçlardan kalibre et
 - [ ] Travel-burden ağırlıklarını gözlenen süre/başarı sonuçlarından kalibre et
 - [ ] Calibration drift takibi
-- [ ] Model/heuristic versioning
-- [ ] Feature versioning
+- [x] Model/heuristic versioning
+- [x] Feature versioning
 - [x] Backtest: geçmiş haftalarda öneri verilseydi sonuç ne olurdu?
 
 ## P3 — AI Location ve veri kalitesi
@@ -88,7 +90,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Co-located / alias işletmeler için identity confidence
 - [x] İsim + adres + mesafe + geçmiş ziyaret kanıtını tek confidence modelinde birleştirme
 - [x] Location contradiction detection
-- [ ] Implausible travel / suspicious batch skorunu geography modeline bağlama
+- [x] Implausible travel / suspicious batch skorunu geography modeline bağlama
 - [x] AI Data Quality Engine
 - [x] Missingness severity scoring
 - [x] Contradictory point metadata detection
@@ -98,14 +100,14 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 ## P4 — Operasyonel AI özetleri
 
-- [ ] Günlük teknisyen AI özeti: riskler, gecikenler, yüksek yük, rota anomalileri
-- [ ] Günlük admin AI özeti
-- [ ] Hafta/period sonu AI özeti
+- [x] Günlük teknisyen AI özeti: riskler, gecikenler, yüksek yük, rota anomalileri
+- [x] Günlük admin AI özeti
+- [x] Hafta/period sonu AI özeti
 - [x] Region health trend
 - [x] Technician capacity trend
 - [x] Point difficulty trend
 - [x] Equipment data-quality trend
-- [ ] Paperwork completion-time analitiğini risk sinyali olarak ekle
+- [x] Paperwork completion-time analitiğini risk sinyali olarak ekle
 - [x] AI Dashboard tarihsel karşılaştırma
 - [ ] Export edilebilir AI/KPI raporu
 
@@ -120,8 +122,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Veri eksik/çelişkili/stale durum testleri
 - [ ] AI endpoint contract testleri
 - [ ] AI Dashboard smoke/e2e testi
-- [ ] Feature snapshot reproducibility testi
-- [ ] Model/heuristic version bilgisini her AI çıktısına ekle
+- [x] Feature snapshot reproducibility testi
+- [x] Model/heuristic version bilgisini temel kullanıcıya açık AI çıktılarında ve snapshotlarda taşı
 - [ ] AI hesaplama süresi ve hata metriği
 - [ ] Risk/recommendation dağılım drift metriği
 
@@ -137,7 +139,7 @@ AI V1 tamamlanmış sayılabilmesi için:
 - [ ] Similar Week ve What-if en az temel sürümde çalışmalı
 - [ ] Geçmiş veriyle backtest yapılabilmeli
 - [ ] Admin AI Dashboard sonuçları tarihsel olarak karşılaştırabilmeli
-- [ ] Kritik AI motorlarının otomatik testleri CI'da çalışmalı
+- [x] Kritik AI motorlarının otomatik testleri CI'da çalışmalı
 
 ## AI kapsamı dışında
 

@@ -11,6 +11,8 @@ export type WeeklyAssignedWorkloadVector = {
 };
 
 export type WeeklyWorkloadAssessment = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   technicianId: string;
   evidenceState: WorkloadEvidenceState;
   baselineState: TechnicianBaselineState;

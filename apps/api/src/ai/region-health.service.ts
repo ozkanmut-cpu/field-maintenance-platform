@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
-import { AI_ENGINE_VERSION } from './ai-version';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 export type RegionHealth = {
   regionId: string;
   engineVersion: string;
+  featureSchemaVersion?: string;
   score: number;
   state: 'GREEN' | 'AMBER' | 'RED';
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -29,6 +30,7 @@ export class RegionHealthService {
       return {
         regionId: row.entityId,
         engineVersion: AI_ENGINE_VERSION,
+        featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
         score: currentScore,
         state: currentScore >= 80 ? 'GREEN' : currentScore >= 55 ? 'AMBER' : 'RED',
         confidence: points >= 20 && ordered.length >= 8 ? 'HIGH' : points >= 5 && ordered.length >= 4 ? 'MEDIUM' : 'LOW',
