@@ -78,6 +78,7 @@ export class AdminAiController {
     ]);
 
     const maturity = this.maturity.assess(history);
+    const dataQuality = this.dataQuality.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
     const recommendationMaturity = maturity.capabilities.find((item) => item.capability === 'RECOMMENDATION');
     const baselineByTechnician = new Map(this.baselines.assess(history).map((item) => [item.technicianId, item]));
@@ -109,13 +110,14 @@ export class AdminAiController {
         baseline,
         workload,
         assessment,
-        risk: this.riskEngine.assessTechnician(workload, baseline, assessment, riskMaturity),
+        risk: this.riskEngine.assessTechnician(workload, baseline, assessment, riskMaturity, dataQuality),
       };
     });
 
     const planning = this.planningEngine.assess(
       technicianRows.map((item) => ({ technicianId: item.id, assigned: item.workload, workload: item.assessment, risk: item.risk })),
       recommendationMaturity,
+      dataQuality,
     );
 
     const pointMeta = new Map(points.map((point) => [point.id, point]));
@@ -123,7 +125,7 @@ export class AdminAiController {
     const pointDifficulty = this.difficulties.assess(history)
       .map((item) => ({
         ...item,
-        risk: this.riskEngine.assessPoint(item, riskMaturity),
+        risk: this.riskEngine.assessPoint(item, riskMaturity, dataQuality),
         location: locationByPoint.get(item.pointId) ?? null,
         point: pointMeta.get(item.pointId) ?? null,
       }))
@@ -160,7 +162,7 @@ export class AdminAiController {
       summaries,
       trends: this.trends.assess(history),
       calibration: this.calibration.assess(history),
-      dataQuality: this.dataQuality.assess(history),
+      dataQuality,
       similarWeeks: this.similarWeeks.find(history),
       pointDifficulty,
     };
@@ -196,6 +198,7 @@ export class AdminAiController {
     };
     const baseline = this.baselines.assessTechnician(history, dto.technicianId);
     const maturity = this.maturity.assess(history);
+    const dataQuality = this.dataQuality.assess(history);
     const riskMaturity = maturity.capabilities.find((item) => item.capability === 'RISK');
     const { technicianId: _technicianId, targetTechnicianId: _targetTechnicianId, regionId: _regionId, ...change } = dto;
     if (dto.regionId) {
@@ -219,9 +222,9 @@ export class AdminAiController {
       const targetId = dto.targetTechnicianId ?? dto.technicianId;
       const targetWorkload = assigned.technicians.find((item) => item.technicianId === targetId) ?? { ...workload, technicianId: targetId };
       const targetBaseline = this.baselines.assessTechnician(history, targetId);
-      return this.whatIf.simulateRegionPlacement(vector, typeof f.assignedTechnicianId === 'string' ? f.assignedTechnicianId : null, targetWorkload, targetBaseline, riskMaturity);
+      return this.whatIf.simulateRegionPlacement(vector, typeof f.assignedTechnicianId === 'string' ? f.assignedTechnicianId : null, targetWorkload, targetBaseline, riskMaturity, dataQuality);
     }
-    if (!dto.targetTechnicianId) return this.whatIf.simulate(workload, baseline, riskMaturity, change);
+    if (!dto.targetTechnicianId) return this.whatIf.simulate(workload, baseline, riskMaturity, change, dataQuality);
 
     const targetWorkload = assigned.technicians.find((item) => item.technicianId === dto.targetTechnicianId) ?? {
       technicianId: dto.targetTechnicianId,
@@ -233,7 +236,7 @@ export class AdminAiController {
       assignedClusterCount: 0, assignedIsolatedPointCount: 0, assignedFragmentationRatio: null, workAreaCenterDistanceMeters: null,
     };
     const targetBaseline = this.baselines.assessTechnician(history, dto.targetTechnicianId);
-    return this.whatIf.comparePlacement(workload, baseline, targetWorkload, targetBaseline, riskMaturity, change);
+    return this.whatIf.comparePlacement(workload, baseline, targetWorkload, targetBaseline, riskMaturity, change, dataQuality);
   }
 
 

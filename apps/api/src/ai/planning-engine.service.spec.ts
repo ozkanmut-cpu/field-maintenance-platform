@@ -46,3 +46,20 @@ test('route pressure produces route review while incomplete profiles produce dat
   assert.ok(result.recommendations.some((item) => item.type === 'REVIEW_ROUTE'));
   assert.ok(result.recommendations.some((item) => item.type === 'FIX_DATA_QUALITY'));
 });
+
+test('shared data-quality gate suppresses planning when evidence quality is unsafe', () => {
+  const quality:any = { score:45, confidence:'MEDIUM', issues:[], reasonCodes:[] };
+  const result = service.assess([input()], maturity, quality);
+  assert.equal(result.state, 'INSUFFICIENT_DATA');
+  assert.equal(result.dataQualityState, 'BLOCKED');
+  assert.deepEqual(result.recommendations, []);
+});
+
+test('limited data quality keeps planning available but caps recommendation confidence', () => {
+  const quality:any = { score:65, confidence:'MEDIUM', issues:[], reasonCodes:[] };
+  const result = service.assess([input({ assigned:{standardCarryover:2}, risk:{severity:'MEDIUM', confidence:'MEDIUM', reasons:['CARRYOVER_PRESENT']} })], maturity, quality);
+  assert.equal(result.state, 'READY');
+  assert.equal(result.confidence, 'LOW');
+  assert.equal(result.dataQualityState, 'LIMITED');
+  assert.ok(result.recommendations.every((item) => item.confidence === 'LOW'));
+});

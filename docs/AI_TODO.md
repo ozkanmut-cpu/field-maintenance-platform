@@ -121,8 +121,9 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Calibration/backtest testleri
 - [x] Confidence/maturity gate testleri
 - [x] Veri eksik/çelişkili/stale durum testleri
-- [ ] AI endpoint contract testleri
-- [ ] AI Dashboard smoke/e2e testi
+- [x] AI endpoint contract testleri
+- [x] AI Dashboard smoke testi
+  - [ ] AI Dashboard browser e2e testi
 - [x] Feature snapshot reproducibility testi
 - [x] Model/heuristic version bilgisini temel kullanıcıya açık AI çıktılarında ve snapshotlarda taşı
 - [ ] AI hesaplama süresi ve hata metriği
@@ -136,7 +137,7 @@ AI V1 tamamlanmış sayılabilmesi için:
 - [ ] Risk Engine gerçek operasyonel risk skoru üretmeli
 - [ ] Planning Engine açıklanabilir öneriler üretmeli
 - [ ] Tüm AI çıktılarında maturity/confidence/reason codes bulunmalı
-- [ ] Düşük veri kalitesinde sistem güvenli biçimde öneriyi kısmalı
+- [x] Düşük veri kalitesinde sistem güvenli biçimde öneriyi kısmalı
 - [ ] Similar Week ve What-if en az temel sürümde çalışmalı
 - [ ] Geçmiş veriyle backtest yapılabilmeli
 - [ ] Admin AI Dashboard sonuçları tarihsel olarak karşılaştırabilmeli

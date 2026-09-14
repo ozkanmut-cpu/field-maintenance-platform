@@ -5,6 +5,7 @@ import { CapabilityMaturity } from './data-maturity.types';
 import { RiskEngineService } from './risk-engine.service';
 import { TechnicianWeeklyBaseline } from './technician-baseline.types';
 import { WeeklyWorkloadService } from './weekly-workload.service';
+import { DataQualityAssessment } from './data-quality-engine.types';
 
 
 export type RegionWorkloadVector = {
@@ -45,12 +46,12 @@ export type WhatIfChange = Partial<{
 export class WhatIfService {
   constructor(private readonly workloadEngine: WeeklyWorkloadService, private readonly riskEngine: RiskEngineService) {}
 
-  simulate(assigned: TechnicianAssignedWeeklyWorkload, baseline: TechnicianWeeklyBaseline, riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange) {
+  simulate(assigned: TechnicianAssignedWeeklyWorkload, baseline: TechnicianWeeklyBaseline, riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange, dataQuality?: DataQualityAssessment) {
     const beforeWorkload = this.workloadEngine.assess(assigned, baseline);
-    const beforeRisk = this.riskEngine.assessTechnician(assigned, baseline, beforeWorkload, riskMaturity);
+    const beforeRisk = this.riskEngine.assessTechnician(assigned, baseline, beforeWorkload, riskMaturity, dataQuality);
     const after = this.apply(assigned, change);
     const afterWorkload = this.workloadEngine.assess(after, baseline);
-    const afterRisk = this.riskEngine.assessTechnician(after, baseline, afterWorkload, riskMaturity);
+    const afterRisk = this.riskEngine.assessTechnician(after, baseline, afterWorkload, riskMaturity, dataQuality);
     return {
       engineVersion: AI_ENGINE_VERSION,
       featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
@@ -67,10 +68,10 @@ export class WhatIfService {
   comparePlacement(
     source: TechnicianAssignedWeeklyWorkload, sourceBaseline: TechnicianWeeklyBaseline,
     target: TechnicianAssignedWeeklyWorkload, targetBaseline: TechnicianWeeklyBaseline,
-    riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange,
+    riskMaturity: CapabilityMaturity | undefined, change: WhatIfChange, dataQuality?: DataQualityAssessment,
   ) {
-    const sourceScenario = this.simulate(source, sourceBaseline, riskMaturity, change);
-    const targetScenario = this.simulate(target, targetBaseline, riskMaturity, change);
+    const sourceScenario = this.simulate(source, sourceBaseline, riskMaturity, change, dataQuality);
+    const targetScenario = this.simulate(target, targetBaseline, riskMaturity, change, dataQuality);
     const sourceRank = this.riskRank(sourceScenario.after.risk.severity);
     const targetRank = this.riskRank(targetScenario.after.risk.severity);
     const preferredTechnicianId = sourceRank < targetRank ? source.technicianId
@@ -94,6 +95,7 @@ export class WhatIfService {
     target: TechnicianAssignedWeeklyWorkload,
     targetBaseline: TechnicianWeeklyBaseline,
     riskMaturity: CapabilityMaturity | undefined,
+    dataQuality?: DataQualityAssessment,
   ) {
     const change: WhatIfChange = {
       standardCurrentDelta: region.standardCurrent,
@@ -108,7 +110,7 @@ export class WhatIfService {
       locatedPointDelta: region.locatedPointCount,
       unlocatedPointDelta: region.unlocatedPointCount,
     };
-    const scenario = this.simulate(target, targetBaseline, riskMaturity, change);
+    const scenario = this.simulate(target, targetBaseline, riskMaturity, change, dataQuality);
     return {
       engineVersion: AI_ENGINE_VERSION,
       featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,

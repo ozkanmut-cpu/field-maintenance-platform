@@ -100,3 +100,19 @@ test('paperwork completion time is compared with learned technician baseline', (
   assert.equal(result.severity, 'HIGH');
   assert.ok(result.signals.some((signal) => signal.code === 'PAPERWORK_COMPLETION_ABOVE_P90'));
 });
+
+test('shared data-quality gate blocks technician risk when quality is unsafe', () => {
+  const quality:any = { score:40, confidence:'MEDIUM', issues:[], reasonCodes:['TEST_LOW_QUALITY'] };
+  const result = service.assessTechnician(assigned(), baseline, workload('ABOVE_P90'), maturity, quality);
+  assert.equal(result.state, 'INSUFFICIENT_DATA');
+  assert.equal(result.dataQualityState, 'BLOCKED');
+  assert.ok(result.reasons.includes('AI_DATA_QUALITY_GATE_BLOCKED'));
+});
+
+test('limited shared data quality caps risk confidence without suppressing usable output', () => {
+  const quality:any = { score:65, confidence:'MEDIUM', issues:[], reasonCodes:[] };
+  const result = service.assessTechnician(assigned(), baseline, workload('ABOVE_P90'), maturity, quality);
+  assert.equal(result.state, 'READY');
+  assert.equal(result.confidence, 'LOW');
+  assert.equal(result.dataQualityState, 'LIMITED');
+});

@@ -6,7 +6,8 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:ai-smoke": "node --test app/ai-dashboard.smoke.test.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",

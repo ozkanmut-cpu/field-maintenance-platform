@@ -5,6 +5,8 @@ import { CapabilityMaturity } from './data-maturity.types';
 import { PlanningAssessment, PlanningRecommendation, PlanningRecommendationType } from './planning-engine.types';
 import { TechnicianRiskAssessment } from './risk-engine.types';
 import { WeeklyWorkloadAssessment } from './weekly-workload.types';
+import { DataQualityAssessment } from './data-quality-engine.types';
+import { evaluateAiOutputPolicy } from './ai-output-policy';
 
 export type PlanningTechnicianInput = {
   technicianId: string;
@@ -15,15 +17,16 @@ export type PlanningTechnicianInput = {
 
 @Injectable()
 export class PlanningEngineService {
-  assess(technicians: PlanningTechnicianInput[], maturity?: CapabilityMaturity): PlanningAssessment {
-    if (maturity?.state !== 'ACTIVE' && maturity?.state !== 'RELIABLE') {
-      return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'INSUFFICIENT_DATA', recommendations: [], reasons: ['RECOMMENDATION_MATURITY_GATE_NOT_READY'] };
+  assess(technicians: PlanningTechnicianInput[], maturity?: CapabilityMaturity, dataQuality?: DataQualityAssessment): PlanningAssessment {
+    const policy = evaluateAiOutputPolicy(maturity, dataQuality);
+    if (!policy.allowed) {
+      return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'INSUFFICIENT_DATA', maturityState: policy.maturityState, dataQualityState: policy.dataQualityState, confidence: 'UNKNOWN', recommendations: [], reasons: [...new Set([...policy.reasonCodes, 'RECOMMENDATION_MATURITY_OR_QUALITY_GATE_NOT_READY'])] };
     }
 
     const recommendations = technicians.flatMap((input) => this.forTechnician(input))
       .sort((a, b) => this.compareRank(a, b))
-      .map((item, index, all) => ({ ...item, priority: Math.max(1, 100 - index) }));
-    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'READY', recommendations, reasons: [] };
+      .map((item, index) => ({ ...item, priority: Math.max(1, 100 - index), confidence: policy.confidenceCap === 'LOW' ? 'LOW' as const : item.confidence }));
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, state: 'READY', maturityState: policy.maturityState, dataQualityState: policy.dataQualityState, confidence: policy.confidenceCap, recommendations, reasons: policy.reasonCodes }; 
   }
 
   private forTechnician(input: PlanningTechnicianInput): PlanningRecommendation[] {

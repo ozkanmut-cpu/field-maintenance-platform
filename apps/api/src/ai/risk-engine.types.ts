@@ -2,6 +2,8 @@ import { TechnicianBaselineConfidence } from './technician-baseline.types';
 
 export type AiRiskSeverity = 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
 export type AiRiskState = 'INSUFFICIENT_DATA' | 'READY';
+export type AiMaturityOutputState = 'INACTIVE' | 'WARMING_UP' | 'ACTIVE' | 'RELIABLE' | 'UNKNOWN';
+export type AiDataQualityOutputState = 'BLOCKED' | 'LIMITED' | 'READY';
 
 export type AiRiskSignal = {
   code: string;
@@ -14,6 +16,8 @@ export type PointRiskAssessment = {
   engineVersion: string;
   featureSchemaVersion?: string;
   state: AiRiskState;
+  maturityState?: AiMaturityOutputState;
+  dataQualityState?: AiDataQualityOutputState;
   severity: AiRiskSeverity;
   confidence: 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
   signals: AiRiskSignal[];
@@ -25,6 +29,8 @@ export type TechnicianRiskAssessment = {
   engineVersion: string;
   featureSchemaVersion?: string;
   state: AiRiskState;
+  maturityState?: AiMaturityOutputState;
+  dataQualityState?: AiDataQualityOutputState;
   severity: AiRiskSeverity;
   confidence: TechnicianBaselineConfidence | 'UNKNOWN';
   signals: AiRiskSignal[];

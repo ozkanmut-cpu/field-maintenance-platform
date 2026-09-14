@@ -6,12 +6,16 @@ on:
       - 'apps/api/src/ai/**'
       - 'apps/api/package.json'
       - 'apps/admin/app/ai-dashboard.tsx'
+      - 'apps/admin/app/ai-dashboard.smoke.test.mjs'
+      - 'apps/admin/package.json'
       - '.github/workflows/ai-ci.yml'
   pull_request:
     paths:
       - 'apps/api/src/ai/**'
       - 'apps/api/package.json'
       - 'apps/admin/app/ai-dashboard.tsx'
+      - 'apps/admin/app/ai-dashboard.smoke.test.mjs'
+      - 'apps/admin/package.json'
       - '.github/workflows/ai-ci.yml'
 
 jobs:
@@ -31,6 +35,8 @@ jobs:
         run: npm --prefix apps/api run lint
       - name: API build
         run: npm --prefix apps/api run build
+      - name: Admin AI smoke test
+        run: npm --prefix apps/admin run test:ai-smoke
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build

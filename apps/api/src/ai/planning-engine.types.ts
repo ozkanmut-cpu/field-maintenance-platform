@@ -23,6 +23,9 @@ export type PlanningAssessment = {
   engineVersion: string;
   featureSchemaVersion?: string;
   state: 'INSUFFICIENT_DATA' | 'READY';
+  maturityState?: 'INACTIVE' | 'WARMING_UP' | 'ACTIVE' | 'RELIABLE' | 'UNKNOWN';
+  dataQualityState?: 'BLOCKED' | 'LIMITED' | 'READY';
+  confidence?: 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
   recommendations: PlanningRecommendation[];
   reasons: string[];
 };
