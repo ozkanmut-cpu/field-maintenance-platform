@@ -32,9 +32,9 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 ## P0 — Mevcut AI temelini üretim seviyesine çıkar
 
 - [ ] Point Difficulty Score'u ekipman + geçmiş süre/sonuç + coğrafya ile yeniden kalibre et
-- [ ] Equipment-profile confidence: completeness, verification age, verification history
-- [ ] Equipment-profile stability/change-rate feature per point
-- [ ] Equipment-change anomaly detection: olağandışı / tekrarlayan adet sıçramaları
+- [x] Equipment-profile confidence: completeness, verification age, verification history
+- [x] Equipment-profile stability/change-rate feature per point
+- [x] Equipment-change anomaly detection: olağandışı / tekrarlayan adet sıçramaları
 - [ ] Equipment data-quality brake: difficulty/capacity/risk/recommendation motorlarına ortak güven kapısı
 - [ ] Historical point-difficulty reconstruction: visit-level equipment snapshot kullanarak geçmiş skor üretimi
 - [ ] Cold-start cohortlarını maintenance type + equipment mix + geography ile zenginleştir
@@ -110,7 +110,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 ## P5 — Test, güvenlik ve gözlemlenebilirlik
 
-- [ ] Risk Engine deterministik fixture testleri
+- [x] Risk Engine deterministik fixture testleri
 - [ ] Planning Engine deterministik fixture testleri
 - [ ] Similar Week testleri
 - [ ] What-if simulator testleri

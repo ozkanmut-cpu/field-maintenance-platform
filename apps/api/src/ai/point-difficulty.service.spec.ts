@@ -1,9 +1,10 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { PointDifficultyService } from './point-difficulty.service';
+import { EquipmentProfileService } from './equipment-profile.service';
 import { FeatureSnapshot, FeatureValue } from './feature-store.types';
 
-const service = new PointDifficultyService();
+const service = new PointDifficultyService(new EquipmentProfileService());
 
 function snap(week: number, features: Record<string, FeatureValue>): FeatureSnapshot {
   return {
@@ -33,6 +34,14 @@ test('activates only with equipment and outcome depth', () => {
     towerCount: 1,
     tapCount: 4,
     smarttapCount: 1,
+    equipmentProfileComplete: true,
+    equipmentVerificationAgeDays: 10,
+    equipmentVerifiedAt: '2026-01-15T00:00:00Z',
+    equipmentConfirmedVisitCount: 1,
+    equipmentSnapshotCoolerCount: 2,
+    equipmentSnapshotTowerCount: 1,
+    equipmentSnapshotTapCount: 4,
+    equipmentSnapshotSmarttapCount: 1,
     hasCanonicalLocation: true,
     visitCount: 1,
     attemptCount: week === 4 ? 1 : 0,
@@ -50,6 +59,14 @@ test('keeps geography as evidence without arbitrary distance weight', () => {
     towerCount: 1,
     tapCount: 1,
     smarttapCount: 1,
+    equipmentProfileComplete: true,
+    equipmentVerificationAgeDays: 10,
+    equipmentVerifiedAt: '2026-01-15T00:00:00Z',
+    equipmentConfirmedVisitCount: 1,
+    equipmentSnapshotCoolerCount: 2,
+    equipmentSnapshotTowerCount: 1,
+    equipmentSnapshotTapCount: 4,
+    equipmentSnapshotSmarttapCount: 1,
     hasCanonicalLocation: true,
     geographicIsolated: true,
     nearestNeighborMeters: 4200,

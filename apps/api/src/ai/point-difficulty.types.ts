@@ -1,3 +1,4 @@
+import { EquipmentProfileAssessment } from './equipment-profile.types';
 export type PointDifficultyState = 'WARMING_UP' | 'ACTIVE';
 export type PointDifficultyConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -7,6 +8,7 @@ export type PointDifficultyProfile = {
   confidence: PointDifficultyConfidence;
   score: number | null;
   equipmentProfileComplete: boolean;
+  equipmentProfile: EquipmentProfileAssessment;
   equipment: { coolerCount: number | null; towerCount: number | null; tapCount: number | null; smarttapCount: number | null };
   geography: { located: boolean; isolated: boolean; nearestNeighborMeters: number | null };
   history: { visits: number; attempts: number; missed: number; completed: number; observedPeriods: number };

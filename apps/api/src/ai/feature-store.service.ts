@@ -28,7 +28,7 @@ export class FeatureStoreService {
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
       this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
-      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, updatedAt: true }, orderBy: { id: 'asc' } }),
+      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentVerifiedAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceAttempt.findMany({ where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceObligation.findMany({ where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } }, select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true }, orderBy: { id: 'asc' } }),
@@ -52,13 +52,18 @@ export class FeatureStoreService {
       nearestNeighborMeters.set(point.id, peers.length ? Math.min(...peers.map((peer) => this.geography.distanceMeters(point, peer))) : null);
     }
 
+    const equipmentProfileAsOf = (point: typeof points[number]) =>
+      point.equipmentVerifiedAt !== null && point.equipmentVerifiedAt < week.endExclusiveInstant &&
+      [point.coolerCount, point.towerCount, point.tapCount, point.smarttapCount].every((v) => v !== null);
+    const equipmentProfileCompleteCount = points.filter(equipmentProfileAsOf).length;
+
     const records: FeatureRecord[] = [];
     records.push({ entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
       activeTechnicianCount: technicians.length,
       regionCount: regions.length,
       activePointCount: points.length,
-      equipmentProfileCompleteCount: points.filter((p) => [p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((v) => v !== null)).length,
-      equipmentProfileCoverage: points.length ? points.filter((p) => [p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((v) => v !== null)).length / points.length : 0,
+      equipmentProfileCompleteCount,
+      equipmentProfileCoverage: points.length ? equipmentProfileCompleteCount / points.length : 0,
       locatedPointCount: locatedPoints.length,
       visitCount: visits.length,
       attemptCount: attempts.length,
@@ -144,7 +149,14 @@ export class FeatureStoreService {
       const pointVisits = visits.filter((v) => v.pointId === point.id);
       const pointAttempts = attempts.filter((a) => a.pointId === point.id);
       const pointObligations = obligations.filter((o) => o.pointId === point.id);
+      const equipmentVisits = pointVisits
+        .filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null))
+        .sort((a, b) => a.performedAt.getTime() - b.performedAt.getTime());
+      const latestEquipmentVisit = equipmentVisits.at(-1);
+      const pointProfileEligible = equipmentProfileAsOf(point);
+      const profile = pointProfileEligible ? point : latestEquipmentVisit;
       const clusterMembership = pointClusterMembership.get(point.id);
+      const verifiedAt = pointProfileEligible ? point.equipmentVerifiedAt : latestEquipmentVisit?.performedAt ?? null;
       records.push({ entityType: 'POINT', entityId: point.id, features: {
         regionId: point.regionId,
         hasRegion: Boolean(point.regionId),
@@ -158,11 +170,18 @@ export class FeatureStoreService {
         locationSource: point.locationSource,
         maintenanceType: point.maintenanceType,
         maintenanceWeek: point.maintenanceWeek,
-        coolerCount: point.coolerCount,
-        towerCount: point.towerCount,
-        tapCount: point.tapCount,
-        smarttapCount: point.smarttapCount,
-        equipmentProfileComplete: [point.coolerCount, point.towerCount, point.tapCount, point.smarttapCount].every((v) => v !== null),
+        coolerCount: profile?.coolerCount ?? null,
+        towerCount: profile?.towerCount ?? null,
+        tapCount: profile?.tapCount ?? null,
+        smarttapCount: profile?.smarttapCount ?? null,
+        equipmentProfileComplete: Boolean(profile) && [profile?.coolerCount, profile?.towerCount, profile?.tapCount, profile?.smarttapCount].every((v) => v !== null),
+        equipmentVerifiedAt: verifiedAt?.toISOString() ?? null,
+        equipmentVerificationAgeDays: verifiedAt ? Math.max(0, (week.endExclusiveInstant.getTime() - verifiedAt.getTime()) / 86_400_000) : null,
+        equipmentConfirmedVisitCount: equipmentVisits.length,
+        equipmentSnapshotCoolerCount: latestEquipmentVisit?.coolerCount ?? null,
+        equipmentSnapshotTowerCount: latestEquipmentVisit?.towerCount ?? null,
+        equipmentSnapshotTapCount: latestEquipmentVisit?.tapCount ?? null,
+        equipmentSnapshotSmarttapCount: latestEquipmentVisit?.smarttapCount ?? null,
         visitCount: pointVisits.length,
         attemptCount: pointAttempts.length,
         obligationCount: pointObligations.length,
