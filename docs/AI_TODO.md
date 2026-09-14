@@ -123,7 +123,7 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Veri eksik/çelişkili/stale durum testleri
 - [x] AI endpoint contract testleri
 - [x] AI Dashboard smoke testi
-  - [ ] AI Dashboard browser e2e testi
+  - [x] AI Dashboard browser e2e testi
 - [x] Feature snapshot reproducibility testi
 - [x] Model/heuristic version bilgisini temel kullanıcıya açık AI çıktılarında ve snapshotlarda taşı
 - [x] AI hesaplama süresi ve hata metriği
