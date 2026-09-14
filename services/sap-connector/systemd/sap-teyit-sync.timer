@@ -1,0 +1,12 @@
+[Unit]
+Description=Run SAP teyit synchronization every 10 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=15s
+Persistent=true
+Unit=sap-teyit-sync.service
+
+[Install]
+WantedBy=timers.target

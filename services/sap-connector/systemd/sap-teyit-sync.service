@@ -1,0 +1,14 @@
+[Unit]
+Description=SAP Web CRM teyit pull and database sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/field-maintenance/sap-runtime
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/flock -n /run/sap-teyit-203.lock /usr/local/bin/sap-teyit-203
+TimeoutStartSec=180
+StandardOutput=journal
+StandardError=journal
