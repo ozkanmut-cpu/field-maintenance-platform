@@ -17,6 +17,7 @@ import { RiskEngineService } from './risk-engine.service';
 import { SimilarWeekService } from './similar-week.service';
 import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { TechnicianBaselineService } from './technician-baseline.service';
+import { TrendService } from './trend.service';
 import { WeeklyWorkloadService } from './weekly-workload.service';
 import { WhatIfService } from './what-if.service';
 
@@ -30,6 +31,7 @@ export class AdminAiController {
     private readonly dataQuality: DataQualityEngineService,
     private readonly locations: LocationIntelligenceService,
     private readonly baselines: TechnicianBaselineService,
+    private readonly trends: TrendService,
     private readonly difficulties: PointDifficultyService,
     private readonly assignedWorkload: AssignedWeeklyWorkloadService,
     private readonly weeklyWorkload: WeeklyWorkloadService,
@@ -128,6 +130,7 @@ export class AdminAiController {
       planning,
       backtest: this.backtest.evaluate(history),
       regionHealth: this.regionHealth.assess(history),
+      trends: this.trends.assess(history),
       dataQuality: this.dataQuality.assess(history),
       similarWeeks: this.similarWeeks.find(history),
       pointDifficulty,

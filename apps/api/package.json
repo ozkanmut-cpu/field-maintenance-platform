@@ -28,6 +28,7 @@
     "test:data-quality-engine": "node --test --require ts-node/register src/ai/data-quality-engine.service.spec.ts",
     "test:backtest": "node --test --require ts-node/register src/ai/backtest.service.spec.ts",
     "test:region-health": "node --test --require ts-node/register src/ai/region-health.service.spec.ts",
+    "test:trends": "node --test --require ts-node/register src/ai/trend.service.spec.ts",
     "test:equipment-profile": "node --test --require ts-node/register src/ai/equipment-profile.service.spec.ts",
     "test:planning-engine": "node --test --require ts-node/register src/ai/planning-engine.service.spec.ts",
     "test:similar-week": "node --test --require ts-node/register src/ai/similar-week.service.spec.ts",

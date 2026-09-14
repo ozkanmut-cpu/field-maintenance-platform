@@ -26,3 +26,12 @@ test('stable complete verified point can remain issue free', () => {
   assert.equal(result.issues.length, 0);
   assert.equal(result.score, 100);
 });
+
+test('stale equipment and location contradiction are raised explicitly', () => {
+  const result = service.assess([
+    snap(1, { hasRegion: true, hasCanonicalLocation: true, canonicalLatitude: 38.4, canonicalLongitude: 27.1, locationConfidence: 90, locationEvidenceVisitCount: 1, maintenanceType: 'STANDARD', maintenanceWeek: 1, coolerCount: 1, towerCount: 1, tapCount: 1, smarttapCount: 0, equipmentProfileComplete: true, equipmentVerifiedAt: '2025-01-01T00:00:00Z', equipmentVerificationAgeDays: 150, equipmentConfirmedVisitCount: 1, equipmentSnapshotCoolerCount: 1, equipmentSnapshotTowerCount: 1, equipmentSnapshotTapCount: 1, equipmentSnapshotSmarttapCount: 0 }),
+    snap(2, { hasRegion: true, hasCanonicalLocation: true, canonicalLatitude: 38.42, canonicalLongitude: 27.12, locationConfidence: 90, locationEvidenceVisitCount: 1, maintenanceType: 'STANDARD', maintenanceWeek: 1, coolerCount: 1, towerCount: 1, tapCount: 1, smarttapCount: 0, equipmentProfileComplete: true, equipmentVerifiedAt: '2025-01-01T00:00:00Z', equipmentVerificationAgeDays: 160, equipmentConfirmedVisitCount: 1, equipmentSnapshotCoolerCount: 1, equipmentSnapshotTowerCount: 1, equipmentSnapshotTapCount: 1, equipmentSnapshotSmarttapCount: 0 }),
+  ]);
+  assert.ok(result.issues.some((x) => x.code === 'EQUIPMENT_PROFILE_STALE'));
+  assert.ok(result.issues.some((x) => x.code === 'LOCATION_CONTRADICTION'));
+});

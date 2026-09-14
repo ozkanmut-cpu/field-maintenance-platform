@@ -100,12 +100,12 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [ ] Günlük teknisyen AI özeti: riskler, gecikenler, yüksek yük, rota anomalileri
 - [ ] Günlük admin AI özeti
 - [ ] Hafta/period sonu AI özeti
-- [ ] Region health trend
-- [ ] Technician capacity trend
-- [ ] Point difficulty trend
-- [ ] Equipment data-quality trend
+- [x] Region health trend
+- [x] Technician capacity trend
+- [x] Point difficulty trend
+- [x] Equipment data-quality trend
 - [ ] Paperwork completion-time analitiğini risk sinyali olarak ekle
-- [ ] AI Dashboard tarihsel karşılaştırma
+- [x] AI Dashboard tarihsel karşılaştırma
 - [ ] Export edilebilir AI/KPI raporu
 
 ## P5 — Test, güvenlik ve gözlemlenebilirlik
@@ -115,8 +115,8 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 - [x] Similar Week testleri
 - [x] What-if simulator — V1 technician workload/risk simulation testleri
 - [x] Calibration/backtest testleri
-- [ ] Confidence/maturity gate testleri
-- [ ] Veri eksik/çelişkili/stale durum testleri
+- [x] Confidence/maturity gate testleri
+- [x] Veri eksik/çelişkili/stale durum testleri
 - [ ] AI endpoint contract testleri
 - [ ] AI Dashboard smoke/e2e testi
 - [ ] Feature snapshot reproducibility testi
