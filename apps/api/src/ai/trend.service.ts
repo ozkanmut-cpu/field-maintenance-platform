@@ -51,10 +51,14 @@ export class TrendService {
       const previous = ordered.length > 1 ? this.baselines.assessTechnician(ordered.slice(0, -1), technicianId).service.completedVisits.p75 : null;
       return { technicianId, currentCapacityP75: current, previousCapacityP75: previous, delta: this.delta(current, previous) };
     });
-    const pointIds = new Set(ordered.flatMap((s) => s.records.filter((r) => r.entityType === 'POINT').map((r) => r.entityId)));
+    const currentDifficultyByPoint = new Map(this.difficulties.assess(ordered).map((row) => [row.pointId, row.score]));
+    const previousDifficultyByPoint = ordered.length > 1
+      ? new Map(this.difficulties.assess(ordered.slice(0, -1)).map((row) => [row.pointId, row.score]))
+      : new Map<string, number | null>();
+    const pointIds = new Set([...currentDifficultyByPoint.keys(), ...previousDifficultyByPoint.keys()]);
     const points = [...pointIds].sort().map((pointId) => {
-      const current = this.difficulties.assessPoint(ordered, pointId).score;
-      const previous = ordered.length > 1 ? this.difficulties.assessPoint(ordered.slice(0, -1), pointId).score : null;
+      const current = currentDifficultyByPoint.get(pointId) ?? null;
+      const previous = previousDifficultyByPoint.get(pointId) ?? null;
       return { pointId, currentDifficulty: current, previousDifficulty: previous, delta: this.delta(current, previous) };
     });
 

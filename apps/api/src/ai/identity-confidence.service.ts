@@ -22,12 +22,13 @@ export class IdentityConfidenceService {
     const latest = [...history].sort((a, b) => a.weekKey.localeCompare(b.weekKey)).at(-1);
     if (!latest) return [];
     const rows = latest.records.filter((r) => r.entityType === 'POINT');
+    const prepared = rows.map((row) => ({ row, names: this.names(row.features).map((name) => this.prepareName(name)) }));
     const result: IdentityCandidate[] = [];
-    for (let i = 0; i < rows.length; i += 1) for (let j = i + 1; j < rows.length; j += 1) {
-      const left = rows[i], right = rows[j];
-      const namesLeft = this.names(left.features);
-      const namesRight = this.names(right.features);
-      const nameSimilarity = Math.max(0, ...namesLeft.flatMap((a) => namesRight.map((b) => this.similarity(a, b))));
+    for (let i = 0; i < prepared.length; i += 1) for (let j = i + 1; j < prepared.length; j += 1) {
+      const left = prepared[i].row, right = prepared[j].row;
+      const namesLeft = prepared[i].names;
+      const namesRight = prepared[j].names;
+      const nameSimilarity = this.maxPreparedSimilarity(namesLeft, namesRight);
       const leftPlace = this.str(left.features.googlePlaceId);
       const rightPlace = this.str(right.features.googlePlaceId);
       const sameGooglePlace = Boolean(leftPlace && rightPlace && leftPlace === rightPlace);
@@ -79,11 +80,25 @@ export class IdentityConfidenceService {
     return this.geography.distanceMeters({ latitude: aLat, longitude: aLon }, { latitude: bLat, longitude: bLon });
   }
 
-  private similarity(a: string, b: string) {
-    const left = this.normalize(a), right = this.normalize(b);
-    if (left === right) return 1;
-    if (!left || !right) return 0;
-    const leftPairs = this.bigrams(left), rightPairs = this.bigrams(right);
+  private prepareName(value: string) {
+    const normalized = this.normalize(value);
+    return { normalized, pairs: this.bigrams(normalized) };
+  }
+
+  private maxPreparedSimilarity(left: Array<{ normalized: string; pairs: string[] }>, right: Array<{ normalized: string; pairs: string[] }>) {
+    let best = 0;
+    for (const a of left) for (const b of right) {
+      const score = this.preparedSimilarity(a, b);
+      if (score > best) best = score;
+      if (best === 1) return 1;
+    }
+    return best;
+  }
+
+  private preparedSimilarity(left: { normalized: string; pairs: string[] }, right: { normalized: string; pairs: string[] }) {
+    if (left.normalized === right.normalized) return left.normalized ? 1 : 0;
+    if (!left.normalized || !right.normalized) return 0;
+    const leftPairs = left.pairs, rightPairs = right.pairs;
     if (!leftPairs.length || !rightPairs.length) return 0;
     const counts = new Map<string, number>();
     for (const pair of leftPairs) counts.set(pair, (counts.get(pair) ?? 0) + 1);
@@ -93,6 +108,10 @@ export class IdentityConfidenceService {
       if (count > 0) { overlap += 1; counts.set(pair, count - 1); }
     }
     return (2 * overlap) / (leftPairs.length + rightPairs.length);
+  }
+
+  private similarity(a: string, b: string) {
+    return this.preparedSimilarity(this.prepareName(a), this.prepareName(b));
   }
 
   private bigrams(value: string) {
