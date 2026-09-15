@@ -135,9 +135,9 @@ Amaç: ham nokta sayısını optimize eden bir sistem değil; ekipman yükü, co
 
 AI V1 tamamlanmış sayılabilmesi için:
 
-- [ ] Point difficulty, technician capacity ve travel burden üretimde birlikte çalışmalı
+- [x] Point difficulty, technician capacity ve travel burden üretimde birlikte çalışmalı
   - [x] Production veritabanıyla read-only dry-run: equipment mix + travel evidence + point-difficulty pipeline aynı dashboard hesaplamasında birlikte çalıştı; süre uydurulmadı.
-  - [ ] Canlı API/Admin deploy sonrası health + authenticated AI Dashboard doğrulaması.
+  - [x] Canlı API/Admin deploy sonrası health + AI Dashboard production-data doğrulaması: API/DB health OK, Admin HTTP 200; 12 haftalık dashboard pipeline field-stat-v1.2 ile 8 teknisyen + 472 nokta üzerinde 123 sn içinde tamamlandı. Travel evidence 8/8; service workload ve active point-difficulty veri olgunluğu kapıları nedeniyle güvenli biçimde frenli (0/8, 0/472).
 - [x] Risk Engine gerçek operasyonel risk skoru üretmeli
 - [x] Planning Engine açıklanabilir öneriler üretmeli
 - [x] Tüm AI çıktılarında maturity/confidence/reason codes bulunmalı
