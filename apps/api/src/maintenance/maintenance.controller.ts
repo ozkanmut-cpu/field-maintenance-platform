@@ -108,6 +108,16 @@ export class MaintenanceController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Get('paperwork-analytics')
+  paperworkAnalytics(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('technicianId') technicianId?: string,
+  ) {
+    return this.maintenance.paperworkAnalytics({ from, to, technicianId });
+  }
+
+  @Roles(UserRole.ADMIN)
   @Get('paperwork-history')
   paperworkHistory(@Query('visitId') visitId: string) {
     return this.maintenance.paperworkHistory(visitId);

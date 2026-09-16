@@ -1,0 +1,42 @@
+name: Reporting CI
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/maintenance/**'
+      - 'apps/admin/app/paperwork-management.tsx'
+      - 'apps/admin/app/paperwork-analytics.smoke.test.mjs'
+      - '.github/workflows/reporting-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/api/src/maintenance/**'
+      - 'apps/admin/app/paperwork-management.tsx'
+      - 'apps/admin/app/paperwork-analytics.smoke.test.mjs'
+      - '.github/workflows/reporting-ci.yml'
+
+jobs:
+  reporting-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npm --prefix apps/api run prisma:generate
+      - name: Maintenance and paperwork analytics regression tests
+        working-directory: apps/api
+        run: node --test --require ts-node/register src/maintenance/maintenance-engine.service.spec.ts src/maintenance/paperwork-analytics.spec.ts
+      - name: API typecheck
+        run: npm --prefix apps/api run lint
+      - name: API build
+        run: npm --prefix apps/api run build
+      - name: Paperwork analytics admin smoke
+        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs
+      - name: Admin typecheck
+        run: npm --prefix apps/admin run lint
+      - name: Admin build
+        run: npm --prefix apps/admin run build

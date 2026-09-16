@@ -72,7 +72,7 @@
 
 AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_TODO.md](./AI_TODO.md) (108/108).
 
-- [ ] Paperwork completion-time analytics
+- [x] Paperwork completion-time analytics — admin analytics measures document-arrival and status-resolution time from server-recorded maintenance time, with median/P90 and pending-age buckets
 - [ ] Daily technician summary
 - [ ] Daily admin summary
 - [ ] Period/week-end admin summary
@@ -84,17 +84,16 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Add paperwork completion-time analytics.
-2. Add the daily admin summary.
-3. Add the period/week-end admin summary.
-4. Add the daily technician summary backend/reporting flow.
-5. Complete the KPI/reporting module.
-6. Add real PostGIS usage on top of the existing PostgreSQL/Prisma migration foundation.
-7. Complete mobile search coverage for address/old-name aliases on technician screens.
-8. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
-9. Add mobile favorites/pinned/recent if retained for V1.
-10. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
-11. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
+1. Add the daily admin summary.
+2. Add the period/week-end admin summary.
+3. Add the daily technician summary backend/reporting flow.
+4. Complete the KPI/reporting module.
+5. Add real PostGIS usage on top of the existing PostgreSQL/Prisma migration foundation.
+6. Complete mobile search coverage for address/old-name aliases on technician screens.
+7. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+8. Add mobile favorites/pinned/recent if retained for V1.
+9. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+10. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
 
 AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
