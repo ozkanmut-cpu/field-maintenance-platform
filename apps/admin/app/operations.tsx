@@ -42,8 +42,18 @@ currentOpen: number; overdueOpen: number; unassignedOpen: number; paperworkPendi
 };
 technicians: Array<{ technicianId: string; name: string; username: string; completedMaintenance: number; attempts: number; nonMaintenanceVisits: number; currentOpen: number; overdueOpen: number }>;
 };
+type PeriodAdminSummary = {
+selectedDate: string; weekStart: string; weekEnd: string; generatedAt: string;
+metrics: DailyAdminSummary['metrics'];
+technicians: DailyAdminSummary['technicians'];
+};
 function istanbulDateKey() {
 return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+function shiftDateKey(dateKey: string, days: number) {
+const date = new Date(`${dateKey}T12:00:00.000Z`);
+date.setUTCDate(date.getUTCDate() + days);
+return date.toISOString().slice(0, 10);
 }
 type Section = 'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'users' | 'new-user';
 type Props = { users: Technician[]; activeSection: Section; onNavigate: (section: Section) => void };
@@ -56,6 +66,9 @@ const [attemptHistory, setAttemptHistory] = useState<AttemptHistoryItem[]>([]);
 const [dailySummaryDate, setDailySummaryDate] = useState(istanbulDateKey);
 const [dailySummary, setDailySummary] = useState<DailyAdminSummary | null>(null);
 const [dailySummaryLoading, setDailySummaryLoading] = useState(false);
+const [periodSummaryDate, setPeriodSummaryDate] = useState(istanbulDateKey);
+const [periodSummary, setPeriodSummary] = useState<PeriodAdminSummary | null>(null);
+const [periodSummaryLoading, setPeriodSummaryLoading] = useState(false);
 const [busy, setBusy] = useState(false);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState('');
@@ -105,6 +118,14 @@ try {
 setDailySummary(await api<DailyAdminSummary>(`/api/backend/maintenance/admin-daily-summary?date=${encodeURIComponent(date)}`));
 } finally { setDailySummaryLoading(false); }
 }
+async function loadPeriodSummary(date = periodSummaryDate) {
+if (!date) { setPeriodSummary(null); return; }
+setPeriodSummary(null);
+setPeriodSummaryLoading(true);
+try {
+setPeriodSummary(await api<PeriodAdminSummary>(`/api/backend/maintenance/admin-period-summary?date=${encodeURIComponent(date)}`));
+} finally { setPeriodSummaryLoading(false); }
+}
 async function load() {
 setLoading(true);
 try {
@@ -131,6 +152,10 @@ useEffect(() => {
 if (activeSection !== 'dashboard') return;
 void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
 }, [dailySummaryDate, activeSection]);
+useEffect(() => {
+if (activeSection !== 'dashboard') return;
+void loadPeriodSummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+}, [periodSummaryDate, activeSection]);
 async function createRegion(event: FormEvent) {
 event.preventDefault();
 setBusy(true); setError('');
@@ -330,6 +355,26 @@ return (
 {dailySummary.technicians.map((item) => <tr key={item.technicianId}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td>{item.completedMaintenance}</td><td>{item.attempts}</td><td>{item.nonMaintenanceVisits}</td><td>{item.currentOpen}</td><td>{item.overdueOpen}</td></tr>)}
 </tbody></table></div>
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Günlük özet hazırlanıyor</strong><span>Seçili günün operasyon verileri yükleniyor.</span></div>}
+</section>
+<section className="panel">
+<div className="panelHeader"><div><h2>Haftalık / Dönem Sonu Özeti</h2><p>Seçilen tarihin ait olduğu Pazartesi–Pazar İstanbul haftasının operasyon görünümü.</p></div><div className="rowActions"><button className="ghost small" onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, -7))}>ÖNCEKİ HAFTA</button><input type="date" value={periodSummaryDate} onChange={(e) => setPeriodSummaryDate(e.target.value)} aria-label="Haftalık özet tarihi" /><button className="ghost small" disabled={shiftDateKey(periodSummaryDate, 7) > istanbulDateKey()} onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, 7))}>SONRAKİ HAFTA</button><button className="ghost iconAction" onClick={() => void loadPeriodSummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={periodSummaryLoading}><AdminIcon name="refresh" size={17} /><span>{periodSummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
+{periodSummary ? <>
+<p className="muted"><strong>{periodSummary.weekStart}</strong> – <strong>{periodSummary.weekEnd}</strong></p>
+<section className="dashboardGrid">
+<div className="dashboardCard"><span>Tamamlanan bakım</span><strong>{periodSummary.metrics.completedMaintenance}</strong><small>Haftalık toplam</small></div>
+<div className="dashboardCard"><span>Sahada çalışan teknisyen</span><strong>{periodSummary.metrics.fieldTechnicianCount}</strong><small>Hafta içinde en az bir saha işlemi</small></div>
+<div className="dashboardCard"><span>Yapılamadı / diğer ziyaret</span><strong>{periodSummary.metrics.attemptCount} / {periodSummary.metrics.nonMaintenanceVisitCount}</strong><small>Haftalık saha olayları</small></div>
+<div className="dashboardCard"><span>Hafta sonu açık iş</span><strong>{periodSummary.metrics.currentOpen}</strong><small>Geciken hariç</small></div>
+</section>
+<div className="tableWrap"><table><thead><tr><th>Dikkat alanı</th><th>Adet</th><th>Açıklama</th></tr></thead><tbody>
+<tr><td><strong>Geciken açık iş</strong></td><td>{periodSummary.metrics.overdueOpen}</td><td className="muted">Hafta sonu snapshot</td></tr>
+<tr><td><strong>Atanmamış açık iş</strong></td><td>{periodSummary.metrics.unassignedOpen}</td><td className="muted">Hafta sonu etkin teknisyeni olmayan işler</td></tr>
+<tr><td><strong>Bekleyen evrak</strong></td><td>{periodSummary.metrics.paperworkPending}</td><td className="muted">Servis fişi {periodSummary.metrics.serviceSlipPending} · Teyit {periodSummary.metrics.confirmationPending} · Seçili hafta sonuna kadar oluşmuş ve halen bekleyen</td></tr>
+</tbody></table></div>
+<div className="tableWrap"><table><thead><tr><th>Teknisyen haftalık dağılımı</th><th>Bakım</th><th>Yapılamadı</th><th>Diğer ziyaret</th><th>Hafta sonu açık</th><th>Geciken</th></tr></thead><tbody>
+{periodSummary.technicians.map((item) => <tr key={item.technicianId}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td>{item.completedMaintenance}</td><td>{item.attempts}</td><td>{item.nonMaintenanceVisits}</td><td>{item.currentOpen}</td><td>{item.overdueOpen}</td></tr>)}
+</tbody></table></div>
+</> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Haftalık özet hazırlanıyor</strong><span>Seçili haftanın operasyon verileri yükleniyor.</span></div>}
 </section>
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">

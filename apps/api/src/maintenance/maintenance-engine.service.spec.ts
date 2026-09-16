@@ -40,3 +40,54 @@ test('week 1 can begin exactly on operations start date', async () => {
   assert.equal(upserts.length, 1);
   assert.equal(upserts[0].create.cycleKey, 'STD:2026-09-14');
 });
+
+
+test('historical due snapshot constrains resolved obligations and SmartClean evidence to period end', async () => {
+  const calls: any[] = [];
+  const standardPoint = {
+    id: 'p-standard', code: 'S1', name: 'Standard', regionId: 'r1', address: null,
+    canonicalLatitude: null, canonicalLongitude: null, maintenanceType: 'STANDARD', maintenanceWeek: 1,
+    coolerCount: 0, towerCount: 0, tapCount: 0, smarttapCount: 0,
+    region: { id: 'r1', name: 'R1' },
+  };
+  const smartPoint = {
+    id: 'p-smart', code: 'SC1', name: 'Smart', regionId: 'r1', address: null,
+    canonicalLatitude: null, canonicalLongitude: null, maintenanceType: 'SMARTCLEAN', maintenanceWeek: 1,
+    smartcleanReferenceAt: new Date('2026-07-20T00:00:00.000Z'),
+    coolerCount: 0, towerCount: 0, tapCount: 0, smarttapCount: 0,
+    region: { id: 'r1', name: 'R1' },
+    visits: [{ performedAt: new Date('2026-07-20T09:00:00.000Z') }],
+    attempts: [],
+  };
+  const prisma: any = {
+    maintenanceObligation: {
+      findMany: async (args: any) => { calls.push(['obligations', args]); return [{
+        id: 'o1', pointId: 'p-standard', dueStart: new Date('2026-09-14T00:00:00.000Z'),
+        dueEnd: new Date('2026-09-20T00:00:00.000Z'), resolvedAt: new Date('2026-09-21T09:00:00.000Z'),
+        status: 'COMPLETED', point: standardPoint,
+      }]; },
+      upsert: async () => undefined,
+    },
+    point: {
+      findMany: async (args: any) => {
+        calls.push(['points', args]);
+        if (args?.select) return [];
+        return [smartPoint];
+      },
+    },
+  };
+  const config: any = { get: (key: string) => ({
+    STANDARD_WEEK1_ANCHOR: '2026-09-14',
+    STANDARD_OPERATIONS_START_DATE: '2026-09-14',
+  } as Record<string, string>)[key] };
+  const assignments: any = { resolveMany: async (ids: string[]) => new Map(ids.map((id) => [id, { technicianId: 't1', source: 'REGION', assignmentId: null }])) };
+  const service = new MaintenanceEngineService(prisma, config, assignments);
+
+  const result = await (service as any).dueSnapshot('2026-09-20');
+  assert.equal(result.items.some((item: any) => item.pointId === 'p-standard'), true);
+  const obligationQuery = calls.find(([kind]) => kind === 'obligations')[1];
+  assert.equal(JSON.stringify(obligationQuery.where).includes('resolvedAt'), true);
+  const smartQuery = calls.filter(([kind, args]) => kind === 'points' && !args?.select)[0][1];
+  assert.equal(smartQuery.include.visits.where.performedAt.lt.toISOString(), '2026-09-20T21:00:00.000Z');
+  assert.equal(smartQuery.include.attempts.where.reviewedAt.lt.toISOString(), '2026-09-20T21:00:00.000Z');
+});
