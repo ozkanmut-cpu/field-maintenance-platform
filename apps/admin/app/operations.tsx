@@ -34,6 +34,17 @@ type AttemptHistoryItem = AttemptReviewItem & {
 reviewStatus: 'APPROVED' | 'REJECTED'; reviewedAt?: string | null; reviewNote?: string | null;
 closedDueDate?: string | null; reviewedBy?: { id: string; name: string; username: string } | null;
 };
+type DailyAdminSummary = {
+date: string; generatedAt: string;
+metrics: {
+completedMaintenance: number; fieldTechnicianCount: number; attemptCount: number; nonMaintenanceVisitCount: number;
+currentOpen: number; overdueOpen: number; unassignedOpen: number; paperworkPending: number; serviceSlipPending: number; confirmationPending: number;
+};
+technicians: Array<{ technicianId: string; name: string; username: string; completedMaintenance: number; attempts: number; nonMaintenanceVisits: number; currentOpen: number; overdueOpen: number }>;
+};
+function istanbulDateKey() {
+return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
 type Section = 'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'users' | 'new-user';
 type Props = { users: Technician[]; activeSection: Section; onNavigate: (section: Section) => void };
 export default function Operations({ users, activeSection, onNavigate }: Props) {
@@ -42,6 +53,9 @@ const [points, setPoints] = useState<Point[]>([]);
 const [setupPending, setSetupPending] = useState<SetupPendingItem[]>([]);
 const [attemptQueue, setAttemptQueue] = useState<AttemptReviewItem[]>([]);
 const [attemptHistory, setAttemptHistory] = useState<AttemptHistoryItem[]>([]);
+const [dailySummaryDate, setDailySummaryDate] = useState(istanbulDateKey);
+const [dailySummary, setDailySummary] = useState<DailyAdminSummary | null>(null);
+const [dailySummaryLoading, setDailySummaryLoading] = useState(false);
 const [busy, setBusy] = useState(false);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState('');
@@ -83,6 +97,14 @@ throw new Error(Array.isArray(message) ? message.join(', ') : message || `HTTP $
 }
 return body as T;
 }
+async function loadDailySummary(date = dailySummaryDate) {
+if (!date) { setDailySummary(null); return; }
+setDailySummary(null);
+setDailySummaryLoading(true);
+try {
+setDailySummary(await api<DailyAdminSummary>(`/api/backend/maintenance/admin-daily-summary?date=${encodeURIComponent(date)}`));
+} finally { setDailySummaryLoading(false); }
+}
 async function load() {
 setLoading(true);
 try {
@@ -105,6 +127,10 @@ setBulkRegionId((current) => current || regionList[0]?.id || '');
 useEffect(() => {
 void load().catch((e) => setError(e instanceof Error ? e.message : String(e)));
 }, []);
+useEffect(() => {
+if (activeSection !== 'dashboard') return;
+void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+}, [dailySummaryDate, activeSection]);
 async function createRegion(event: FormEvent) {
 event.preventDefault();
 setBusy(true); setError('');
@@ -277,12 +303,35 @@ return 'SmartClean referans tarihi bekliyor';
 return (
 <>
 {error ? <div className="error banner">{error}</div> : null}
-{activeSection === 'dashboard' ? <section className="dashboardGrid">
+{activeSection === 'dashboard' ? <>
+<section className="dashboardGrid">
 <button className="dashboardCard" onClick={() => onNavigate('setup-pending')}><span>Ayar bekleyen</span><strong>{setupPending.length}</strong><small>Eksik ayarları tamamla</small></button>
 <button className="dashboardCard" onClick={() => onNavigate('approvals')}><span>Bekleyen onay</span><strong>{attemptQueue.length}</strong><small>Yapılamadı kayıtlarını incele</small></button>
 <button className="dashboardCard" onClick={() => onNavigate('points')}><span>Noktalar</span><strong>{points.length}</strong><small>Nokta listesini yönet</small></button>
 <button className="dashboardCard" onClick={() => onNavigate('regions')}><span>Bölgeler</span><strong>{regions.length}</strong><small>Bölge ve sorumluları yönet</small></button>
-</section> : null}
+</section>
+<section className="panel">
+<div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
+{dailySummary ? <>
+<section className="dashboardGrid">
+<div className="dashboardCard"><span>Tamamlanan bakım</span><strong>{dailySummary.metrics.completedMaintenance}</strong><small>{dailySummary.date}</small></div>
+<div className="dashboardCard"><span>Sahada çalışan teknisyen</span><strong>{dailySummary.metrics.fieldTechnicianCount}</strong><small>En az bir saha işlemi</small></div>
+<div className="dashboardCard"><span>Yapılamadı / diğer ziyaret</span><strong>{dailySummary.metrics.attemptCount} / {dailySummary.metrics.nonMaintenanceVisitCount}</strong><small>Günün saha olayları</small></div>
+<div className="dashboardCard"><span>Bu dönem açık iş</span><strong>{dailySummary.metrics.currentOpen}</strong><small>Geciken hariç</small></div>
+</section>
+<div className="tableWrap"><table><thead><tr><th>Dikkat alanı</th><th>Adet</th><th>Açıklama</th></tr></thead><tbody>
+<tr><td><strong>Geciken açık iş</strong></td><td>{dailySummary.metrics.overdueOpen}</td><td className="muted">Bakım penceresi geçmiş işler</td></tr>
+<tr><td><strong>Atanmamış açık iş</strong></td><td>{dailySummary.metrics.unassignedOpen}</td><td className="muted">Etkin teknisyeni bulunmayan açık işler</td></tr>
+<tr><td><strong>Bekleyen evrak</strong></td><td>{dailySummary.metrics.paperworkPending}</td><td className="muted">Servis fişi {dailySummary.metrics.serviceSlipPending} · Teyit {dailySummary.metrics.confirmationPending}</td></tr>
+<tr><td><strong>Ayar bekleyen nokta</strong></td><td>{setupPending.length}</td><td className="muted">Eksik operasyon ayarı</td></tr>
+<tr><td><strong>Bekleyen yönetici onayı</strong></td><td>{attemptQueue.length}</td><td className="muted">Yapılamadı inceleme kuyruğu</td></tr>
+</tbody></table></div>
+<div className="tableWrap"><table><thead><tr><th>Teknisyen günlük dağılımı</th><th>Bakım</th><th>Yapılamadı</th><th>Diğer ziyaret</th><th>Bu dönem açık</th><th>Geciken</th></tr></thead><tbody>
+{dailySummary.technicians.map((item) => <tr key={item.technicianId}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td>{item.completedMaintenance}</td><td>{item.attempts}</td><td>{item.nonMaintenanceVisits}</td><td>{item.currentOpen}</td><td>{item.overdueOpen}</td></tr>)}
+</tbody></table></div>
+</> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Günlük özet hazırlanıyor</strong><span>Seçili günün operasyon verileri yükleniyor.</span></div>}
+</section>
+</> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">
 <div className="panelHeader">
 <div><h2>Bölgeler</h2><p>Bölge sorumlularını ve nokta dağılımını yönet.</p></div>
