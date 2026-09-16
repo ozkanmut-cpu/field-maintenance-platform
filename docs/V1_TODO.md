@@ -82,12 +82,22 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 ## Current near-term priorities
 
-1. Keep Android APK CI green and distribute the latest `fıçıbakım` release build.
-2. Complete mobile search coverage for address/old-name aliases on technician screens.
-3. Decide whether V1 needs a dedicated `YAKINIMDAKILER`/map UI or the current distance-aware Jobs list + external directions is sufficient.
-4. Complete bulk region/status/week/SmartClean operations.
-5. Add offline cache/queue/sync only if field connectivity requirements make it necessary for V1.
-6. Continue non-AI reporting/KPI work; AI V1 and SAP synchronization are closed.
+Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
+
+1. Complete bulk region/status/week/SmartClean operations.
+2. Add paperwork completion-time analytics.
+3. Add the daily admin summary.
+4. Add the period/week-end admin summary.
+5. Add the daily technician summary backend/reporting flow.
+6. Complete the KPI/reporting module.
+7. Add real PostGIS usage on top of the existing PostgreSQL/Prisma migration foundation.
+8. Complete mobile search coverage for address/old-name aliases on technician screens.
+9. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+10. Add mobile favorites/pinned/recent if retained for V1.
+11. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+12. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
+
+AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
 ## Explicitly out of V1
 
