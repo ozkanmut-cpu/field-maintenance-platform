@@ -1,0 +1,4 @@
+const {dryRun}=require('./sap_search_dryrun');
+async function findSearchButton(page){const hits=[];for(const [fi,f] of page.frames().entries()){for(const sel of ['button','input[type=button]','input[type=submit]','a']){const loc=f.locator(sel);const n=await loc.count();for(let i=0;i<n;i++){const e=loc.nth(i);if(!(await e.isVisible().catch(()=>false)))continue;const t=((await e.innerText().catch(()=>''))||(await e.getAttribute('value'))||(await e.getAttribute('title'))||'').trim();if(t==='Ara')hits.push({frame:fi,selector:sel,index:i,text:t});}}}if(hits.length!==1)throw new Error('SAFE_ABORT_SEARCH:search-button-not-unique:'+hits.length);return hits[0];}
+async function prepareSearch(page){const verified=await dryRun(page);const button=await findSearchButton(page);return {verified,button,ready:true};}
+module.exports={findSearchButton,prepareSearch};

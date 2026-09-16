@@ -451,3 +451,27 @@ model MaintenanceReviewResolution {
   @@index([resolvedById, resolvedAt])
   @@map("maintenance_review_resolutions")
 }
+
+model SapConfirmation {
+  confirmationId  String   @id @map("confirmation_id")
+  dealer          String?  @map("dealer")
+  pointCode       String?  @map("point_code")
+  pointName       String?  @map("point_name")
+  recordDate      DateTime @map("record_date") @db.Date
+  creator         String?  @map("creator")
+  netValue        Decimal? @map("net_value") @db.Decimal(14, 2)
+  status          String?  @map("status")
+  contact         String?  @map("contact")
+  costCenter      String?  @map("cost_center")
+  transactionType String?  @map("transaction_type")
+  systemStatus    String?  @map("system_status")
+  productId       String   @default("203") @map("product_id")
+  sourceSyncedAt  DateTime @default(now()) @map("source_synced_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([recordDate])
+  @@index([pointCode])
+  @@index([status])
+  @@map("sap_confirmations")
+}

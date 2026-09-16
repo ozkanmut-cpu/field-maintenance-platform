@@ -1,0 +1,4 @@
+const {findUniqueFrameForText}=require('./sap_dom_utils');const {candidatesNearLabel}=require('./sap_search_geometry');const {resolveUnique}=require('./sap_search_resolver');const {frameKey}=require('./sap_frame_utils');
+const TARGETS=['Kayıt tarihi (zaman çerçevesi)','Ürün tanıtıcısı','Azami sonuç sayısı'];
+async function buildSearchPlan(page){const plan={};for(const text of TARGETS){const frame=await findUniqueFrameForText(page,text);const label=frame.getByText(text,{exact:true});if(await label.count()!==1)throw new Error('SAFE_ABORT_SEARCH:exact-label:'+text);const c=await candidatesNearLabel(label);const r=resolveUnique(text,c);const fi=page.frames().indexOf(frame);plan[text]={frame:frameKey(frame,fi),id:r.id,name:r.name,tag:r.tag,type:r.type,score:r.score};}return plan;}
+module.exports={buildSearchPlan,TARGETS};

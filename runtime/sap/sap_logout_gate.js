@@ -1,0 +1,3 @@
+const {logoutAutomationSession}=require('./sap_logout_dom');
+async function guardedLogout(page,runState,{downloadValidated,dbSyncSucceeded}){if(!downloadValidated)throw new Error('SAFE_ABORT_LOGOUT:download-not-validated');if(!dbSyncSucceeded)throw new Error('SAFE_ABORT_LOGOUT:db-sync-not-successful');if(!runState||!runState.canLogout())throw new Error('SAFE_ABORT_LOGOUT:state-not-db-synced');const r=await logoutAutomationSession(page);if(!r.loggedOut)throw new Error('SAFE_ABORT_LOGOUT:not-confirmed');runState.advance('LOGGED_OUT');return {...r,state:runState.state};}
+module.exports={guardedLogout};
