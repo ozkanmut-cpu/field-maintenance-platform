@@ -1,0 +1,1 @@
+const assert=require('assert');const {pickDateOption}=require('./sap_date_option');assert.deepEqual(pickDateOption([{text:'Bugün',key:'D 0'},{text:'<- 14 gün ->',key:'W*2'}]),{text:'<- 14 gün ->',key:'W*2'});assert.throws(()=>pickDateOption([{text:'Bugün',key:'D 0'}]),/date-option-not-unique/);console.log(JSON.stringify({ok:true,passed:2}));
