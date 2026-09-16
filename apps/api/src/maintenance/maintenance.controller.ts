@@ -108,6 +108,12 @@ export class MaintenanceController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Get('admin-daily-summary')
+  adminDailySummary(@Query('date') date?: string) {
+    return this.maintenance.adminDailySummary(date);
+  }
+
+  @Roles(UserRole.ADMIN)
   @Get('paperwork-analytics')
   paperworkAnalytics(
     @Query('from') from?: string,
