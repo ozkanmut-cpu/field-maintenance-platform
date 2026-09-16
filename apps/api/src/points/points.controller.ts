@@ -9,6 +9,7 @@ import { CreatePointDto } from './dto/create-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
 import { UpdatePointEquipmentDto } from './dto/update-point-equipment.dto';
+import { BulkPointAction, BulkUpdatePointsDto } from './dto/bulk-update-points.dto';
 import { PointsService } from './points.service';
 
 @Controller('points')
@@ -39,6 +40,16 @@ export class PointsController {
   async importPoints(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportPointsDto) {
     const result = await this.points.importPoints(user.id, dto);
     for (const pointId of result.createdIds) this.addressDiscovery.enqueue(pointId);
+    return result;
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('bulk-update')
+  async bulkUpdate(@CurrentUser() user: AuthenticatedUser, @Body() dto: BulkUpdatePointsDto) {
+    const result = await this.points.bulkUpdate(user.id, dto);
+    if (dto.action === BulkPointAction.SET_REGION) {
+      void this.addressDiscovery.enqueueMany(result.pointIds);
+    }
     return result;
   }
 

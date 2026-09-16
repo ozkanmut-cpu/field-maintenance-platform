@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MaintenanceType, Prisma, UserRole } from '@prisma/client';
+import { MaintenanceType, PointStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
@@ -12,6 +12,7 @@ import { CreatePointDto } from './dto/create-point.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
 import { UpdatePointEquipmentDto } from './dto/update-point-equipment.dto';
+import { BulkPointAction, BulkUpdatePointsDto } from './dto/bulk-update-points.dto';
 
 @Injectable()
 export class PointsService {
@@ -104,6 +105,66 @@ export class PointsService {
     const updated = await this.prisma.point.update({ where: { id }, data });
     await this.audit(adminUserId, id, 'POINT_UPDATED', existing, updated);
     return updated;
+  }
+
+  async bulkUpdate(adminUserId: string, dto: BulkUpdatePointsDto) {
+    await this.requireAdmin(adminUserId);
+    const pointIds = dto.pointIds ?? [];
+    if (pointIds.length < 1) throw new BadRequestException('Toplu işlem için en az 1 nokta seçilmelidir');
+    if (pointIds.length > 500) throw new BadRequestException('Tek toplu işlemde en fazla 500 nokta güncellenebilir');
+    if (new Set(pointIds).size !== pointIds.length) throw new BadRequestException('Nokta seçimi tekrarlı kayıt içeremez');
+
+    let updateData: Prisma.PointUncheckedUpdateManyInput;
+    let auditPatch: Record<string, string | number | null>;
+    if (dto.action === BulkPointAction.SET_REGION) {
+      if (!dto.regionId) throw new BadRequestException('Hedef bölge zorunludur');
+      updateData = { regionId: dto.regionId };
+      auditPatch = { regionId: dto.regionId };
+    } else if (dto.action === BulkPointAction.SET_STATUS) {
+      if (!dto.status || !Object.values(PointStatus).includes(dto.status)) throw new BadRequestException('Geçerli nokta durumu zorunludur');
+      updateData = { status: dto.status };
+      auditPatch = { status: dto.status };
+    } else if (dto.action === BulkPointAction.SET_STANDARD_WEEK) {
+      if (![1, 2].includes(dto.maintenanceWeek ?? 0)) throw new BadRequestException('Rut haftası yalnızca 1 veya 2 olabilir');
+      updateData = { maintenanceType: MaintenanceType.STANDARD, maintenanceWeek: dto.maintenanceWeek, smartcleanReferenceAt: null };
+      auditPatch = { maintenanceType: MaintenanceType.STANDARD, maintenanceWeek: dto.maintenanceWeek!, smartcleanReferenceAt: null };
+    } else if (dto.action === BulkPointAction.SET_SMARTCLEAN) {
+      if (![1, 2].includes(dto.maintenanceWeek ?? 0)) throw new BadRequestException('Rut haftası yalnızca 1 veya 2 olabilir');
+      if (!dto.smartcleanReferenceAt) throw new BadRequestException('SmartClean referans tarihi zorunludur');
+      const referenceAt = this.validDate(dto.smartcleanReferenceAt, 'smartcleanReferenceAt');
+      updateData = { maintenanceType: MaintenanceType.SMARTCLEAN, maintenanceWeek: dto.maintenanceWeek, smartcleanReferenceAt: referenceAt };
+      auditPatch = { maintenanceType: MaintenanceType.SMARTCLEAN, maintenanceWeek: dto.maintenanceWeek!, smartcleanReferenceAt: referenceAt.toISOString() };
+    } else {
+      throw new BadRequestException('Geçersiz toplu nokta işlemi');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.action === BulkPointAction.SET_REGION) {
+        const region = await tx.region.findUnique({ where: { id: dto.regionId! }, select: { id: true } });
+        if (!region) throw new BadRequestException('Hedef bölge bulunamadı');
+      }
+
+      const points = await tx.point.findMany({ where: { id: { in: pointIds }, deletedAt: null } });
+      if (points.length !== pointIds.length) throw new NotFoundException('Seçili noktalardan biri veya daha fazlası bulunamadı');
+
+      const updated = await tx.point.updateMany({ where: { id: { in: pointIds }, deletedAt: null }, data: updateData });
+      if (updated.count !== points.length) throw new BadRequestException('Toplu nokta güncellemesi tamamlanamadı');
+
+      await tx.adminAuditLog.createMany({
+        data: points.map((point) => {
+          const oldValue = this.bulkAuditSnapshot(point);
+          return {
+            actorId: adminUserId,
+            entityType: 'Point',
+            entityId: point.id,
+            action: 'POINT_BULK_UPDATED',
+            oldValue: oldValue as Prisma.InputJsonValue,
+            newValue: { ...oldValue, ...auditPatch } as Prisma.InputJsonValue,
+          };
+        }),
+      });
+      return { updated: updated.count, pointIds: points.map((point) => point.id), action: dto.action };
+    });
   }
 
   async setupPending() {
@@ -321,6 +382,24 @@ export class PointsService {
     });
     await this.prisma.adminAuditLog.create({ data: { actorId: technicianId, entityType: 'POINT_EQUIPMENT', entityId: pointId, action: 'TECHNICIAN_VERIFIED', oldValue, newValue } });
     return updated;
+  }
+
+  private bulkAuditSnapshot(point: {
+    id: string;
+    regionId?: string | null;
+    status?: unknown;
+    maintenanceType?: unknown;
+    maintenanceWeek?: number | null;
+    smartcleanReferenceAt?: Date | null;
+  }) {
+    return {
+      id: point.id,
+      regionId: point.regionId ?? null,
+      status: point.status ?? null,
+      maintenanceType: point.maintenanceType ?? null,
+      maintenanceWeek: point.maintenanceWeek ?? null,
+      smartcleanReferenceAt: point.smartcleanReferenceAt?.toISOString() ?? null,
+    };
   }
 
   private async requireTechnician(userId: string) {
