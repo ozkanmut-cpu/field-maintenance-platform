@@ -22,6 +22,7 @@ export type MaturityEvidence = {
   suspiciousVisits: number;
   reviewRecommended: number;
   locationCoverage: number;
+  equipmentProfileCoverage: number;
 };
 
 export type CapabilityMaturity = {
@@ -33,10 +34,14 @@ export type CapabilityMaturity = {
 };
 
 export type DataMaturityAssessment = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   generatedAt: string;
   latestWeekKey: string | null;
   overallState: AiMaturityState;
   overallScore: number;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  reasonCodes: string[];
   evidence: MaturityEvidence;
   capabilities: CapabilityMaturity[];
 };

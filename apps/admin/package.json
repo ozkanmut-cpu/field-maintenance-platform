@@ -6,7 +6,9 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:ai-smoke": "node --test app/ai-dashboard.smoke.test.mjs",
+    "test:ai-e2e": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
     "next": "^15.5.0",
@@ -14,6 +16,7 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

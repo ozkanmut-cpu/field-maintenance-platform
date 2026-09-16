@@ -1,6 +1,6 @@
 # V1 TODO
 
-> Last synchronized with `main` and current production state: 2026-09-14.
+> Last synchronized with `main` and current production state: 2026-09-16.
 > `[x]` means implemented and present in the current system. Open items are still missing, incomplete, or intentionally left for a later pass.
 
 ## P0 — Core operating system
@@ -70,24 +70,24 @@
 
 ## P2 — Reporting and automation
 
-AI / karar destek backlog'u ayrı tutulur: [AI_TODO.md](./AI_TODO.md)
+AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_TODO.md](./AI_TODO.md) (108/108).
 
 - [ ] Paperwork completion-time analytics
 - [ ] Daily technician summary
 - [ ] Daily admin summary
 - [ ] Period/week-end admin summary
 - [ ] KPI/reporting module
-- [ ] SAP confirmation synchronization — production runtime is working every 10 minutes with normal `Operasyon → Hizmet teyitleri` search, 14-day window, product 203, max 1000 and date-scoped DB deletion; repository integration/Prisma merge still needs to be completed before this is closed
+- [x] SAP confirmation synchronization — production runtime runs every 10 minutes with normal `Operasyon → Hizmet teyitleri` search, 14-day window, product 203, max 1000, date-scoped DB deletion and guarded logout; repository integration is merged to `main` and production-verified
 - [x] SAP Web CRM browser automation proof-of-concept — superseded by the working production automation; Playwright + Firefox specifically is no longer required
 
 ## Current near-term priorities
 
 1. Keep Android APK CI green and distribute the latest `fıçıbakım` release build.
-2. Finish repository-side SAP confirmation integration (`SapConfirmation` Prisma model/migration/runtime branch) without disturbing the dirty production checkout.
-3. Complete mobile search coverage if address/old-name search is required on technician screens.
-4. Decide whether V1 needs a dedicated `YAKINIMDAKILER`/map UI or the current distance-aware Jobs list + external directions is sufficient.
+2. Complete mobile search coverage for address/old-name aliases on technician screens.
+3. Decide whether V1 needs a dedicated `YAKINIMDAKILER`/map UI or the current distance-aware Jobs list + external directions is sufficient.
+4. Complete bulk region/status/week/SmartClean operations.
 5. Add offline cache/queue/sync only if field connectivity requirements make it necessary for V1.
-6. Start reporting/KPI work after SAP and mobile stabilization.
+6. Continue non-AI reporting/KPI work; AI V1 and SAP synchronization are closed.
 
 ## Explicitly out of V1
 

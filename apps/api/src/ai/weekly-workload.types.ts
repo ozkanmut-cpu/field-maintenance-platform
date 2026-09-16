@@ -1,4 +1,5 @@
 import { TechnicianBaselineConfidence, TechnicianBaselineState } from './technician-baseline.types';
+import { ServiceWorkloadIndex } from './service-workload-index';
 
 export type WorkloadEvidenceState = 'INSUFFICIENT_DATA' | 'READY';
 export type WorkloadPressureBand = 'WITHIN_BASELINE' | 'ABOVE_P75' | 'ABOVE_P90' | 'UNKNOWN';
@@ -11,7 +12,11 @@ export type WeeklyAssignedWorkloadVector = {
 };
 
 export type WeeklyWorkloadAssessment = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   technicianId: string;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
+  confidence: TechnicianBaselineConfidence;
   evidenceState: WorkloadEvidenceState;
   baselineState: TechnicianBaselineState;
   baselineConfidence: TechnicianBaselineConfidence;
@@ -22,9 +27,14 @@ export type WeeklyWorkloadAssessment = {
     tapCount: WorkloadPressureBand;
     smarttapCount: WorkloadPressureBand;
   };
+  serviceWorkload: ServiceWorkloadIndex;
   travelPressure: {
     routeDistanceMeters: WorkloadPressureBand;
     fieldP90RadiusMeters: WorkloadPressureBand;
+    routeCoherenceRatio: WorkloadPressureBand;
+    fragmentationRatio: WorkloadPressureBand;
+    workAreaProximity: WorkloadPressureBand;
   };
   reasons: string[];
+  reasonCodes: string[];
 };

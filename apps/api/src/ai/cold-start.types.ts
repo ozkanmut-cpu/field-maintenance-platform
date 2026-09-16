@@ -2,6 +2,8 @@ import { FeatureEntityType, FeatureSnapshot } from './feature-store.types';
 
 export type ColdStartSource =
   | 'ENTITY_HISTORY'
+  | 'REGION_TYPE_EQUIPMENT_GEO_COHORT'
+  | 'TYPE_EQUIPMENT_GEO_COHORT'
   | 'REGION_TYPE_WEEK_COHORT'
   | 'REGION_TYPE_COHORT'
   | 'TYPE_WEEK_COHORT'
@@ -13,6 +15,9 @@ export type ColdStartSource =
 export type ColdStartConfidence = 'UNKNOWN' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type ColdStartEstimate = {
+  engineVersion: string;
+  featureSchemaVersion: string;
+  maturityState: 'WARMING_UP' | 'ACTIVE';
   entityType: Exclude<FeatureEntityType, 'SYSTEM'>;
   entityId: string;
   metric: string;
@@ -23,6 +28,7 @@ export type ColdStartEstimate = {
   entityCount: number;
   weeksUsed: number;
   reasons: string[];
+  reasonCodes: string[];
 };
 
 export type ColdStartHistory = FeatureSnapshot[];
