@@ -4,6 +4,7 @@ import { PointStatus, UserRole, VisitStatus } from '@prisma/client';
 import { businessWeek } from '../common/business-week';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureRecord, FeatureSnapshot } from './feature-store.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import { AssignedWeeklyWorkloadService } from './assigned-weekly-workload.service';
 import { EffectiveWorkloadService } from './effective-workload.service';
 import { GeographyService } from './geography.service';
@@ -28,8 +29,8 @@ export class FeatureStoreService {
     const [technicians, regions, points, visits, attempts, obligations] = await Promise.all([
       this.prisma.user.findMany({ where: { role: UserRole.TECHNICIAN, active: true }, select: { id: true, name: true, createdAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       this.prisma.region.findMany({ select: { id: true, name: true, technicianId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
-      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, updatedAt: true }, orderBy: { id: 'asc' } }),
-      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, suspiciousBatch: true, reviewRecommended: true, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
+      this.prisma.point.findMany({ where: { status: PointStatus.ACTIVE, deletedAt: null }, select: { id: true, code: true, name: true, address: true, regionId: true, maintenanceType: true, maintenanceWeek: true, canonicalLatitude: true, canonicalLongitude: true, locationConfidence: true, locationSource: true, googlePlaceId: true, googleBusinessName: true, aliases: { select: { alias: true } }, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentVerifiedAt: true, updatedAt: true }, orderBy: { id: 'asc' } }),
+      this.prisma.maintenanceVisit.findMany({ where: { status: VisitStatus.VALID, performedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, assistedForTechnicianId: true, performedAt: true, recordedAtServer: true, enteredLate: true, lateEntryMinutes: true, suspiciousBatch: true, reviewRecommended: true, serviceSlipStatus: true, confirmationStatus: true, paperworkHistory: { where: { changedAt: { lt: week.endExclusiveInstant } }, select: { kind: true, newStatus: true, changedAt: true }, orderBy: { changedAt: 'asc' } }, latitude: true, longitude: true, accuracyMeters: true, coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true, equipmentConfirmed: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceAttempt.findMany({ where: { attemptedAt: { gte: week.startInstant, lt: week.endExclusiveInstant } }, select: { id: true, pointId: true, technicianId: true, attemptedAt: true, reviewStatus: true }, orderBy: { id: 'asc' } }),
       this.prisma.maintenanceObligation.findMany({ where: { dueStart: { lte: week.weekEnd }, dueEnd: { gte: week.weekStart } }, select: { id: true, pointId: true, status: true, dueStart: true, dueEnd: true, createdAt: true }, orderBy: { id: 'asc' } }),
     ]);
@@ -52,13 +53,18 @@ export class FeatureStoreService {
       nearestNeighborMeters.set(point.id, peers.length ? Math.min(...peers.map((peer) => this.geography.distanceMeters(point, peer))) : null);
     }
 
+    const equipmentProfileAsOf = (point: typeof points[number]) =>
+      point.equipmentVerifiedAt !== null && point.equipmentVerifiedAt < week.endExclusiveInstant &&
+      [point.coolerCount, point.towerCount, point.tapCount, point.smarttapCount].every((v) => v !== null);
+    const equipmentProfileCompleteCount = points.filter(equipmentProfileAsOf).length;
+
     const records: FeatureRecord[] = [];
     records.push({ entityType: 'SYSTEM', entityId: 'SYSTEM', features: {
       activeTechnicianCount: technicians.length,
       regionCount: regions.length,
       activePointCount: points.length,
-      equipmentProfileCompleteCount: points.filter((p) => [p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((v) => v !== null)).length,
-      equipmentProfileCoverage: points.length ? points.filter((p) => [p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((v) => v !== null)).length / points.length : 0,
+      equipmentProfileCompleteCount,
+      equipmentProfileCoverage: points.length ? equipmentProfileCompleteCount / points.length : 0,
       locatedPointCount: locatedPoints.length,
       visitCount: visits.length,
       attemptCount: attempts.length,
@@ -80,7 +86,12 @@ export class FeatureStoreService {
       const technicianGeo = this.geography.summarize(technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
       const orderedGeoVisits = technicianVisits.filter((v) => v.latitude !== null && v.longitude !== null).sort((a, b) => a.performedAt.getTime() - b.performedAt.getTime());
       const fieldRouteDistanceMeters = orderedGeoVisits.slice(1).reduce((sum, visit, index) => sum + this.geography.distanceMeters({ latitude: Number(orderedGeoVisits[index].latitude), longitude: Number(orderedGeoVisits[index].longitude) }, { latitude: Number(visit.latitude), longitude: Number(visit.longitude) }), 0);
+      const uniqueGeoByPoint = new Map<string, { id: string; latitude: number; longitude: number }>();
+      for (const visit of orderedGeoVisits) if (!uniqueGeoByPoint.has(visit.pointId)) uniqueGeoByPoint.set(visit.pointId, { id: visit.pointId, latitude: Number(visit.latitude), longitude: Number(visit.longitude) });
+      const technicianGeoPoints = [...uniqueGeoByPoint.values()];
+      const technicianClusters = this.clustering.clusterAdaptive(technicianGeoPoints);
       const equipmentCompleteVisits = technicianVisits.filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null));
+      const paperworkPendingCount = technicianVisits.reduce((sum, visit) => sum + (visit.serviceSlipStatus === 'PRESENT' ? 0 : 1) + (visit.confirmationStatus === 'PRESENT' ? 0 : 1), 0);
       records.push({ entityType: 'TECHNICIAN', entityId: technician.id, features: {
         assignedRegionCount: regions.filter((r) => r.technicianId === technician.id).length,
         assignedStandardCurrentCount: assigned?.standardCurrent ?? 0,
@@ -96,11 +107,16 @@ export class FeatureStoreService {
         lateEntryCount: technicianVisits.filter((v) => v.enteredLate).length,
         suspiciousVisitCount: technicianVisits.filter((v) => v.suspiciousBatch).length,
         reviewRecommendedCount: technicianVisits.filter((v) => v.reviewRecommended).length,
+        suspiciousVisitRate: technicianVisits.length ? technicianVisits.filter((v) => v.suspiciousBatch).length / technicianVisits.length : 0,
+        averageLateEntryMinutes: technicianVisits.filter((v) => v.lateEntryMinutes !== null).length ? technicianVisits.filter((v) => v.lateEntryMinutes !== null).reduce((sum, v) => sum + Number(v.lateEntryMinutes), 0) / technicianVisits.filter((v) => v.lateEntryMinutes !== null).length : null,
+        paperworkPendingCount,
         gpsSampleCount: technicianGeo.sampleCount,
         fieldCenterLatitude: technicianGeo.centerLatitude,
         fieldCenterLongitude: technicianGeo.centerLongitude,
         fieldP90RadiusMeters: technicianGeo.p90RadiusMeters,
         fieldRouteDistanceMeters: orderedGeoVisits.length >= 2 ? fieldRouteDistanceMeters : null,
+        routeCoherenceRatio: technicianGeoPoints.length >= 2 ? this.geography.routeCoherenceRatio(technicianGeoPoints) : null,
+        routeFragmentationRatio: technicianGeoPoints.length ? technicianClusters.fragmentationRatio : null,
         equipmentSnapshotCompleteVisitCount: equipmentCompleteVisits.length,
         equipmentSnapshotCoverage: technicianVisits.length ? equipmentCompleteVisits.length / technicianVisits.length : 0,
         servicedCoolerCount: equipmentCompleteVisits.reduce((sum, v) => sum + Number(v.coolerCount), 0),
@@ -134,9 +150,17 @@ export class FeatureStoreService {
         nearestNeighborP90Meters: regionCluster.nearestNeighborP90Meters,
         visitCount: visits.filter((v) => regionPointIds.has(v.pointId)).length,
         attemptCount: attempts.filter((a) => regionPointIds.has(a.pointId)).length,
+        standardCurrentWorkloadCount: obligations.filter((o) => regionPointIds.has(o.pointId) && o.dueEnd >= week.weekStart).length,
+        standardCarryoverWorkloadCount: obligations.filter((o) => regionPointIds.has(o.pointId) && o.dueEnd < week.weekStart).length,
         smartcleanScheduleConfigured,
         smartcleanCurrentWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CURRENT').length,
         smartcleanCarryoverWorkloadCount: smartcleanWorkload.filter((x) => x.regionId === region.id && x.state === 'CARRYOVER').length,
+        equipmentKnownPointCount: regionPoints.filter((p) => [p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((value) => value !== null)).length,
+        equipmentUnknownPointCount: regionPoints.filter((p) => ![p.coolerCount, p.towerCount, p.tapCount, p.smarttapCount].every((value) => value !== null)).length,
+        coolerCount: regionPoints.reduce((sum, p) => sum + (p.coolerCount ?? 0), 0),
+        towerCount: regionPoints.reduce((sum, p) => sum + (p.towerCount ?? 0), 0),
+        tapCount: regionPoints.reduce((sum, p) => sum + (p.tapCount ?? 0), 0),
+        smarttapCount: regionPoints.reduce((sum, p) => sum + (p.smarttapCount ?? 0), 0),
       }});
     }
 
@@ -144,8 +168,26 @@ export class FeatureStoreService {
       const pointVisits = visits.filter((v) => v.pointId === point.id);
       const pointAttempts = attempts.filter((a) => a.pointId === point.id);
       const pointObligations = obligations.filter((o) => o.pointId === point.id);
+      const pointLocationVisits = pointVisits.filter((v) => v.latitude !== null && v.longitude !== null);
+      const pointVisitGeo = this.geography.summarize(pointLocationVisits.map((v) => ({ latitude: Number(v.latitude), longitude: Number(v.longitude) })));
+      const locationVisitToCanonicalMeters = pointVisitGeo.centerLatitude !== null && pointVisitGeo.centerLongitude !== null && point.canonicalLatitude !== null && point.canonicalLongitude !== null
+        ? this.geography.distanceMeters({ latitude: pointVisitGeo.centerLatitude, longitude: pointVisitGeo.centerLongitude }, { latitude: Number(point.canonicalLatitude), longitude: Number(point.canonicalLongitude) })
+        : null;
+      const equipmentVisits = pointVisits
+        .filter((v) => v.equipmentConfirmed && [v.coolerCount, v.towerCount, v.tapCount, v.smarttapCount].every((value) => value !== null))
+        .sort((a, b) => a.performedAt.getTime() - b.performedAt.getTime());
+      const latestEquipmentVisit = equipmentVisits.at(-1);
+      const pointProfileEligible = equipmentProfileAsOf(point);
+      const profile = pointProfileEligible ? point : latestEquipmentVisit;
       const clusterMembership = pointClusterMembership.get(point.id);
+      const verifiedAt = pointProfileEligible ? point.equipmentVerifiedAt : latestEquipmentVisit?.performedAt ?? null;
       records.push({ entityType: 'POINT', entityId: point.id, features: {
+        pointCode: point.code,
+        pointName: point.name,
+        pointAddress: point.address,
+        googlePlaceId: point.googlePlaceId,
+        googleBusinessName: point.googleBusinessName,
+        pointAliases: point.aliases.map((item) => item.alias).join('|'),
         regionId: point.regionId,
         hasRegion: Boolean(point.regionId),
         hasCanonicalLocation: point.canonicalLatitude !== null && point.canonicalLongitude !== null,
@@ -156,13 +198,27 @@ export class FeatureStoreService {
         nearestNeighborMeters: nearestNeighborMeters.get(point.id) ?? null,
         locationConfidence: point.locationConfidence,
         locationSource: point.locationSource,
+        locationEvidenceVisitCount: pointLocationVisits.length,
+        locationVisitCenterLatitude: pointVisitGeo.centerLatitude,
+        locationVisitCenterLongitude: pointVisitGeo.centerLongitude,
+        locationVisitP90RadiusMeters: pointVisitGeo.p90RadiusMeters,
+        locationVisitToCanonicalMeters,
+        suspiciousVisitCount: pointVisits.filter((v) => v.suspiciousBatch).length,
+        reviewRecommendedVisitCount: pointVisits.filter((v) => v.reviewRecommended).length,
         maintenanceType: point.maintenanceType,
         maintenanceWeek: point.maintenanceWeek,
-        coolerCount: point.coolerCount,
-        towerCount: point.towerCount,
-        tapCount: point.tapCount,
-        smarttapCount: point.smarttapCount,
-        equipmentProfileComplete: [point.coolerCount, point.towerCount, point.tapCount, point.smarttapCount].every((v) => v !== null),
+        coolerCount: profile?.coolerCount ?? null,
+        towerCount: profile?.towerCount ?? null,
+        tapCount: profile?.tapCount ?? null,
+        smarttapCount: profile?.smarttapCount ?? null,
+        equipmentProfileComplete: Boolean(profile) && [profile?.coolerCount, profile?.towerCount, profile?.tapCount, profile?.smarttapCount].every((v) => v !== null),
+        equipmentVerifiedAt: verifiedAt?.toISOString() ?? null,
+        equipmentVerificationAgeDays: verifiedAt ? Math.max(0, (week.endExclusiveInstant.getTime() - verifiedAt.getTime()) / 86_400_000) : null,
+        equipmentConfirmedVisitCount: equipmentVisits.length,
+        equipmentSnapshotCoolerCount: latestEquipmentVisit?.coolerCount ?? null,
+        equipmentSnapshotTowerCount: latestEquipmentVisit?.towerCount ?? null,
+        equipmentSnapshotTapCount: latestEquipmentVisit?.tapCount ?? null,
+        equipmentSnapshotSmarttapCount: latestEquipmentVisit?.smarttapCount ?? null,
         visitCount: pointVisits.length,
         attemptCount: pointAttempts.length,
         obligationCount: pointObligations.length,
@@ -178,7 +234,14 @@ export class FeatureStoreService {
     const timestamps = [...technicians.map((x) => x.updatedAt), ...regions.map((x) => x.updatedAt), ...points.map((x) => x.updatedAt), ...visits.map((x) => x.recordedAtServer), ...attempts.map((x) => x.attemptedAt), ...obligations.map((x) => x.createdAt)];
     const sourceDataThrough = timestamps.length ? new Date(Math.max(...timestamps.map((d) => d.getTime()))).toISOString() : null;
     records.sort((a, b) => `${a.entityType}:${a.entityId}`.localeCompare(`${b.entityType}:${b.entityId}`));
-    return { weekKey: week.key, isoYear: week.isoYear, isoWeek: week.isoWeek, weekStart: week.weekStart.toISOString().slice(0, 10), weekEnd: week.weekEnd.toISOString().slice(0, 10), startInstant: week.startInstant.toISOString(), endExclusiveInstant: week.endExclusiveInstant.toISOString(), sourceDataThrough, sourceHash, generatedAt: new Date().toISOString(), records };
+    return { engineVersion: AI_ENGINE_VERSION, featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION, weekKey: week.key, isoYear: week.isoYear, isoWeek: week.isoWeek, weekStart: week.weekStart.toISOString().slice(0, 10), weekEnd: week.weekEnd.toISOString().slice(0, 10), startInstant: week.startInstant.toISOString(), endExclusiveInstant: week.endExclusiveInstant.toISOString(), sourceDataThrough, sourceHash, generatedAt: new Date().toISOString(), records };
+  }
+
+  private percentile(sorted: number[], p: number) {
+    if (!sorted.length) return null;
+    const index = (sorted.length - 1) * p;
+    const lo = Math.floor(index), hi = Math.ceil(index);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo);
   }
 
   private stableStringify(value: unknown): string {

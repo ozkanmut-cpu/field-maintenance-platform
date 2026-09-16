@@ -218,14 +218,14 @@ Alanlar:
 - `failureRate Decimal?`
 - `repeatProblemScore Decimal?`
 - `geographicAccessScore Decimal?`
-- `expectedServiceEffort Decimal?`
+- `serviceWorkloadIndex Decimal?`
 - `visitCount Int`
 - `attemptCount Int`
 - `confidenceLevel AiConfidenceLevel`
 - `factors Json?`
 - `createdAt DateTime`
 
-Not: Güvenilir gerçek servis süresi henüz source-of-truth'ta yoktur. `expectedServiceEffort` ilk aşamada süreymiş gibi yorumlanmayacak; mevcut gözlemlenebilir yük faktörlerinden türetilen göreli bir değer olacaktır.
+Not: Güvenilir gerçek servis süresi henüz source-of-truth'ta yoktur. `serviceWorkloadIndex` dakika değildir. Soğutucu, kule, musluk ve SmartTap karmasının gözlenen sonuçlarla ilişkisi üzerinden öğrenilen göreli iş yükü indeksidir; yeterli kanıt yoksa değer üretilmez.
 
 ### AiRegionProfile
 Bölgenin haftalık coğrafi ve operasyonel profilidir.

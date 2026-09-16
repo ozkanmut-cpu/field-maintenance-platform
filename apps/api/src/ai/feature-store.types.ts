@@ -9,6 +9,8 @@ export type FeatureRecord = {
 };
 
 export type FeatureSnapshot = {
+  engineVersion?: string;
+  featureSchemaVersion?: string;
   weekKey: string;
   isoYear: number;
   isoWeek: number;

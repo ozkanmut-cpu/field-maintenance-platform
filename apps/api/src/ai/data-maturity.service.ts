@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 import {
   AiCapability,
   AiMaturityState,
@@ -20,10 +21,14 @@ export class DataMaturityService {
       : 0;
 
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       generatedAt: new Date().toISOString(),
       latestWeekKey: snapshots.at(-1)?.weekKey ?? null,
       overallState: this.stateForScore(overallScore),
       overallScore,
+      confidence: overallScore >= 75 ? 'HIGH' : overallScore >= 45 ? 'MEDIUM' : 'LOW',
+      reasonCodes: [...new Set(capabilities.flatMap((item) => item.reasons))],
       evidence,
       capabilities,
     };
@@ -34,20 +39,11 @@ export class DataMaturityService {
     let attempts = 0;
     let suspiciousVisits = 0;
     let reviewRecommended = 0;
-    let activePoints = 0;
-    let locatedPoints = 0;
-    let activeTechnicians = 0;
-    let regions = 0;
 
     for (const snapshot of snapshots) {
       const system = snapshot.records.find((record) => record.entityType === 'SYSTEM')?.features ?? {};
       visits += this.number(system.visitCount);
       attempts += this.number(system.attemptCount);
-      activePoints = Math.max(activePoints, this.number(system.activePointCount));
-      locatedPoints = Math.max(locatedPoints, this.number(system.locatedPointCount));
-      activeTechnicians = Math.max(activeTechnicians, this.number(system.activeTechnicianCount));
-      regions = Math.max(regions, this.number(system.regionCount));
-
       for (const record of snapshot.records) {
         if (record.entityType !== 'TECHNICIAN') continue;
         suspiciousVisits += this.number(record.features.suspiciousVisitCount);
@@ -55,7 +51,16 @@ export class DataMaturityService {
       }
     }
 
+    const latest = snapshots.at(-1)?.records.find((record) => record.entityType === 'SYSTEM')?.features ?? {};
+    const activePoints = this.number(latest.activePointCount);
+    const locatedPoints = this.number(latest.locatedPointCount);
+    const activeTechnicians = this.number(latest.activeTechnicianCount);
+    const regions = this.number(latest.regionCount);
+    const completeEquipment = this.number(latest.equipmentProfileCompleteCount);
     const locationCoverage = activePoints > 0 ? locatedPoints / activePoints : 0;
+    const storedEquipmentCoverage = this.optionalNumber(latest.equipmentProfileCoverage);
+    const equipmentProfileCoverage = storedEquipmentCoverage ?? (activePoints > 0 ? completeEquipment / activePoints : 0);
+
     return {
       weeks: snapshots.length,
       visits,
@@ -67,6 +72,7 @@ export class DataMaturityService {
       suspiciousVisits,
       reviewRecommended,
       locationCoverage: Number(locationCoverage.toFixed(4)),
+      equipmentProfileCoverage: Number(Math.max(0, Math.min(1, equipmentProfileCoverage)).toFixed(4)),
     };
   }
 
@@ -74,8 +80,8 @@ export class DataMaturityService {
     return [
       this.capability('CORE', this.scoreCore(e), 100, e),
       this.capability('GEOGRAPHY', this.scoreGeography(e), this.geoQuality(e), e),
-      this.capability('CAPACITY', this.scoreCapacity(e), this.historyQuality(e), e),
-      this.capability('RISK', this.scoreRisk(e), this.historyQuality(e), e),
+      this.capability('CAPACITY', this.scoreCapacity(e), Math.min(this.historyQuality(e), this.equipmentQuality(e)), e),
+      this.capability('RISK', this.scoreRisk(e), Math.min(this.historyQuality(e), this.equipmentQuality(e), this.geoQuality(e)), e),
       this.capability('ANOMALY', this.scoreAnomaly(e), this.anomalyQuality(e), e),
       this.capability('RECOMMENDATION', this.scoreRecommendation(e), this.recommendationQuality(e), e),
       this.capability('SEASONALITY', this.scoreSeasonality(e), this.historyQuality(e), e),
@@ -156,8 +162,13 @@ export class DataMaturityService {
     return Math.min(100, 50 + this.progress(e.visits, 1, 500) * 35 + this.progress(e.weeks, 1, 8) * 15);
   }
 
+  private equipmentQuality(e: MaturityEvidence) {
+    if (e.activePoints === 0) return 0;
+    return Math.min(100, 30 + e.equipmentProfileCoverage * 70);
+  }
+
   private recommendationQuality(e: MaturityEvidence) {
-    return Math.min(this.geoQuality(e), this.historyQuality(e));
+    return Math.min(this.geoQuality(e), this.historyQuality(e), this.equipmentQuality(e));
   }
 
   private reasons(capability: AiCapability, e: MaturityEvidence) {
@@ -165,8 +176,11 @@ export class DataMaturityService {
     if (e.weeks === 0) reasons.push('Henüz haftalık snapshot yok');
     if (e.visits === 0) reasons.push('Henüz geçerli bakım ziyareti yok');
     if (e.activePoints === 0) reasons.push('Aktif nokta verisi yok');
-    if (capability === 'GEOGRAPHY' || capability === 'RECOMMENDATION') {
+    if (capability === 'GEOGRAPHY' || capability === 'RISK' || capability === 'RECOMMENDATION') {
       if (e.locationCoverage < 0.5) reasons.push('Konum kapsaması %50 altında');
+    }
+    if (capability === 'CAPACITY' || capability === 'RISK' || capability === 'RECOMMENDATION') {
+      if (e.equipmentProfileCoverage < 0.5) reasons.push('Ekipman profil kapsaması %50 altında');
     }
     if (capability === 'CAPACITY' && e.weeks < 3) reasons.push('Kapasite baseline için en az 3 hafta gerekli');
     if (capability === 'RISK' && e.weeks < 4) reasons.push('Risk modeli için en az 4 hafta gerekli');
@@ -188,7 +202,11 @@ export class DataMaturityService {
     return (value - start) / (full - start);
   }
 
+  private optionalNumber(value: unknown) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
   private number(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return this.optionalNumber(value) ?? 0;
   }
 }

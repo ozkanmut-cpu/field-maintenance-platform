@@ -1,0 +1,55 @@
+name: AI CI
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/ai/**'
+      - 'apps/api/package.json'
+      - 'apps/admin/app/ai-dashboard.tsx'
+      - 'apps/admin/app/ai-dashboard.smoke.test.mjs'
+      - 'apps/admin/e2e/**'
+      - 'apps/admin/playwright.config.ts'
+      - 'package-lock.json'
+      - 'apps/admin/package.json'
+      - '.github/workflows/ai-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/api/src/ai/**'
+      - 'apps/api/package.json'
+      - 'apps/admin/app/ai-dashboard.tsx'
+      - 'apps/admin/app/ai-dashboard.smoke.test.mjs'
+      - 'apps/admin/e2e/**'
+      - 'apps/admin/playwright.config.ts'
+      - 'package-lock.json'
+      - 'apps/admin/package.json'
+      - '.github/workflows/ai-ci.yml'
+
+jobs:
+  ai-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npm --prefix apps/api run prisma:generate
+      - name: AI deterministic tests
+        run: npm --prefix apps/api run test:ai
+      - name: API typecheck
+        run: npm --prefix apps/api run lint
+      - name: API build
+        run: npm --prefix apps/api run build
+      - name: Admin AI smoke test
+        run: npm --prefix apps/admin run test:ai-smoke
+      - name: Install Chromium for Admin E2E
+        run: npx playwright install --with-deps chromium
+      - name: Admin browser E2E
+        run: npm --prefix apps/admin run test:ai-e2e
+      - name: Admin typecheck
+        run: npm --prefix apps/admin run lint
+      - name: Admin build
+        run: npm --prefix apps/admin run build

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
 import { BaselineBand, TechnicianWeeklyBaseline } from './technician-baseline.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
 
 @Injectable()
 export class TechnicianBaselineService {
@@ -24,6 +25,8 @@ export class TechnicianBaselineService {
     const state = serviceRows.length >= 4 ? 'ACTIVE' : 'WARMING_UP';
     const confidence = state === 'WARMING_UP' ? 'LOW' : serviceRows.length >= 12 && travelRows.length >= 8 ? 'HIGH' : serviceRows.length >= 8 ? 'MEDIUM' : 'LOW';
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       technicianId,
       state,
       confidence,
@@ -40,8 +43,14 @@ export class TechnicianBaselineService {
       travel: {
         routeDistanceMeters: this.band(travelRows, 'fieldRouteDistanceMeters'),
         fieldP90RadiusMeters: this.band(travelRows, 'fieldP90RadiusMeters'),
+        routeCoherenceRatio: this.band(travelRows, 'routeCoherenceRatio'),
+        fragmentationRatio: this.band(travelRows, 'routeFragmentationRatio'),
       },
-      context: { uniqueVisitedPoints: this.band(serviceRows, 'uniqueVisitedPointCount') },
+      context: {
+        uniqueVisitedPoints: this.band(serviceRows, 'uniqueVisitedPointCount'),
+        suspiciousVisitRate: this.band(rows, 'suspiciousVisitRate'),
+        lateEntryMinutes: this.band(rows, 'averageLateEntryMinutes'),
+      },
       reasons,
     };
   }
@@ -50,6 +59,8 @@ export class TechnicianBaselineService {
     const values = rows.map((row) => row[key]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)).sort((a, b) => a - b);
     return { median: this.percentile(values, 0.5), p75: this.percentile(values, 0.75), p90: this.percentile(values, 0.9) };
   }
+
+  private optionalNumber(value: unknown) { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
 
   private percentile(sorted: number[], p: number) {
     if (!sorted.length) return null;
