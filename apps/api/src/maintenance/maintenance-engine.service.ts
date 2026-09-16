@@ -8,7 +8,7 @@ import {
   VisitStatus,
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
-import { businessDateKey, dateOnlyForBusinessDate } from '../common/business-time';
+import { businessDateKey, businessDayRange, dateOnlyForBusinessDate } from '../common/business-time';
 import { rutWeekSlot } from '../common/rut-schedule';
 import { nextSmartcleanDueDate } from '../common/smartclean-schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -131,6 +131,154 @@ export class MaintenanceEngineService {
     const rawRows = [...standardRows, ...smartcleanRows];
     const effectiveAssignments = await this.assignments.resolveMany(rawRows.map((row) => row.pointId), asOf);
 
+    const rows = rawRows
+      .map((row) => {
+        const assignment = effectiveAssignments.get(row.pointId);
+        return {
+          ...row,
+          technicianId: assignment?.technicianId ?? null,
+          assignmentSource: assignment?.source ?? 'REGION',
+          assignmentId: assignment?.assignmentId ?? null,
+        };
+      })
+      .sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority === 'OVERDUE' ? -1 : 1;
+        if (a.overduePeriods !== b.overduePeriods) return b.overduePeriods - a.overduePeriods;
+        if (a.dueStart.getTime() !== b.dueStart.getTime()) return a.dueStart.getTime() - b.dueStart.getTime();
+        return a.pointName.localeCompare(b.pointName, 'tr');
+      });
+
+    return { asOf, count: rows.length, items: rows };
+  }
+
+
+  async dueSnapshot(asOfInput: string) {
+    const asOf = this.toDateOnly(new Date(asOfInput));
+    await this.ensureStandardObligations(asOf);
+    const cutoff = businessDayRange(new Date(`${businessDateKey(asOf)}T12:00:00+03:00`)).end;
+
+    const standardObligations = await this.prisma.maintenanceObligation.findMany({
+      where: {
+        dueStart: { lte: asOf },
+        OR: [
+          { status: MaintenanceObligationStatus.OPEN },
+          { resolvedAt: { gte: cutoff } },
+        ],
+        point: {
+          status: PointStatus.ACTIVE,
+          deletedAt: null,
+          maintenanceType: MaintenanceType.STANDARD,
+        },
+      },
+      include: { point: { include: { region: true } } },
+      orderBy: [{ dueStart: 'asc' }],
+    });
+
+    const standardByPoint = new Map<string, typeof standardObligations>();
+    for (const obligation of standardObligations) {
+      const list = standardByPoint.get(obligation.pointId) ?? [];
+      list.push(obligation);
+      standardByPoint.set(obligation.pointId, list);
+    }
+
+    const standardRows = Array.from(standardByPoint.values()).flatMap((obligations) => {
+      const oldest = obligations[0];
+      const overdueCount = obligations.filter((item) => item.dueEnd < asOf).length;
+      if (!oldest.point.region) return [];
+      return [{
+        pointId: oldest.point.id,
+        pointCode: oldest.point.code,
+        pointName: oldest.point.name,
+        regionId: oldest.point.regionId,
+        regionName: oldest.point.region.name,
+        address: oldest.point.address,
+        latitude: oldest.point.canonicalLatitude ? Number(oldest.point.canonicalLatitude) : null,
+        longitude: oldest.point.canonicalLongitude ? Number(oldest.point.canonicalLongitude) : null,
+        maintenanceType: oldest.point.maintenanceType,
+        maintenanceWeek: oldest.point.maintenanceWeek,
+        coolerCount: oldest.point.coolerCount,
+        towerCount: oldest.point.towerCount,
+        tapCount: oldest.point.tapCount,
+        smarttapCount: oldest.point.smarttapCount,
+        dueStart: oldest.dueStart,
+        dueEnd: oldest.dueEnd,
+        priority: overdueCount > 0 ? ('OVERDUE' as Priority) : ('CURRENT' as Priority),
+        overduePeriods: overdueCount,
+        obligationId: oldest.id,
+      }];
+    });
+
+    const smartcleanPoints = await this.prisma.point.findMany({
+      where: {
+        status: PointStatus.ACTIVE,
+        deletedAt: null,
+        maintenanceType: MaintenanceType.SMARTCLEAN,
+      },
+      include: {
+        region: true,
+        visits: {
+          where: {
+            performedAt: { lt: cutoff },
+            OR: [
+              { status: VisitStatus.VALID },
+              { status: VisitStatus.REVERSED, reversedAt: { gte: cutoff } },
+            ],
+          },
+          orderBy: { performedAt: 'desc' },
+          take: 1,
+        },
+        attempts: {
+          where: {
+            reviewStatus: AttemptReviewStatus.APPROVED,
+            closedDueDate: { not: null },
+            reviewedAt: { lt: cutoff },
+          },
+          orderBy: { reviewedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const smartcleanRows = smartcleanPoints
+      .map((point) => {
+        if (!point.region) return null;
+        const base = point.visits[0]?.performedAt ?? point.smartcleanReferenceAt;
+        if (!base || this.toDateOnly(base) > asOf) return null;
+        if (![1, 2].includes(point.maintenanceWeek ?? 0)) return null;
+        const closedDueDate = point.attempts[0]?.closedDueDate ?? null;
+        const dueDate = nextSmartcleanDueDate(
+          this.toDateOnly(base),
+          point.maintenanceWeek!,
+          this.week1Anchor(),
+          closedDueDate,
+        );
+        if (dueDate > asOf) return null;
+        return {
+          pointId: point.id,
+          pointCode: point.code,
+          pointName: point.name,
+          regionId: point.regionId,
+          regionName: point.region.name,
+          address: point.address,
+          latitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
+          longitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
+          maintenanceType: point.maintenanceType,
+          maintenanceWeek: point.maintenanceWeek,
+          coolerCount: point.coolerCount,
+          towerCount: point.towerCount,
+          tapCount: point.tapCount,
+          smarttapCount: point.smarttapCount,
+          dueStart: dueDate,
+          dueEnd: dueDate,
+          priority: dueDate < asOf ? ('OVERDUE' as Priority) : ('CURRENT' as Priority),
+          overduePeriods: dueDate < asOf ? 1 : 0,
+          obligationId: null,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const rawRows = [...standardRows, ...smartcleanRows];
+    const effectiveAssignments = await this.assignments.resolveMany(rawRows.map((row) => row.pointId), asOf);
     const rows = rawRows
       .map((row) => {
         const assignment = effectiveAssignments.get(row.pointId);

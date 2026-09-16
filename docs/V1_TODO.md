@@ -75,7 +75,7 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 - [x] Paperwork completion-time analytics — admin analytics measures document-arrival and status-resolution time from server-recorded maintenance time, with median/P90 and pending-age buckets
 - [ ] Daily technician summary
 - [x] Daily admin summary — admin dashboard shows selected-day field activity, open/current/overdue/unassigned work, paperwork backlog and technician-level distribution
-- [ ] Period/week-end admin summary
+- [x] Period/week-end admin summary — admin dashboard aggregates Monday–Sunday Istanbul field activity with week-end open/overdue/unassigned work and technician-level distribution
 - [ ] KPI/reporting module
 - [x] SAP confirmation synchronization — production runtime runs every 10 minutes with normal `Operasyon → Hizmet teyitleri` search, 14-day window, product 203, max 1000, date-scoped DB deletion and guarded logout; repository integration is merged to `main` and production-verified
 - [x] SAP Web CRM browser automation proof-of-concept — superseded by the working production automation; Playwright + Firefox specifically is no longer required
@@ -84,15 +84,14 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Add the period/week-end admin summary.
-2. Add the daily technician summary backend/reporting flow.
-3. Complete the KPI/reporting module.
-4. Add real PostGIS usage on top of the existing PostgreSQL/Prisma migration foundation.
-5. Complete mobile search coverage for address/old-name aliases on technician screens.
-6. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
-7. Add mobile favorites/pinned/recent if retained for V1.
-8. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
-9. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
+1. Add the daily technician summary backend/reporting flow.
+2. Complete the KPI/reporting module.
+3. Add real PostGIS usage on top of the existing PostgreSQL/Prisma migration foundation.
+4. Complete mobile search coverage for address/old-name aliases on technician screens.
+5. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+6. Add mobile favorites/pinned/recent if retained for V1.
+7. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+8. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
 
 AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 

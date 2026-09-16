@@ -673,6 +673,116 @@ export class MaintenanceService {
     };
   }
 
+
+  async adminPeriodSummary(dateInput?: string, now = new Date()) {
+    this.assertValidDate(now, 'now');
+    const dateKey = dateInput ?? businessDateKey(now);
+    const selected = this.analyticsDate(dateKey, 'date');
+    const mondayOffset = (selected.getUTCDay() + 6) % 7;
+    const weekStartDate = new Date(selected);
+    weekStartDate.setUTCDate(weekStartDate.getUTCDate() - mondayOffset);
+    const weekEndDate = new Date(weekStartDate);
+    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+    const weekStart = weekStartDate.toISOString().slice(0, 10);
+    const weekEnd = weekEndDate.toISOString().slice(0, 10);
+    const today = this.analyticsDate(businessDateKey(now), 'today');
+    const currentMondayOffset = (today.getUTCDay() + 6) % 7;
+    today.setUTCDate(today.getUTCDate() - currentMondayOffset);
+    if (weekStartDate.getTime() > today.getTime()) {
+      throw new BadRequestException('Gelecek hafta için dönem özeti oluşturulamaz');
+    }
+    const start = businessDayRange(new Date(`${weekStart}T12:00:00+03:00`)).start;
+    const end = businessDayRange(new Date(`${weekEnd}T12:00:00+03:00`)).end;
+
+    const [due, technicians, visits, attempts, nonMaintenanceVisits, serviceSlipPending, confirmationPending] = await Promise.all([
+      this.engine.dueSnapshot(weekEnd),
+      this.prisma.user.findMany({
+        where: { active: true, role: UserRole.TECHNICIAN },
+        select: { id: true, name: true, username: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.maintenanceVisit.findMany({
+        where: { status: VisitStatus.VALID, performedAt: { gte: start, lt: end } },
+        select: { technicianId: true },
+      }),
+      this.prisma.maintenanceAttempt.findMany({
+        where: { attemptedAt: { gte: start, lt: end } },
+        select: { technicianId: true },
+      }),
+      this.prisma.nonMaintenanceVisit.findMany({
+        where: { visitedAt: { gte: start, lt: end } },
+        select: { technicianId: true },
+      }),
+      this.prisma.maintenanceVisit.count({
+        where: { status: VisitStatus.VALID, serviceSlipStatus: PaperworkStatus.PENDING, recordedAtServer: { lt: end } },
+      }),
+      this.prisma.maintenanceVisit.count({
+        where: { status: VisitStatus.VALID, confirmationStatus: PaperworkStatus.PENDING, recordedAtServer: { lt: end } },
+      }),
+    ]);
+
+    const byTechnician = new Map(technicians.map((technician) => [technician.id, {
+      technicianId: technician.id,
+      name: technician.name,
+      username: technician.username,
+      completedMaintenance: 0,
+      attempts: 0,
+      nonMaintenanceVisits: 0,
+      currentOpen: 0,
+      overdueOpen: 0,
+    }]));
+    const fieldTechnicians = new Set<string>();
+    for (const visit of visits) {
+      const row = byTechnician.get(visit.technicianId);
+      if (row) { row.completedMaintenance += 1; fieldTechnicians.add(visit.technicianId); }
+    }
+    for (const attempt of attempts) {
+      const row = byTechnician.get(attempt.technicianId);
+      if (row) { row.attempts += 1; fieldTechnicians.add(attempt.technicianId); }
+    }
+    for (const visit of nonMaintenanceVisits) {
+      const row = byTechnician.get(visit.technicianId);
+      if (row) { row.nonMaintenanceVisits += 1; fieldTechnicians.add(visit.technicianId); }
+    }
+    for (const item of due.items) {
+      if (!item.technicianId) continue;
+      const row = byTechnician.get(item.technicianId);
+      if (!row) continue;
+      if (item.priority === 'OVERDUE') row.overdueOpen += 1;
+      else row.currentOpen += 1;
+    }
+
+    const rows = Array.from(byTechnician.values()).sort((a, b) =>
+      b.overdueOpen - a.overdueOpen
+      || b.currentOpen - a.currentOpen
+      || (b.completedMaintenance + b.attempts + b.nonMaintenanceVisits) - (a.completedMaintenance + a.attempts + a.nonMaintenanceVisits)
+      || a.name.localeCompare(b.name, 'tr'),
+    );
+    const currentOpen = due.items.filter((item) => item.priority === 'CURRENT').length;
+    const overdueOpen = due.items.filter((item) => item.priority === 'OVERDUE').length;
+    const unassignedOpen = due.items.filter((item) => !item.technicianId).length;
+
+    return {
+      selectedDate: dateKey,
+      weekStart,
+      weekEnd,
+      generatedAt: now.toISOString(),
+      metrics: {
+        completedMaintenance: visits.length,
+        fieldTechnicianCount: fieldTechnicians.size,
+        attemptCount: attempts.length,
+        nonMaintenanceVisitCount: nonMaintenanceVisits.length,
+        currentOpen,
+        overdueOpen,
+        unassignedOpen,
+        paperworkPending: serviceSlipPending + confirmationPending,
+        serviceSlipPending,
+        confirmationPending,
+      },
+      technicians: rows,
+    };
+  }
+
   async paperworkAnalytics(
     query: { from?: string; to?: string; technicianId?: string },
     now = new Date(),
