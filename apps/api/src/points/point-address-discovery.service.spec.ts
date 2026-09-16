@@ -94,3 +94,22 @@ test('narrow İzmir operational regions reject cross-city-side candidates', () =
   assert.equal(service.isPlausibleRegionCandidate('HATAY', karsiyakaWinston, hatayAnchors), false);
   assert.equal(service.isPlausibleRegionCandidate('BAYRAKLI', konakFourPoints, bayrakliAnchors), true);
 });
+
+test('bulk address discovery limits concurrent lookups', async () => {
+  const bulkService = new PointAddressDiscoveryService({} as never, {} as never) as any;
+  let active = 0;
+  let maxActive = 0;
+  const seen: string[] = [];
+  bulkService.discover = async (pointId: string) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    seen.push(pointId);
+    active -= 1;
+    return { status: 'TEST' };
+  };
+
+  await bulkService.enqueueMany(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'], 3);
+  assert.equal(seen.length, 8);
+  assert.equal(maxActive, 3);
+});

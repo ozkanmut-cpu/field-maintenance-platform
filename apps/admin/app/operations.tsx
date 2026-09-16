@@ -20,6 +20,7 @@ maintenanceWeek?: number | null;
 smartcleanReferenceAt?: string | null;
 region: Region | null;
 };
+type BulkPointAction = 'SET_REGION' | 'SET_STATUS' | 'SET_STANDARD_WEEK' | 'SET_SMARTCLEAN';
 type SetupPendingReason = 'TEMPORARY_CODE' | 'REGION_MISSING' | 'TECHNICIAN_MISSING' | 'STANDARD_WEEK_MISSING' | 'SMARTCLEAN_REFERENCE_MISSING' | 'DUPLICATE_CODE';
 type SetupPendingItem = Point & { setupReasons: SetupPendingReason[] };
 type AttemptReviewItem = {
@@ -46,6 +47,12 @@ const [loading, setLoading] = useState(true);
 const [error, setError] = useState('');
 const [pointSearch, setPointSearch] = useState('');
 const [pointStatusFilter, setPointStatusFilter] = useState<'ALL' | Point['status']>('ALL');
+const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
+const [bulkAction, setBulkAction] = useState<BulkPointAction>('SET_REGION');
+const [bulkRegionId, setBulkRegionId] = useState('');
+const [bulkStatus, setBulkStatus] = useState<Point['status']>('ACTIVE');
+const [bulkWeek, setBulkWeek] = useState('1');
+const [bulkSmartcleanReferenceAt, setBulkSmartcleanReferenceAt] = useState('');
 const [regionName, setRegionName] = useState('');
 const [regionTechnicianId, setRegionTechnicianId] = useState('');
 const [pointForm, setPointForm] = useState({
@@ -92,6 +99,7 @@ setSetupPending(setupQueue.items);
 setAttemptQueue(attemptReview.items);
 setAttemptHistory(reviewHistory.items);
 setPointForm((current) => ({ ...current, regionId: current.regionId || regionList[0]?.id || '' }));
+setBulkRegionId((current) => current || regionList[0]?.id || '');
 } finally { setLoading(false); }
 }
 useEffect(() => {
@@ -163,6 +171,50 @@ await load();
 } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
 finally { setBusy(false); }
 }
+function handlePointSearchChange(value: string) {
+setPointSearch(value);
+setSelectedPointIds([]);
+}
+function handlePointStatusFilterChange(value: typeof pointStatusFilter) {
+setPointStatusFilter(value);
+setSelectedPointIds([]);
+}
+function togglePointSelection(pointId: string) {
+setSelectedPointIds((current) => current.includes(pointId) ? current.filter((id) => id !== pointId) : [...current, pointId]);
+}
+function selectVisiblePoints() {
+setSelectedPointIds(visiblePoints.map((point) => point.id));
+}
+function clearPointSelection() { setSelectedPointIds([]); }
+async function bulkUpdatePoints() {
+if (!selectedPointIds.length) { setError('Toplu işlem için en az bir nokta seçin.'); return; }
+if (selectedPointIds.length > 500) { setError('En fazla 500 nokta tek toplu işlemde güncellenebilir.'); return; }
+const payload: Record<string, unknown> = { pointIds: selectedPointIds, action: bulkAction };
+let description = '';
+if (bulkAction === 'SET_REGION') {
+const region = regions.find((item) => item.id === bulkRegionId);
+if (!region) { setError('Geçerli bir hedef bölge seçin.'); return; }
+payload.regionId = region.id; description = `bölgesi ${region.name} yapılacak`;
+} else if (bulkAction === 'SET_STATUS') {
+payload.status = bulkStatus; description = `durumu ${bulkStatus === 'ACTIVE' ? 'Aktif' : bulkStatus === 'PASSIVE' ? 'Pasif' : 'İptal'} yapılacak`;
+} else if (bulkAction === 'SET_STANDARD_WEEK') {
+payload.maintenanceWeek = Number(bulkWeek); description = `bakımı Standart / Hafta ${bulkWeek} yapılacak`;
+} else {
+if (!bulkSmartcleanReferenceAt) { setError('SmartClean referans tarihi zorunludur.'); return; }
+payload.maintenanceWeek = Number(bulkWeek);
+payload.smartcleanReferenceAt = bulkSmartcleanReferenceAt;
+description = `bakımı SmartClean / Hafta ${bulkWeek}, referans ${bulkSmartcleanReferenceAt} yapılacak`;
+}
+if (!window.confirm(`${selectedPointIds.length} nokta için ${description}. Devam edilsin mi?`)) return;
+setBusy(true); setError('');
+try {
+await api('/api/backend/points/bulk-update', { method: 'POST', body: JSON.stringify(payload) });
+clearPointSelection();
+await load();
+} catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+finally { setBusy(false); }
+}
+
 async function fixSetup(point: SetupPendingItem, reason: SetupPendingReason) {
 let payload: Record<string, unknown> | null = null;
 if (reason === 'REGION_MISSING') {
@@ -329,16 +381,30 @@ return (
 {activeSection === 'points' ? <section className="panel" id="points">
 <div className="panelHeader"><div><h2>Noktalar</h2><p>Aktif, pasif ve iptal noktaları buradan yönet.</p></div><button className="ghost iconAction" onClick={() => void load()} disabled={busy || loading}><AdminIcon name="refresh" size={17} /><span>{loading ? 'Yükleniyor' : 'Yenile'}</span></button></div>
 <div className="filterBar">
-<label className="searchField"><AdminIcon name="search" size={18} /><input value={pointSearch} onChange={(e) => setPointSearch(e.target.value)} placeholder="Kod, nokta, adres veya bölge ara" /></label>
-<select value={pointStatusFilter} onChange={(e) => setPointStatusFilter(e.target.value as typeof pointStatusFilter)}><option value="ALL">Tüm durumlar</option><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option><option value="CANCELLED">İptal</option></select>
+<label className="searchField"><AdminIcon name="search" size={18} /><input value={pointSearch} onChange={(e) => handlePointSearchChange(e.target.value)} placeholder="Kod, nokta, adres veya bölge ara" /></label>
+<select value={pointStatusFilter} onChange={(e) => handlePointStatusFilterChange(e.target.value as typeof pointStatusFilter)}><option value="ALL">Tüm durumlar</option><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option><option value="CANCELLED">İptal</option></select>
 <span className="filterCount">{visiblePoints.length} / {points.length} nokta</span>
+<button className="small" disabled={busy || !visiblePoints.length} onClick={selectVisiblePoints}>GÖRÜNENLERİ SEÇ</button>
+<button className="ghost small" disabled={busy || !selectedPointIds.length} onClick={clearPointSelection}>SEÇİMİ TEMİZLE</button>
+</div>
+<div className="filterBar">
+<strong>{selectedPointIds.length} seçili</strong>
+<select value={bulkAction} onChange={(e) => setBulkAction(e.target.value as BulkPointAction)}>
+<option value="SET_REGION">Bölge değiştir</option><option value="SET_STATUS">Durum değiştir</option><option value="SET_STANDARD_WEEK">Standart rut haftası</option><option value="SET_SMARTCLEAN">SmartClean yap</option>
+</select>
+{bulkAction === 'SET_REGION' ? <select value={bulkRegionId} onChange={(e) => setBulkRegionId(e.target.value)}><option value="">Hedef bölge seç</option>{regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}</select> : null}
+{bulkAction === 'SET_STATUS' ? <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as Point['status'])}><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option><option value="CANCELLED">İptal</option></select> : null}
+{bulkAction === 'SET_STANDARD_WEEK' || bulkAction === 'SET_SMARTCLEAN' ? <select value={bulkWeek} onChange={(e) => setBulkWeek(e.target.value)}><option value="1">Hafta 1</option><option value="2">Hafta 2</option></select> : null}
+{bulkAction === 'SET_SMARTCLEAN' ? <input type="date" value={bulkSmartcleanReferenceAt} onChange={(e) => setBulkSmartcleanReferenceAt(e.target.value)} aria-label="SmartClean referans tarihi" /> : null}
+<button disabled={busy || !selectedPointIds.length} onClick={() => void bulkUpdatePoints()}>SEÇİLİLERE UYGULA</button>
 </div>
 <div className="tableWrap">
 <table>
-<thead><tr><th>Kod</th><th>Nokta</th><th>Bölge</th><th>Bakım</th><th>Durum</th></tr></thead>
+<thead><tr><th>Seç</th><th>Kod</th><th>Nokta</th><th>Bölge</th><th>Bakım</th><th>Durum</th></tr></thead>
 <tbody>
-{loading ? <tr><td colSpan={5}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Noktalar yükleniyor</strong><span>Liste hazırlanıyor.</span></div></td></tr> : visiblePoints.length === 0 ? <tr><td colSpan={5}><div className="emptyState compact"><AdminIcon name="search" /><strong>Sonuç bulunamadı</strong><span>Arama veya durum filtresini değiştir.</span></div></td></tr> : visiblePoints.map((point) => (
+{loading ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Noktalar yükleniyor</strong><span>Liste hazırlanıyor.</span></div></td></tr> : visiblePoints.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Sonuç bulunamadı</strong><span>Arama veya durum filtresini değiştir.</span></div></td></tr> : visiblePoints.map((point) => (
 <tr key={point.id}>
+<td><input type="checkbox" checked={selectedPointIds.includes(point.id)} onChange={() => togglePointSelection(point.id)} aria-label={`${point.name} seç`} /></td>
 <td>{point.code}</td>
 <td><strong>{point.name}</strong><div className="muted">{point.address || 'Adres yok'}</div></td>
 <td>{point.region?.name || 'Bölge bekliyor'}</td>

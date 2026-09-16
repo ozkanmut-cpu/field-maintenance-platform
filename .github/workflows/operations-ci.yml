@@ -1,0 +1,42 @@
+name: Operations CI
+
+on:
+  push:
+    paths:
+      - 'apps/api/src/points/**'
+      - 'apps/admin/app/operations.tsx'
+      - 'apps/admin/app/operations.bulk.smoke.test.mjs'
+      - '.github/workflows/operations-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/api/src/points/**'
+      - 'apps/admin/app/operations.tsx'
+      - 'apps/admin/app/operations.bulk.smoke.test.mjs'
+      - '.github/workflows/operations-ci.yml'
+
+jobs:
+  operations-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npm --prefix apps/api run prisma:generate
+      - name: Point operation regression tests
+        working-directory: apps/api
+        run: node --test --require ts-node/register src/points/points.bulk-update.spec.ts src/points/point-address-discovery.service.spec.ts
+      - name: API typecheck
+        run: npm --prefix apps/api run lint
+      - name: API build
+        run: npm --prefix apps/api run build
+      - name: Admin bulk operation smoke tests
+        run: node --test apps/admin/app/operations.bulk.smoke.test.mjs
+      - name: Admin typecheck
+        run: npm --prefix apps/admin run lint
+      - name: Admin build
+        run: npm --prefix apps/admin run build
