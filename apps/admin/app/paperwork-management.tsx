@@ -16,6 +16,31 @@ type PaperworkHistoryItem = {
   changedAt: string; note?: string | null; changedBy: { id: string; name: string };
 };
 
+type PaperworkAnalyticsKind = {
+  statusCounts: { pending: number; present: number; missing: number };
+  statusRates: { pending: number; present: number; missing: number };
+  arrival: { completedCount: number; medianMinutes: number | null; p90Minutes: number | null };
+  resolution: { resolvedCount: number; medianMinutes: number | null; p90Minutes: number | null };
+  pendingAgeBuckets: { under24h: number; h24to48: number; d2to7: number; d7plus: number };
+};
+type PaperworkAnalytics = {
+  from: string; to: string; technicianId: string | null; generatedAt: string; totalVisits: number;
+  serviceSlip: PaperworkAnalyticsKind; confirmation: PaperworkAnalyticsKind;
+};
+
+function istanbulDateKey() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+function shiftDateKey(key: string, days: number) {
+  const date = new Date(`${key}T00:00:00.000Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10);
+}
+function formatMinutes(value: number | null) {
+  if (value === null) return '—';
+  if (value < 60) return `${value} dk`;
+  if (value < 1440) return `${Math.floor(value / 60)} sa ${value % 60} dk`;
+  return `${Math.floor(value / 1440)} gün ${Math.floor((value % 1440) / 60)} sa`;
+}
+
 const statusLabel: Record<PaperworkStatus, string> = { PENDING: 'Bekliyor', PRESENT: 'Var', MISSING: 'Eksik' };
 
 export default function PaperworkManagement() {
@@ -34,6 +59,12 @@ export default function PaperworkManagement() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const analyticsToday = istanbulDateKey();
+  const [analytics, setAnalytics] = useState<PaperworkAnalytics | null>(null);
+  const [analyticsTechnicianId, setAnalyticsTechnicianId] = useState('');
+  const [analyticsFrom, setAnalyticsFrom] = useState(() => shiftDateKey(analyticsToday, -29));
+  const [analyticsTo, setAnalyticsTo] = useState(analyticsToday);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
@@ -60,8 +91,21 @@ export default function PaperworkManagement() {
     finally { setBusy(false); setLoading(false); }
   }
 
+  async function loadAnalytics() {
+    if (!analyticsFrom || !analyticsTo) return;
+    setAnalytics(null);
+    setAnalyticsLoading(true); setError('');
+    try {
+      const params = new URLSearchParams({ from: analyticsFrom, to: analyticsTo });
+      if (analyticsTechnicianId) params.set('technicianId', analyticsTechnicianId);
+      setAnalytics(await api<PaperworkAnalytics>(`/api/backend/maintenance/paperwork-analytics?${params.toString()}`));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setAnalyticsLoading(false); }
+  }
+
   useEffect(() => { void loadTechnicians().catch((e) => setError(e instanceof Error ? e.message : String(e))); }, []);
   useEffect(() => { void loadVisits(); }, [technicianId, date]);
+  useEffect(() => { void loadAnalytics(); }, [analyticsTechnicianId, analyticsFrom, analyticsTo]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLocaleLowerCase('tr-TR');
@@ -134,6 +178,30 @@ export default function PaperworkManagement() {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / nokta ara" />
       </div>
+    </section>
+
+    <section className="panel">
+      <div className="panelHeader"><div><h2>Evrak Tamamlanma Analitiği</h2><p>Bakımın sisteme kaydedildiği andan itibaren evrak geliş ve durum netleşme sürelerini izle.</p></div><button className="ghost iconAction" disabled={analyticsLoading} onClick={() => void loadAnalytics()}><AdminIcon name="refresh" size={17} /><span>{analyticsLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div>
+      <div className="compactForm">
+        <select value={analyticsTechnicianId} onChange={(e) => setAnalyticsTechnicianId(e.target.value)}><option value="">Tüm teknisyenler</option>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
+        <input type="date" value={analyticsFrom} onChange={(e) => setAnalyticsFrom(e.target.value)} aria-label="Analitik başlangıç tarihi" />
+        <input type="date" value={analyticsTo} onChange={(e) => setAnalyticsTo(e.target.value)} aria-label="Analitik bitiş tarihi" />
+      </div>
+      {analytics ? <>
+        <section className="dashboardGrid">
+          <div className="dashboardCard"><span>Analiz edilen bakım</span><strong>{analytics.totalVisits}</strong><small>{analytics.from} → {analytics.to}</small></div>
+          <div className="dashboardCard"><span>Servis fişi · Belge geliş medyanı</span><strong>{formatMinutes(analytics.serviceSlip.arrival.medianMinutes)}</strong><small>P90: {formatMinutes(analytics.serviceSlip.arrival.p90Minutes)} · {analytics.serviceSlip.arrival.completedCount} kayıt</small></div>
+          <div className="dashboardCard"><span>Teyit · Belge geliş medyanı</span><strong>{formatMinutes(analytics.confirmation.arrival.medianMinutes)}</strong><small>P90: {formatMinutes(analytics.confirmation.arrival.p90Minutes)} · {analytics.confirmation.arrival.completedCount} kayıt</small></div>
+          <div className="dashboardCard"><span>Durum netleşme medyanı</span><strong>{formatMinutes(analytics.serviceSlip.resolution.medianMinutes)}</strong><small>Servis fişi · Teyit: {formatMinutes(analytics.confirmation.resolution.medianMinutes)}</small></div>
+        </section>
+        <div className="tableWrap"><table><thead><tr><th>Evrak</th><th>Var</th><th>Bekliyor</th><th>Eksik</th><th>Belge geliş medyanı / P90</th><th>Durum netleşme medyanı / P90</th></tr></thead><tbody>
+          {([['Servis Fişi', analytics.serviceSlip], ['Teyit', analytics.confirmation]] as const).map(([label, item]) => <tr key={label}><td><strong>{label}</strong></td><td>{item.statusCounts.present} ({item.statusRates.present}%)</td><td>{item.statusCounts.pending} ({item.statusRates.pending}%)</td><td>{item.statusCounts.missing} ({item.statusRates.missing}%)</td><td>{formatMinutes(item.arrival.medianMinutes)} / {formatMinutes(item.arrival.p90Minutes)}</td><td>{formatMinutes(item.resolution.medianMinutes)} / {formatMinutes(item.resolution.p90Minutes)}</td></tr>)}
+        </tbody></table></div>
+        <div className="tableWrap"><table><thead><tr><th>Bekleyen evrak yaşı</th><th>0–24 saat</th><th>24–48 saat</th><th>2–7 gün</th><th>7+ gün</th></tr></thead><tbody>
+          <tr><td><strong>Servis Fişi</strong></td><td>{analytics.serviceSlip.pendingAgeBuckets.under24h}</td><td>{analytics.serviceSlip.pendingAgeBuckets.h24to48}</td><td>{analytics.serviceSlip.pendingAgeBuckets.d2to7}</td><td>{analytics.serviceSlip.pendingAgeBuckets.d7plus}</td></tr>
+          <tr><td><strong>Teyit</strong></td><td>{analytics.confirmation.pendingAgeBuckets.under24h}</td><td>{analytics.confirmation.pendingAgeBuckets.h24to48}</td><td>{analytics.confirmation.pendingAgeBuckets.d2to7}</td><td>{analytics.confirmation.pendingAgeBuckets.d7plus}</td></tr>
+        </tbody></table></div>
+      </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Analitik hazırlanıyor</strong><span>Seçili dönem için evrak süreleri hesaplanıyor.</span></div>}
     </section>
 
     <section className="panel">

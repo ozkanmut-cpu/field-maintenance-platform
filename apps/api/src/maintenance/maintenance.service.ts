@@ -580,6 +580,50 @@ export class MaintenanceService {
     });
   }
 
+  async paperworkAnalytics(
+    query: { from?: string; to?: string; technicianId?: string },
+    now = new Date(),
+  ) {
+    this.assertValidDate(now, 'now');
+    const today = businessDateKey(now);
+    const toKey = query.to ?? today;
+    const fromKey = query.from ?? this.shiftDateKey(toKey, -29);
+    const fromDate = this.analyticsDate(fromKey, 'from');
+    const toDate = this.analyticsDate(toKey, 'to');
+    const inclusiveDays = Math.floor((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1;
+    if (inclusiveDays < 1) throw new BadRequestException('Geçersiz tarih aralığı: başlangıç bitişten sonra olamaz');
+    if (inclusiveDays > 180) throw new BadRequestException('Evrak analitiği en fazla 180 günlük tarih aralığını destekler');
+
+    const fromInstant = businessDayRange(new Date(`${fromKey}T12:00:00+03:00`)).start;
+    const toExclusive = businessDayRange(new Date(`${toKey}T12:00:00+03:00`)).end;
+    const visits = await this.prisma.maintenanceVisit.findMany({
+      where: {
+        status: VisitStatus.VALID,
+        recordedAtServer: { gte: fromInstant, lt: toExclusive },
+        ...(query.technicianId ? { technicianId: query.technicianId } : {}),
+      },
+      select: {
+        recordedAtServer: true,
+        serviceSlipStatus: true,
+        confirmationStatus: true,
+        paperworkHistory: {
+          select: { kind: true, newStatus: true, changedAt: true },
+          orderBy: { changedAt: 'asc' },
+        },
+      },
+    });
+
+    return {
+      from: fromKey,
+      to: toKey,
+      technicianId: query.technicianId ?? null,
+      generatedAt: now.toISOString(),
+      totalVisits: visits.length,
+      serviceSlip: this.paperworkKindAnalytics(visits, PaperworkKind.SERVICE_SLIP, 'serviceSlipStatus', now),
+      confirmation: this.paperworkKindAnalytics(visits, PaperworkKind.CONFIRMATION, 'confirmationStatus', now),
+    };
+  }
+
   async updatePaperwork(dto: UpdatePaperworkDto) {
     const [visit, admin] = await Promise.all([
       this.prisma.maintenanceVisit.findUnique({ where: { id: dto.visitId } }),
@@ -658,6 +702,93 @@ export class MaintenanceService {
         `Maintenance post-processing failed for point ${pointId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private paperworkKindAnalytics(
+    visits: Array<{
+      recordedAtServer: Date;
+      serviceSlipStatus: PaperworkStatus;
+      confirmationStatus: PaperworkStatus;
+      paperworkHistory: Array<{ kind: PaperworkKind; newStatus: PaperworkStatus; changedAt: Date }>;
+    }>,
+    kind: PaperworkKind,
+    statusField: 'serviceSlipStatus' | 'confirmationStatus',
+    now: Date,
+  ) {
+    const statusCounts = { pending: 0, present: 0, missing: 0 };
+    const pendingAgeBuckets = { under24h: 0, h24to48: 0, d2to7: 0, d7plus: 0 };
+    const arrivalDurations: number[] = [];
+    const resolutionDurations: number[] = [];
+
+    for (const visit of visits) {
+      const status = visit[statusField];
+      if (status === PaperworkStatus.PENDING) statusCounts.pending += 1;
+      else if (status === PaperworkStatus.PRESENT) statusCounts.present += 1;
+      else statusCounts.missing += 1;
+
+      if (status === PaperworkStatus.PENDING) {
+        const ageHours = Math.max(0, now.getTime() - visit.recordedAtServer.getTime()) / 3_600_000;
+        if (ageHours < 24) pendingAgeBuckets.under24h += 1;
+        else if (ageHours < 48) pendingAgeBuckets.h24to48 += 1;
+        else if (ageHours < 168) pendingAgeBuckets.d2to7 += 1;
+        else pendingAgeBuckets.d7plus += 1;
+      }
+
+      const validHistory = visit.paperworkHistory
+        .filter((item) => item.kind === kind && item.changedAt.getTime() >= visit.recordedAtServer.getTime())
+        .sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
+      const arrival = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT);
+      const resolution = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT || item.newStatus === PaperworkStatus.MISSING);
+      if (arrival) arrivalDurations.push(arrival.changedAt.getTime() - visit.recordedAtServer.getTime());
+      if (resolution) resolutionDurations.push(resolution.changedAt.getTime() - visit.recordedAtServer.getTime());
+    }
+
+    const total = visits.length;
+    return {
+      statusCounts,
+      statusRates: {
+        pending: this.rate(statusCounts.pending, total),
+        present: this.rate(statusCounts.present, total),
+        missing: this.rate(statusCounts.missing, total),
+      },
+      arrival: this.durationSummary(arrivalDurations, 'completedCount'),
+      resolution: this.durationSummary(resolutionDurations, 'resolvedCount'),
+      pendingAgeBuckets,
+    };
+  }
+
+  private durationSummary(valuesMs: number[], countKey: 'completedCount' | 'resolvedCount') {
+    const sorted = [...valuesMs].sort((a, b) => a - b);
+    const percentile = (p: number) => sorted.length ? sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] : null;
+    let medianMs: number | null = null;
+    if (sorted.length) {
+      const mid = Math.floor(sorted.length / 2);
+      medianMs = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+    return {
+      [countKey]: sorted.length,
+      medianMinutes: medianMs === null ? null : Math.round(medianMs / 60_000),
+      p90Minutes: percentile(0.9) === null ? null : Math.round(percentile(0.9)! / 60_000),
+    };
+  }
+
+  private rate(count: number, total: number) {
+    return total ? Math.round((count / total) * 1000) / 10 : 0;
+  }
+
+  private analyticsDate(key: string, field: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) throw new BadRequestException(`${field} YYYY-MM-DD formatında olmalıdır`);
+    const parsed = new Date(`${key}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== key) {
+      throw new BadRequestException(`${field} geçersiz tarih`);
+    }
+    return parsed;
+  }
+
+  private shiftDateKey(key: string, days: number) {
+    const date = this.analyticsDate(key, 'date');
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
   }
 
   private async requireTechnician(technicianId: string) {
