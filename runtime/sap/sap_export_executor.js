@@ -1,0 +1,5 @@
+const {inspectResults,EXPORT_SELECTOR}=require('./sap_results_contract');
+function exportLocator(page,meta){const f=page.frames()[meta.frame];if(!f)throw new Error('SAFE_ABORT_EXPORT:frame-missing');return {frame:f,locator:f.locator(EXPORT_SELECTOR).nth(meta.index)};}
+async function revalidateExport(page,meta){const current=await inspectResults(page),x=current.export;if(x.frame!==meta.frame||x.index!==meta.index||x.tag!==meta.tag)throw new Error('SAFE_ABORT_EXPORT:control-identity-changed');const {locator}=exportLocator(page,x);if(await locator.count()!==1||!(await locator.isVisible()))throw new Error('SAFE_ABORT_EXPORT:control-not-visible');return {meta:x,locator};}
+async function clickExport(page,meta,{timeout=5000}={}){const {locator}=await revalidateExport(page,meta);const downloadPromise=page.waitForEvent('download',{timeout});await locator.click({timeout:3000});const download=await downloadPromise;const name=download.suggestedFilename();if(!/\.csv$/i.test(name))throw new Error('SAFE_ABORT_EXPORT:download-not-csv:'+name);return {download,suggestedFilename:name,clicked:true};}
+module.exports={exportLocator,revalidateExport,clickExport};

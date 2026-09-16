@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProspectsModule } from './prospects/prospects.module';
 import { RegionsModule } from './regions/regions.module';
 import { UsersModule } from './users/users.module';
+import { SapSyncModule } from './sap-sync/sap-sync.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module';
     AssignmentsModule,
     ProspectsModule,
     MaintenanceModule,
+    SapSyncModule,
   ],
   controllers: [HealthController],
 })

@@ -1,0 +1,2 @@
+const {firefox}=require('/tmp/pw-firefox-test/node_modules/playwright');const {visibleExact}=require('./sap_navigation_contract');
+(async()=>{const b=await firefox.launch({headless:true});try{const p=await b.newPage();await p.setContent('<a>Operasyon</a><button>Operasyon</button>');let ok=false;try{await visibleExact(p,'Operasyon')}catch(e){ok=/not-unique:2/.test(e.message)}if(!ok)throw new Error('ambiguity-not-rejected');console.log(JSON.stringify({ok:true,ambiguousRejected:true}));}finally{await b.close();}})().catch(e=>{console.error(e.message);process.exit(2)});

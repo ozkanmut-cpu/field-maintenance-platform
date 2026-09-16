@@ -1,0 +1,2 @@
+async function candidatesNearLabel(label){const h=await label.elementHandle();return h.evaluate(el=>{const l=el.getBoundingClientRect();return [...document.querySelectorAll('input:not([type=hidden]),select,textarea')].map((e,index)=>{const r=e.getBoundingClientRect();return{index,id:e.id||'',name:e.name||'',tag:e.tagName,type:e.type||'',value:e.value||'',visible:r.width>0&&r.height>0,rightOfLabel:r.left>=l.left,sameRow:Math.abs((r.top+r.height/2)-(l.top+l.height/2))<18,distance:Math.hypot(r.left-l.right,r.top-l.top)};});});}
+module.exports={candidatesNearLabel};

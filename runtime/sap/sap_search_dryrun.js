@@ -1,0 +1,5 @@
+const {buildSearchPlan}=require('./sap_search_plan');const {verifyCriteria}=require('./sap_search_verify');
+function resolveFrame(page,p,label){const frames=page.frames();const f=frames[p.frame.index];if(!f||f.url()!==p.frame.url||f.name()!==p.frame.name)throw new Error('SAFE_ABORT_DRYRUN:frame-identity-changed:'+label);return f;}
+async function readPlanValues(page,plan){const out={};const map={'Kayıt tarihi (zaman çerçevesi)':'date','Ürün tanıtıcısı':'product','Azami sonuç sayısı':'max'};for(const [label,p] of Object.entries(plan)){const f=resolveFrame(page,p,label);let loc=p.id?f.locator('#'+p.id.replace(/([\\"#.;:[\](),>+~*^$|=])/g,'\\$1')):f.locator(`[name="${p.name.replace(/"/g,'\\"')}"]`);if(await loc.count()!==1)throw new Error('SAFE_ABORT_DRYRUN:control-not-unique:'+label);out[map[label]]=await loc.inputValue();}return out;}
+async function dryRun(page){const plan=await buildSearchPlan(page);const values=await readPlanValues(page,plan);return {plan,values,verified:verifyCriteria(values)};}
+module.exports={resolveFrame,readPlanValues,dryRun};
