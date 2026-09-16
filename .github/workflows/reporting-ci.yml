@@ -6,12 +6,16 @@ on:
       - 'apps/api/src/maintenance/**'
       - 'apps/admin/app/paperwork-management.tsx'
       - 'apps/admin/app/paperwork-analytics.smoke.test.mjs'
+      - 'apps/admin/app/operations.tsx'
+      - 'apps/admin/app/daily-admin-summary.smoke.test.mjs'
       - '.github/workflows/reporting-ci.yml'
   pull_request:
     paths:
       - 'apps/api/src/maintenance/**'
       - 'apps/admin/app/paperwork-management.tsx'
       - 'apps/admin/app/paperwork-analytics.smoke.test.mjs'
+      - 'apps/admin/app/operations.tsx'
+      - 'apps/admin/app/daily-admin-summary.smoke.test.mjs'
       - '.github/workflows/reporting-ci.yml'
 
 jobs:
@@ -27,15 +31,15 @@ jobs:
       - run: npm ci
       - name: Generate Prisma client
         run: npm --prefix apps/api run prisma:generate
-      - name: Maintenance and paperwork analytics regression tests
+      - name: Maintenance and reporting regression tests
         working-directory: apps/api
-        run: node --test --require ts-node/register src/maintenance/maintenance-engine.service.spec.ts src/maintenance/paperwork-analytics.spec.ts
+        run: node --test --require ts-node/register src/maintenance/maintenance-engine.service.spec.ts src/maintenance/paperwork-analytics.spec.ts src/maintenance/daily-admin-summary.spec.ts
       - name: API typecheck
         run: npm --prefix apps/api run lint
       - name: API build
         run: npm --prefix apps/api run build
-      - name: Paperwork analytics admin smoke
-        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs
+      - name: Reporting admin smoke
+        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs apps/admin/app/daily-admin-summary.smoke.test.mjs
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
