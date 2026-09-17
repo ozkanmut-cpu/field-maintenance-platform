@@ -108,6 +108,15 @@ export class MaintenanceController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Get('admin-technician-daily-summary')
+  adminTechnicianDailySummary(
+    @Query('technicianId') technicianId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.maintenance.adminTechnicianDailySummary(technicianId, date);
+  }
+
+  @Roles(UserRole.ADMIN)
   @Get('admin-daily-summary')
   adminDailySummary(@Query('date') date?: string) {
     return this.maintenance.adminDailySummary(date);
