@@ -3,17 +3,21 @@ name: Operations CI
 on:
   push:
     paths:
+      - 'apps/api/prisma/**'
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
       - 'docs/V1_TODO.md'
+      - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
   pull_request:
     paths:
+      - 'apps/api/prisma/**'
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
       - 'docs/V1_TODO.md'
+      - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
 
 jobs:
@@ -31,7 +35,13 @@ jobs:
         run: npm --prefix apps/api run prisma:generate
       - name: Point operation regression tests
         working-directory: apps/api
-        run: node --test --require ts-node/register src/points/points.bulk-update.spec.ts src/points/point-address-discovery.service.spec.ts
+        run: >-
+          node --test --require ts-node/register
+          src/points/points.bulk-update.spec.ts
+          src/points/point-address-discovery.service.spec.ts
+          src/points/point-postgis-migration.spec.ts
+          src/points/point-spatial.service.spec.ts
+          src/points/points.nearby.controller.spec.ts
       - name: API typecheck
         run: npm --prefix apps/api run lint
       - name: API build
