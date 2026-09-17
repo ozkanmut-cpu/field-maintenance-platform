@@ -20,6 +20,7 @@ test('search matches Turkish text, address and old-name aliases', () => {
   const { matchesSearch } = loadSearch();
   const values = ['İzmir Büfe', 'C-17', 'Urla', 'İskele Caddesi 10', 'Eski Meyhane'];
   assert.equal(matchesSearch('izmir', values), true);
+  assert.equal(matchesSearch('isik', ['IŞIK BÜFE']), true);
   assert.equal(matchesSearch('iskele caddesi', values), true);
   assert.equal(matchesSearch('eski meyhane', values), true);
   assert.equal(matchesSearch('bornova', values), false);

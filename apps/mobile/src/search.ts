@@ -1,5 +1,5 @@
 export function normalizeSearch(value: string) {
-  return value.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return value.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i').trim();
 }
 
 export function matchesSearch(query: string, values: Array<string | null | undefined>) {
