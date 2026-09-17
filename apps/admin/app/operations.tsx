@@ -47,6 +47,25 @@ selectedDate: string; weekStart: string; weekEnd: string; generatedAt: string;
 metrics: DailyAdminSummary['metrics'];
 technicians: DailyAdminSummary['technicians'];
 };
+type TechnicianDailySummary = {
+date: string; generatedAt: string; technician: { id: string; name: string };
+metrics: {
+completedMaintenance: number; attemptCount: number; nonMaintenanceVisitCount: number; prospectVisitCount: number;
+currentOpen: number; overdueOpen: number; helpedMaintenance: number; helpedAttempts: number;
+receivedHelpMaintenance: number; receivedHelpAttempts: number;
+};
+paperwork: {
+serviceSlip: { pending: number; present: number; missing: number };
+confirmation: { pending: number; present: number; missing: number };
+};
+events: Array<{
+id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'PROSPECT_VISIT';
+relation: 'OWN' | 'HELPED_OTHER' | 'RECEIVED_HELP'; at: string; reason?: string; purpose?: string;
+point?: { id: string; code: string; name: string } | null; prospect?: { id: string; name: string; sapNo?: string | null } | null;
+serviceSlipStatus?: string; confirmationStatus?: string; technician?: { id: string; name: string; username: string } | null;
+assistedForTechnician?: { id: string; name: string; username: string } | null;
+}>;
+};
 function istanbulDateKey() {
 return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
@@ -69,6 +88,10 @@ const [dailySummaryLoading, setDailySummaryLoading] = useState(false);
 const [periodSummaryDate, setPeriodSummaryDate] = useState(istanbulDateKey);
 const [periodSummary, setPeriodSummary] = useState<PeriodAdminSummary | null>(null);
 const [periodSummaryLoading, setPeriodSummaryLoading] = useState(false);
+const [technicianDailySummaryDate, setTechnicianDailySummaryDate] = useState(istanbulDateKey);
+const [technicianDailySummaryTechnicianId, setTechnicianDailySummaryTechnicianId] = useState('');
+const [technicianDailySummary, setTechnicianDailySummary] = useState<TechnicianDailySummary | null>(null);
+const [technicianDailySummaryLoading, setTechnicianDailySummaryLoading] = useState(false);
 const [busy, setBusy] = useState(false);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState('');
@@ -90,6 +113,9 @@ const technicians = useMemo(
 () => users.filter((user) => user.role === 'TECHNICIAN' && user.active),
 [users],
 );
+useEffect(() => {
+setTechnicianDailySummaryTechnicianId((current) => current || technicians[0]?.id || '');
+}, [technicians]);
 const visiblePoints = useMemo(() => {
 const q = pointSearch.trim().toLocaleLowerCase('tr-TR');
 return points.filter((point) => {
@@ -126,6 +152,14 @@ try {
 setPeriodSummary(await api<PeriodAdminSummary>(`/api/backend/maintenance/admin-period-summary?date=${encodeURIComponent(date)}`));
 } finally { setPeriodSummaryLoading(false); }
 }
+async function loadTechnicianDailySummary(technicianId = technicianDailySummaryTechnicianId, date = technicianDailySummaryDate) {
+if (!technicianId || !date) { setTechnicianDailySummary(null); return; }
+setTechnicianDailySummary(null);
+setTechnicianDailySummaryLoading(true);
+try {
+setTechnicianDailySummary(await api<TechnicianDailySummary>(`/api/backend/maintenance/admin-technician-daily-summary?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`));
+} finally { setTechnicianDailySummaryLoading(false); }
+}
 async function load() {
 setLoading(true);
 try {
@@ -156,6 +190,10 @@ useEffect(() => {
 if (activeSection !== 'dashboard') return;
 void loadPeriodSummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
 }, [periodSummaryDate, activeSection]);
+useEffect(() => {
+if (activeSection !== 'dashboard' || !technicianDailySummaryTechnicianId) return;
+void loadTechnicianDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+}, [technicianDailySummaryTechnicianId, technicianDailySummaryDate, activeSection]);
 async function createRegion(event: FormEvent) {
 event.preventDefault();
 setBusy(true); setError('');
@@ -375,6 +413,26 @@ return (
 {periodSummary.technicians.map((item) => <tr key={item.technicianId}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td>{item.completedMaintenance}</td><td>{item.attempts}</td><td>{item.nonMaintenanceVisits}</td><td>{item.currentOpen}</td><td>{item.overdueOpen}</td></tr>)}
 </tbody></table></div>
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Haftalık özet hazırlanıyor</strong><span>Seçili haftanın operasyon verileri yükleniyor.</span></div>}
+</section>
+<section className="panel">
+<div className="panelHeader"><div><h2>Teknisyen Günlük Özeti</h2><p>Seçilen teknisyenin İstanbul iş günündeki kendi işi, yardım hareketleri, açık görevleri ve evrak durumu.</p></div><div className="rowActions"><select value={technicianDailySummaryTechnicianId} onChange={(e) => setTechnicianDailySummaryTechnicianId(e.target.value)} aria-label="Teknisyen seç"><option value="">Teknisyen seç</option>{technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select><input type="date" value={technicianDailySummaryDate} onChange={(e) => setTechnicianDailySummaryDate(e.target.value)} aria-label="Teknisyen özet tarihi" /><button className="ghost iconAction" onClick={() => void loadTechnicianDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={technicianDailySummaryLoading || !technicianDailySummaryTechnicianId}><AdminIcon name="refresh" size={17} /><span>{technicianDailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
+{technicianDailySummary ? <>
+<p className="muted"><strong>{technicianDailySummary.technician.name}</strong> · {technicianDailySummary.date}</p>
+<section className="dashboardGrid">
+<div className="dashboardCard"><span>Kendi bakımı</span><strong>{technicianDailySummary.metrics.completedMaintenance}</strong><small>Başka teknisyen adına yapılanlar hariç</small></div>
+<div className="dashboardCard"><span>Yapılamadı / diğer / prospect</span><strong>{technicianDailySummary.metrics.attemptCount} / {technicianDailySummary.metrics.nonMaintenanceVisitCount} / {technicianDailySummary.metrics.prospectVisitCount}</strong><small>Kendi saha hareketleri</small></div>
+<div className="dashboardCard"><span>Gün sonu açık / geciken</span><strong>{technicianDailySummary.metrics.currentOpen} / {technicianDailySummary.metrics.overdueOpen}</strong><small>Tarihsel görev snapshot</small></div>
+<div className="dashboardCard"><span>Yardım verdi</span><strong>{technicianDailySummary.metrics.helpedMaintenance} / {technicianDailySummary.metrics.helpedAttempts}</strong><small>Bakım / yapılamadı</small></div>
+<div className="dashboardCard"><span>Yardım aldı</span><strong>{technicianDailySummary.metrics.receivedHelpMaintenance} / {technicianDailySummary.metrics.receivedHelpAttempts}</strong><small>Başka teknisyenin onun adına yaptığı</small></div>
+</section>
+<div className="tableWrap"><table><thead><tr><th>Evrak</th><th>Bekliyor</th><th>Var</th><th>Eksik</th></tr></thead><tbody>
+<tr><td><strong>Servis fişi</strong></td><td>{technicianDailySummary.paperwork.serviceSlip.pending}</td><td>{technicianDailySummary.paperwork.serviceSlip.present}</td><td>{technicianDailySummary.paperwork.serviceSlip.missing}</td></tr>
+<tr><td><strong>Teyit</strong></td><td>{technicianDailySummary.paperwork.confirmation.pending}</td><td>{technicianDailySummary.paperwork.confirmation.present}</td><td>{technicianDailySummary.paperwork.confirmation.missing}</td></tr>
+</tbody></table></div>
+<div className="tableWrap"><table><thead><tr><th>Gün içi hareketler</th><th>Tür</th><th>Nokta / müşteri</th><th>İlişki</th><th>Detay</th></tr></thead><tbody>
+{technicianDailySummary.events.length === 0 ? <tr><td colSpan={5}>Seçili günde saha hareketi yok.</td></tr> : technicianDailySummary.events.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td><td>{item.type === 'MAINTENANCE' ? 'Bakım' : item.type === 'ATTEMPT' ? 'Yapılamadı' : item.type === 'NON_MAINTENANCE_VISIT' ? 'Diğer ziyaret' : 'Prospect'}</td><td><strong>{item.point?.name || item.prospect?.name || '—'}</strong>{item.point?.code ? <div className="muted">{item.point.code}</div> : null}</td><td>{item.relation === 'HELPED_OTHER' ? 'Yardım verdi' : item.relation === 'RECEIVED_HELP' ? `Yardım aldı${item.technician?.name ? ` · ${item.technician.name}` : ''}` : 'Kendi işi'}</td><td className="muted">{item.type === 'MAINTENANCE' ? `Servis fişi: ${item.serviceSlipStatus ?? '—'} · Teyit: ${item.confirmationStatus ?? '—'}` : item.reason || item.purpose || '—'}</td></tr>)}
+</tbody></table></div>
+</> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Teknisyen özeti hazırlanıyor</strong><span>Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor.</span></div>}
 </section>
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">

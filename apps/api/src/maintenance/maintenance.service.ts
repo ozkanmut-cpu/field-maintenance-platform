@@ -580,6 +580,130 @@ export class MaintenanceService {
     });
   }
 
+  async adminTechnicianDailySummary(technicianId: string, dateInput?: string, now = new Date()) {
+    if (!technicianId?.trim()) throw new BadRequestException('Teknisyen seçilmelidir');
+    this.assertValidDate(now, 'now');
+    const dateKey = dateInput ?? businessDateKey(now);
+    this.analyticsDate(dateKey, 'date');
+    const technician = await this.requireTechnician(technicianId);
+    const { start, end } = businessDayRange(new Date(`${dateKey}T12:00:00+03:00`));
+
+    const [due, visits, attempts, nonMaintenanceVisits, prospectVisits] = await Promise.all([
+      this.engine.dueSnapshot(dateKey),
+      this.prisma.maintenanceVisit.findMany({
+        where: {
+          status: VisitStatus.VALID,
+          performedAt: { gte: start, lt: end },
+          OR: [{ technicianId }, { assistedForTechnicianId: technicianId }],
+        },
+        select: {
+          id: true,
+          technicianId: true,
+          technician: { select: { id: true, name: true, username: true } },
+          assistedForTechnicianId: true,
+          assistedForTechnician: { select: { id: true, name: true, username: true } },
+          performedAt: true,
+          enteredLate: true,
+          serviceSlipStatus: true,
+          confirmationStatus: true,
+          point: { select: { id: true, code: true, name: true, maintenanceType: true } },
+        },
+        orderBy: { performedAt: 'asc' },
+      }),
+      this.prisma.maintenanceAttempt.findMany({
+        where: {
+          attemptedAt: { gte: start, lt: end },
+          OR: [{ technicianId }, { assistedForTechnicianId: technicianId }],
+        },
+        select: {
+          id: true,
+          technicianId: true,
+          technician: { select: { id: true, name: true, username: true } },
+          assistedForTechnicianId: true,
+          assistedForTechnician: { select: { id: true, name: true, username: true } },
+          attemptedAt: true,
+          reason: true,
+          note: true,
+          point: { select: { id: true, code: true, name: true } },
+        },
+        orderBy: { attemptedAt: 'asc' },
+      }),
+      this.prisma.nonMaintenanceVisit.findMany({
+        where: { technicianId, visitedAt: { gte: start, lt: end } },
+        select: {
+          id: true,
+          technicianId: true,
+          visitedAt: true,
+          purpose: true,
+          note: true,
+          point: { select: { id: true, code: true, name: true } },
+        },
+        orderBy: { visitedAt: 'asc' },
+      }),
+      this.prisma.prospectVisit.findMany({
+        where: { technicianId, visitedAt: { gte: start, lt: end } },
+        select: {
+          id: true,
+          technicianId: true,
+          visitedAt: true,
+          purpose: true,
+          note: true,
+          prospect: { select: { id: true, name: true, sapNo: true, status: true, convertedPointId: true } },
+        },
+        orderBy: { visitedAt: 'asc' },
+      }),
+    ]);
+
+    const relation = (actorId: string, assistedForTechnicianId?: string | null) => {
+      if (actorId !== technicianId && assistedForTechnicianId === technicianId) return 'RECEIVED_HELP' as const;
+      if (actorId === technicianId && assistedForTechnicianId && assistedForTechnicianId !== technicianId) return 'HELPED_OTHER' as const;
+      return 'OWN' as const;
+    };
+    const ownVisits = visits.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'OWN');
+    const helpedVisits = visits.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'HELPED_OTHER');
+    const receivedVisits = visits.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'RECEIVED_HELP');
+    const ownAttempts = attempts.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'OWN');
+    const helpedAttempts = attempts.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'HELPED_OTHER');
+    const receivedAttempts = attempts.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'RECEIVED_HELP');
+    const responsibleVisits = [...ownVisits, ...receivedVisits];
+    const paperworkCounts = (kind: 'serviceSlipStatus' | 'confirmationStatus') => ({
+      pending: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PENDING).length,
+      present: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PRESENT).length,
+      missing: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.MISSING).length,
+    });
+    const assigned = due.items.filter((item) => item.technicianId === technicianId);
+    const events = [
+      ...visits.map((item) => ({ type: 'MAINTENANCE' as const, relation: relation(item.technicianId, item.assistedForTechnicianId), at: item.performedAt, ...item })),
+      ...attempts.map((item) => ({ type: 'ATTEMPT' as const, relation: relation(item.technicianId, item.assistedForTechnicianId), at: item.attemptedAt, ...item })),
+      ...nonMaintenanceVisits.map((item) => ({ type: 'NON_MAINTENANCE_VISIT' as const, relation: 'OWN' as const, at: item.visitedAt, ...item })),
+      ...prospectVisits.map((item) => ({ type: 'PROSPECT_VISIT' as const, relation: 'OWN' as const, at: item.visitedAt, ...item })),
+    ].sort((a, b) => a.at.getTime() - b.at.getTime());
+
+    return {
+      date: dateKey,
+      generatedAt: now.toISOString(),
+      technician,
+      metrics: {
+        completedMaintenance: ownVisits.length,
+        attemptCount: ownAttempts.length,
+        nonMaintenanceVisitCount: nonMaintenanceVisits.length,
+        prospectVisitCount: prospectVisits.length,
+        currentOpen: assigned.filter((item) => item.priority === 'CURRENT').length,
+        overdueOpen: assigned.filter((item) => item.priority === 'OVERDUE').length,
+        helpedMaintenance: helpedVisits.length,
+        helpedAttempts: helpedAttempts.length,
+        receivedHelpMaintenance: receivedVisits.length,
+        receivedHelpAttempts: receivedAttempts.length,
+      },
+      paperwork: {
+        serviceSlip: paperworkCounts('serviceSlipStatus'),
+        confirmation: paperworkCounts('confirmationStatus'),
+      },
+      due: assigned,
+      events,
+    };
+  }
+
   async adminDailySummary(dateInput?: string, now = new Date()) {
     this.assertValidDate(now, 'now');
     const dateKey = dateInput ?? businessDateKey(now);
