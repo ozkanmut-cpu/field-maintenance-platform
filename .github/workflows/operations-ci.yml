@@ -6,12 +6,14 @@ on:
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
+      - 'docs/V1_TODO.md'
       - '.github/workflows/operations-ci.yml'
   pull_request:
     paths:
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
+      - 'docs/V1_TODO.md'
       - '.github/workflows/operations-ci.yml'
 
 jobs:

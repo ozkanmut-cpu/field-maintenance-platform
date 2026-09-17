@@ -119,7 +119,7 @@ test('paperwork analytics controller route is admin-only and forwards filters', 
   const { ROLES_KEY } = await import('../auth/auth.constants');
   const calls: any[] = [];
   const maintenance: any = { paperworkAnalytics: async (query: any) => { calls.push(query); return { totalVisits: 0 }; } };
-  const controller: any = new MaintenanceController(maintenance, {} as never, {} as never, {} as never, {} as never);
+  const controller: any = new MaintenanceController(maintenance, {} as never, {} as never, {} as never, {} as never, {} as never);
   const handler = controller.paperworkAnalytics;
   assert.ok(typeof handler === 'function');
   assert.deepEqual(Reflect.getMetadata(ROLES_KEY, handler), [UserRole.ADMIN]);

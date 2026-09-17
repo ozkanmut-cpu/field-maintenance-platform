@@ -152,9 +152,9 @@ export class MaintenanceEngineService {
   }
 
 
-  async dueSnapshot(asOfInput: string) {
+  async dueSnapshot(asOfInput: string, options: { readOnly?: boolean } = {}) {
     const asOf = this.toDateOnly(new Date(asOfInput));
-    await this.ensureStandardObligations(asOf);
+    if (!options.readOnly) await this.ensureStandardObligations(asOf);
     const cutoff = businessDayRange(new Date(`${businessDateKey(asOf)}T12:00:00+03:00`)).end;
 
     const standardObligations = await this.prisma.maintenanceObligation.findMany({
@@ -174,6 +174,51 @@ export class MaintenanceEngineService {
       orderBy: [{ dueStart: 'asc' }],
     });
 
+    if (options.readOnly) {
+      const standardPoints = await this.prisma.point.findMany({
+        where: {
+          status: PointStatus.ACTIVE,
+          deletedAt: null,
+          maintenanceType: MaintenanceType.STANDARD,
+          maintenanceWeek: { in: [1, 2] },
+          createdAt: { lt: cutoff },
+        },
+        include: { region: true },
+      });
+      const persisted = await this.prisma.maintenanceObligation.findMany({
+        where: { pointId: { in: standardPoints.map((point) => point.id) }, dueStart: { lte: asOf } },
+        select: { pointId: true, cycleKey: true },
+      });
+      const persistedKeys = new Set(persisted.map((item) => `${item.pointId}:${item.cycleKey}`));
+      const operationsStart = this.operationsStartDate();
+      for (const point of standardPoints) {
+        if (!point.region || ![1, 2].includes(point.maintenanceWeek ?? 0)) continue;
+        const pointStart = this.toDateOnly(point.createdAt);
+        const eligibilityStart = pointStart > operationsStart ? pointStart : operationsStart;
+        let start = this.firstAssignedWindowOnOrAfter(eligibilityStart, point.maintenanceWeek!).start;
+        while (start <= asOf) {
+          const cycleKey = `STD:${this.isoDate(start)}`;
+          if (!persistedKeys.has(`${point.id}:${cycleKey}`)) {
+            standardObligations.push({
+              id: `snapshot:${point.id}:${cycleKey}`,
+              pointId: point.id,
+              cycleKey,
+              dueStart: start,
+              dueEnd: this.addDays(start, 6),
+              status: MaintenanceObligationStatus.OPEN,
+              resolvedAt: null,
+              resolvedByVisitId: null,
+              resolvedByAttemptId: null,
+              createdAt: start,
+              completedAt: null,
+              point,
+            } as unknown as (typeof standardObligations)[number]);
+          }
+          start = this.addDays(start, 14);
+        }
+      }
+    }
+
     const standardByPoint = new Map<string, typeof standardObligations>();
     for (const obligation of standardObligations) {
       const list = standardByPoint.get(obligation.pointId) ?? [];
@@ -182,8 +227,9 @@ export class MaintenanceEngineService {
     }
 
     const standardRows = Array.from(standardByPoint.values()).flatMap((obligations) => {
-      const oldest = obligations[0];
-      const overdueCount = obligations.filter((item) => item.dueEnd < asOf).length;
+      const ordered = [...obligations].sort((a, b) => a.dueStart.getTime() - b.dueStart.getTime());
+      const oldest = ordered[0];
+      const overdueCount = ordered.filter((item) => item.dueEnd < asOf).length;
       if (!oldest.point.region) return [];
       return [{
         pointId: oldest.point.id,

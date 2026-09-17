@@ -109,7 +109,7 @@ test('technician daily summary controller route is admin-only and forwards techn
   const maintenance: any = {
     adminTechnicianDailySummary: async (technicianId?: string, date?: string) => ({ technicianId, date }),
   };
-  const controller = new MaintenanceController(maintenance, {} as any, {} as any, {} as any, {} as any);
+  const controller = new MaintenanceController(maintenance, {} as any, {} as any, {} as any, {} as any, {} as any);
   const handler = (controller as any).adminTechnicianDailySummary;
   assert.equal(typeof handler, 'function');
   const { ROLES_KEY } = await import('../auth/auth.constants');

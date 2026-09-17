@@ -76,7 +76,7 @@ test('period admin summary rejects a future business week', async () => {
 
 test('period admin summary controller route is admin-only and forwards the date', async () => {
   const maintenance: any = { adminPeriodSummary: async (date?: string) => ({ date }) };
-  const controller = new MaintenanceController(maintenance, {} as any, {} as any, {} as any, {} as any);
+  const controller = new MaintenanceController(maintenance, {} as any, {} as any, {} as any, {} as any, {} as any);
   const handler = (controller as any).adminPeriodSummary;
   assert.equal(typeof handler, 'function');
   const { ROLES_KEY } = await import('../auth/auth.constants');

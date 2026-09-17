@@ -66,7 +66,7 @@ test('daily admin summary rejects invalid date input', async () => {
 
 test('daily admin summary controller route is admin-only and forwards the date', async () => {
   const maintenance: any = { adminDailySummary: async (date?: string) => ({ date }) };
-  const controller = new MaintenanceController(maintenance, {} as any, {} as any, {} as any, {} as any);
+  const controller = new MaintenanceController(maintenance, {} as any, {} as any, {} as any, {} as any, {} as any);
   const handler = (controller as any).adminDailySummary;
   assert.equal(typeof handler, 'function');
   const { ROLES_KEY } = await import('../auth/auth.constants');
