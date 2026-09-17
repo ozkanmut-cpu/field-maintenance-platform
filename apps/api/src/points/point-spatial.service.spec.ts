@@ -34,6 +34,7 @@ function harness(
   owners: Record<string, { technicianId: string | null; source: string }>,
 ) {
   const rawCalls: unknown[][] = [];
+  const assignmentCalls: Array<{ ids: string[]; asOf: Date | undefined }> = [];
   const prisma = {
     $queryRaw: async (...args: unknown[]) => {
       rawCalls.push(args);
@@ -41,8 +42,9 @@ function harness(
     },
   };
   const assignments = {
-    resolveMany: async (ids: string[]) =>
-      new Map(ids.map((id) => [
+    resolveMany: async (ids: string[], asOf?: Date) => {
+      assignmentCalls.push({ ids: [...ids], asOf });
+      return new Map(ids.map((id) => [
         id,
         {
           pointId: id,
@@ -50,11 +52,13 @@ function harness(
           source: owners[id]?.source ?? 'REGION',
           assignmentId: null,
         },
-      ])),
+      ]));
+    },
   };
   return {
     service: new PointSpatialService(prisma as never, assignments as never),
     rawCalls,
+    assignmentCalls,
   };
 }
 
@@ -91,11 +95,12 @@ test('nearby assigned uses defaults and filters ownership before applying limit'
       'mine-2': { technicianId: 'tech-1', source: 'POINT_OVERRIDE' },
     },
   );
+  const asOf = new Date('2026-09-17T09:00:00+03:00');
 
   const result = await h.service.nearbyAssigned(
     'tech-1',
     { latitude: '38.4192', longitude: '27.1287', limit: '1' },
-    new Date('2026-09-17T09:00:00+03:00'),
+    asOf,
   );
 
   assert.equal(result.radiusMeters, 5000);
@@ -105,6 +110,13 @@ test('nearby assigned uses defaults and filters ownership before applying limit'
   assert.equal(result.items[0].distanceMeters, 200);
   assert.equal(result.items[0].assignmentSource, 'TEMPORARY');
   assert.equal(h.rawCalls.length, 1);
+  const query = h.rawCalls[0][0] as { strings: readonly string[]; values: readonly unknown[] };
+  assert.deepEqual(query.values, [27.1287, 38.4192, 27.1287, 38.4192, 5000]);
+  assert.doesNotMatch(query.strings.join(''), /38\.4192|27\.1287|5000/);
+  assert.doesNotMatch(query.strings.join(''), /\bLIMIT\b/i);
+  assert.equal(h.assignmentCalls.length, 1);
+  assert.deepEqual(h.assignmentCalls[0].ids, ['other-near', 'mine-1', 'mine-2']);
+  assert.equal(h.assignmentCalls[0].asOf, asOf);
 });
 
 test('nearby assigned preserves nearest-first order and rounds distances', async () => {
