@@ -37,7 +37,7 @@ export class MaintenanceEngineService {
           maintenanceType: MaintenanceType.STANDARD,
         },
       },
-      include: { point: { include: { region: true } } },
+      include: { point: { include: { region: true, aliases: { select: { alias: true } } } } },
       orderBy: [{ dueStart: 'asc' }],
     });
 
@@ -59,6 +59,7 @@ export class MaintenanceEngineService {
         regionId: oldest.point.regionId,
         regionName: oldest.point.region.name,
         address: oldest.point.address,
+        aliases: oldest.point.aliases.map((item) => item.alias),
         latitude: oldest.point.canonicalLatitude ? Number(oldest.point.canonicalLatitude) : null,
         longitude: oldest.point.canonicalLongitude ? Number(oldest.point.canonicalLongitude) : null,
         maintenanceType: oldest.point.maintenanceType,
@@ -80,6 +81,7 @@ export class MaintenanceEngineService {
       },
       include: {
         region: true,
+        aliases: { select: { alias: true } },
         visits: {
           where: { status: VisitStatus.VALID },
           orderBy: { performedAt: 'desc' },
@@ -114,6 +116,7 @@ export class MaintenanceEngineService {
           regionId: point.regionId,
           regionName: point.region.name,
           address: point.address,
+          aliases: point.aliases.map((item) => item.alias),
           latitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
           longitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
           maintenanceType: point.maintenanceType,
