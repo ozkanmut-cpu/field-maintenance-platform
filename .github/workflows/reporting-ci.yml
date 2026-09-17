@@ -12,6 +12,7 @@ on:
       - 'apps/admin/app/daily-admin-summary.smoke.test.mjs'
       - 'apps/admin/app/period-admin-summary.smoke.test.mjs'
       - 'apps/admin/app/technician-daily-summary.smoke.test.mjs'
+      - 'docs/V1_TODO.md'
       - '.github/workflows/reporting-ci.yml'
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - 'apps/admin/app/daily-admin-summary.smoke.test.mjs'
       - 'apps/admin/app/period-admin-summary.smoke.test.mjs'
       - 'apps/admin/app/technician-daily-summary.smoke.test.mjs'
+      - 'docs/V1_TODO.md'
       - '.github/workflows/reporting-ci.yml'
 
 jobs:
