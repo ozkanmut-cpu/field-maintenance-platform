@@ -193,7 +193,7 @@ Deployment sequence:
 10. Check journals and SAP timer/service health without modifying SAP automation.
 11. Verify deployed source hashes against merged `main`.
 
-If migration or verification fails, do not restart. The rollback migration removes the GiST index, generated column, and added constraints. It does not drop the PostGIS extension because another database object may use it.
+If migration or verification fails, do not restart. Because the new spatial column is generated from existing decimals and contains no independent business data, the emergency database rollback procedure may drop the GiST index, generated column, and added constraints after recording the applied migration state and failure evidence. It must not drop the PostGIS extension because another database object may use it. Prisma migration history is reconciled only through an explicit, recorded recovery step; it is never edited ad hoc.
 
 ## Scope Boundaries
 
