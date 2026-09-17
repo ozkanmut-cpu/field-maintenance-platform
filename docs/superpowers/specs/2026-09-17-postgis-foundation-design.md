@@ -1,7 +1,7 @@
 # PostGIS Foundation and Nearby Points — Design
 
-**Date:** 2026-09-17  
-**Branch:** `feat/postgis-foundation`  
+**Date:** 2026-09-17
+**Branch:** `feat/postgis-foundation`
 **Base:** `8ff7a1924e3b23e17b81a83e0235c1db31ddb94e`
 
 ## Goal
