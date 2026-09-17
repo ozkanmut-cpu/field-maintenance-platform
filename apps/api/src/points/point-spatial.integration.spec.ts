@@ -9,9 +9,13 @@ import {
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { requirePostgisTestDatabaseUrl } from './point-spatial.integration-config';
 import { PointSpatialService } from './point-spatial.service';
 
-const prisma = new PrismaService();
+const integrationDatabaseUrl = requirePostgisTestDatabaseUrl(
+  process.env.POSTGIS_TEST_DATABASE_URL,
+);
+const prisma = new PrismaService({ datasourceUrl: integrationDatabaseUrl });
 const assignments = new AssignmentsService(prisma);
 const service = new PointSpatialService(prisma, assignments);
 const suffix = randomUUID().slice(0, 8);
@@ -192,6 +196,16 @@ test('real PostGIS query enforces radius and returns assigned located points nea
 
   assert.deepEqual(result.items.map((item) => item.id), [pointIds[0], pointIds[1]]);
   assert.ok(result.items[0].distanceMeters < result.items[1].distanceMeters);
+  assert.ok(Number.isInteger(result.items[0].distanceMeters));
+  assert.ok(Number.isInteger(result.items[1].distanceMeters));
+  assert.ok(
+    result.items[0].distanceMeters >= 100 && result.items[0].distanceMeters <= 250,
+    `expected near distance in meters, received ${result.items[0].distanceMeters}`,
+  );
+  assert.ok(
+    result.items[1].distanceMeters >= 3500 && result.items[1].distanceMeters <= 5500,
+    `expected far distance in meters, received ${result.items[1].distanceMeters}`,
+  );
   assert.ok(!result.items.some((item) => item.id === pointIds[2]));
   assert.ok(!result.items.some((item) => item.id === pointIds[3]));
   assert.ok(!result.items.some((item) => item.id === pointIds[4]));
