@@ -399,24 +399,28 @@ export class MaintenanceService {
     ]);
     if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
     if (!actor) throw new NotFoundException('Kullanıcı bulunamadı veya pasif');
-    if (visit.status === VisitStatus.REVERSED) return visit;
-
     if (actor.role !== UserRole.ADMIN && visit.technicianId !== actor.id) {
       throw new ForbiddenException('Teknisyen yalnızca kendi bakım kaydını geri alabilir');
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const reverted = await tx.maintenanceVisit.update({
-        where: { id: visit.id },
-        data: {
-          status: VisitStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: actor.id,
-          reviewRecommended: true,
-          reviewReason: `GERİ ALINDI: ${dto.reason}`,
-          locationLearningEligible: false,
-        },
-      });
+      let reverted = visit;
+      if (visit.status !== VisitStatus.REVERSED) {
+        await tx.maintenanceVisit.updateMany({
+          where: { id: visit.id, status: { not: VisitStatus.REVERSED } },
+          data: {
+            status: VisitStatus.REVERSED,
+            reversedAt: new Date(),
+            reversedByUserId: actor.id,
+            reviewRecommended: true,
+            reviewReason: `GERİ ALINDI: ${dto.reason}`,
+            locationLearningEligible: false,
+          },
+        });
+        const persisted = await tx.maintenanceVisit.findUnique({ where: { id: visit.id } });
+        if (!persisted) throw new NotFoundException('Bakım kaydı bulunamadı');
+        reverted = persisted;
+      }
 
       await tx.maintenanceObligation.updateMany({
         where: { resolvedByVisitId: visit.id },
