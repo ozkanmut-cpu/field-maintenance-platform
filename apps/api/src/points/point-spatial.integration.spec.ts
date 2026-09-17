@@ -1,7 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
-import { MaintenanceType, PointStatus, UserRole } from '@prisma/client';
+import {
+  MaintenanceType,
+  PointAssignmentKind,
+  PointStatus,
+  UserRole,
+} from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PointSpatialService } from './point-spatial.service';
@@ -12,9 +17,18 @@ const service = new PointSpatialService(prisma, assignments);
 const suffix = randomUUID().slice(0, 8);
 const technicianId = randomUUID();
 const otherTechnicianId = randomUUID();
+const adminId = randomUUID();
 const regionId = randomUUID();
 const otherRegionId = randomUUID();
-const pointIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+const pointIds = [
+  randomUUID(),
+  randomUUID(),
+  randomUUID(),
+  randomUUID(),
+  randomUUID(),
+  randomUUID(),
+];
+const assignmentId = randomUUID();
 
 before(async () => {
   await prisma.$connect();
@@ -34,6 +48,14 @@ before(async () => {
         username: `postgis-other-${suffix}`,
         passwordHash: 'integration-only',
         role: UserRole.TECHNICIAN,
+        active: true,
+      },
+      {
+        id: adminId,
+        name: `PostGIS Admin ${suffix}`,
+        username: `postgis-admin-${suffix}`,
+        passwordHash: 'integration-only',
+        role: UserRole.ADMIN,
         active: true,
       },
     ],
@@ -88,14 +110,51 @@ before(async () => {
         maintenanceType: MaintenanceType.STANDARD,
         maintenanceWeek: 1,
       },
+      {
+        id: pointIds[4],
+        code: `PG-${suffix}-OUTSIDE-RADIUS`,
+        name: 'PostGIS Outside Radius',
+        regionId,
+        status: PointStatus.ACTIVE,
+        maintenanceType: MaintenanceType.STANDARD,
+        maintenanceWeek: 1,
+        canonicalLatitude: 38.6000,
+        canonicalLongitude: 27.1300,
+      },
+      {
+        id: pointIds[5],
+        code: `PG-${suffix}-TEMPORARY`,
+        name: 'PostGIS Temporary Assignment',
+        regionId,
+        status: PointStatus.ACTIVE,
+        maintenanceType: MaintenanceType.STANDARD,
+        maintenanceWeek: 1,
+        canonicalLatitude: 38.4300,
+        canonicalLongitude: 27.1400,
+      },
     ],
+  });
+  await prisma.pointAssignment.create({
+    data: {
+      id: assignmentId,
+      pointId: pointIds[5],
+      technicianId: otherTechnicianId,
+      kind: PointAssignmentKind.TEMPORARY,
+      startsAt: new Date('2026-09-17T08:00:00+03:00'),
+      endsAt: new Date('2026-09-17T10:00:00+03:00'),
+      active: true,
+      createdById: adminId,
+    },
   });
 });
 
 after(async () => {
+  await prisma.pointAssignment.deleteMany({ where: { id: assignmentId } });
   await prisma.point.deleteMany({ where: { id: { in: pointIds } } });
   await prisma.region.deleteMany({ where: { id: { in: [regionId, otherRegionId] } } });
-  await prisma.user.deleteMany({ where: { id: { in: [technicianId, otherTechnicianId] } } });
+  await prisma.user.deleteMany({
+    where: { id: { in: [technicianId, otherTechnicianId, adminId] } },
+  });
   await prisma.$disconnect();
 });
 
@@ -119,7 +178,7 @@ test('generated geography and GiST index exist', async () => {
   assert.match(indexes[0].indexdef, /USING gist/i);
 });
 
-test('real PostGIS query returns only assigned located points nearest first', async () => {
+test('real PostGIS query enforces radius and returns assigned located points nearest first', async () => {
   const result = await service.nearbyAssigned(
     technicianId,
     {
@@ -135,4 +194,47 @@ test('real PostGIS query returns only assigned located points nearest first', as
   assert.ok(result.items[0].distanceMeters < result.items[1].distanceMeters);
   assert.ok(!result.items.some((item) => item.id === pointIds[2]));
   assert.ok(!result.items.some((item) => item.id === pointIds[3]));
+  assert.ok(!result.items.some((item) => item.id === pointIds[4]));
+  assert.ok(!result.items.some((item) => item.id === pointIds[5]));
+});
+
+test('effective temporary assignment displaces the region owner only inside its window', async () => {
+  const input = {
+    latitude: 38.4300,
+    longitude: 27.1400,
+    radiusMeters: 100,
+    limit: 10,
+  };
+  const duringAssignment = new Date('2026-09-17T09:00:00+03:00');
+  const afterAssignment = new Date('2026-09-17T11:00:00+03:00');
+
+  const temporaryResult = await service.nearbyAssigned(
+    otherTechnicianId,
+    input,
+    duringAssignment,
+  );
+  assert.deepEqual(temporaryResult.items.map((item) => item.id), [pointIds[5]]);
+  assert.equal(temporaryResult.items[0].assignmentSource, 'TEMPORARY');
+
+  const displacedOwnerResult = await service.nearbyAssigned(
+    technicianId,
+    input,
+    duringAssignment,
+  );
+  assert.deepEqual(displacedOwnerResult.items, []);
+
+  const restoredOwnerResult = await service.nearbyAssigned(
+    technicianId,
+    input,
+    afterAssignment,
+  );
+  assert.deepEqual(restoredOwnerResult.items.map((item) => item.id), [pointIds[5]]);
+  assert.equal(restoredOwnerResult.items[0].assignmentSource, 'REGION');
+
+  const expiredTemporaryResult = await service.nearbyAssigned(
+    otherTechnicianId,
+    input,
+    afterAssignment,
+  );
+  assert.deepEqual(expiredTemporaryResult.items, []);
 });
