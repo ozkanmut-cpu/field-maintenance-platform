@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE EXTENSION IF NOT EXISTS "postgis";
 
 DO $$
@@ -41,3 +43,5 @@ ALTER TABLE "points"
 CREATE INDEX "points_location_gist_idx"
   ON "points"
   USING GIST ("location");
+
+COMMIT;

@@ -10,7 +10,10 @@ const migrationPath = resolve(
 
 test('point PostGIS migration validates coordinates and creates generated indexed geography', () => {
   const sql = readFileSync(migrationPath, 'utf8');
+  const trimmedSql = sql.trim();
 
+  assert.match(trimmedSql, /^BEGIN;\s/i);
+  assert.match(trimmedSql, /COMMIT;$/i);
   assert.match(sql, /CREATE EXTENSION IF NOT EXISTS "postgis"/i);
   assert.match(sql, /points_canonical_coordinate_pair_ck/i);
   assert.match(sql, /points_canonical_latitude_ck/i);
