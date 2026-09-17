@@ -57,6 +57,89 @@
 
 ---
 
+### Task 0: Recreate the Isolated Worktree and Prove the Baseline
+
+**Files:**
+- No source changes.
+- Worktree: `/tmp/fmp-postgis-foundation`
+- Branch: `feat/postgis-foundation`
+
+**Interfaces:**
+- Consumes: GitHub `main`, exact-SHA workflow state, and the existing remote feature branch containing this spec and plan.
+- Produces: a clean isolated worktree with dependencies installed and a green pre-feature baseline.
+
+- [ ] **Step 1: Re-read GitHub main and exact-SHA CI**
+
+Read the current GitHub `main` SHA. Fetch all workflow runs whose `head_sha` exactly equals that SHA. Require every expected current-main workflow to be `status=completed` and `conclusion=success`. If `main` has advanced beyond the plan base, stop and compare the new commits before rebasing or changing the feature branch.
+
+- [ ] **Step 2: Inspect production checkout without modifying it**
+
+```bash
+cd /opt/field-maintenance/app
+git rev-parse HEAD
+git branch --show-current
+git status --short --branch
+git worktree list --porcelain
+```
+
+Do not clean, reset, checkout, or overwrite production.
+
+- [ ] **Step 3: Fetch refs and create the isolated worktree**
+
+```bash
+cd /opt/field-maintenance/app
+git fetch origin main feat/postgis-foundation
+if git show-ref --verify --quiet refs/heads/feat/postgis-foundation; then
+  git worktree add /tmp/fmp-postgis-foundation feat/postgis-foundation
+else
+  git worktree add --track -b feat/postgis-foundation /tmp/fmp-postgis-foundation origin/feat/postgis-foundation
+fi
+```
+
+Expected: `/tmp/fmp-postgis-foundation` is on `feat/postgis-foundation`, its HEAD equals the remote feature head, and `git status --short` is empty.
+
+- [ ] **Step 4: Install exact dependencies and generate Prisma Client**
+
+```bash
+cd /tmp/fmp-postgis-foundation
+npm ci
+npm --prefix apps/api run prisma:generate
+```
+
+Expected: both exit 0. Do not run `npm audit fix` or change dependency versions.
+
+- [ ] **Step 5: Run the existing Operations baseline**
+
+```bash
+cd /tmp/fmp-postgis-foundation/apps/api
+node --test --require ts-node/register   src/points/points.bulk-update.spec.ts   src/points/point-address-discovery.service.spec.ts
+```
+
+Expected: all existing point tests PASS.
+
+- [ ] **Step 6: Run the existing Reporting baseline**
+
+```bash
+node --test --require ts-node/register   src/maintenance/maintenance-engine.service.spec.ts   src/maintenance/paperwork-analytics.spec.ts   src/maintenance/daily-admin-summary.spec.ts   src/maintenance/period-admin-summary.spec.ts   src/maintenance/technician-daily-summary.spec.ts   src/maintenance/kpi-reporting.spec.ts
+```
+
+Expected: all existing reporting tests PASS.
+
+- [ ] **Step 7: Run baseline lint and production builds**
+
+```bash
+cd /tmp/fmp-postgis-foundation
+npm --prefix apps/api run lint
+npm --prefix apps/api run build
+npm --prefix apps/admin run lint
+npm --prefix apps/admin run build
+git diff --check
+```
+
+Expected: every command exits 0. If any baseline command fails, stop and report the pre-existing failure before writing production code.
+
+---
+
 ### Task 1: Establish the PostGIS Migration Contract
 
 **Files:**
