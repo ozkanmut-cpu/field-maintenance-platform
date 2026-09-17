@@ -139,3 +139,28 @@ test('KPI endpoint is admin-only and returns the reporting service contract', as
   const result = await handler.call(controller, '2026-09-15', '2026-09-16', undefined);
   assert.equal(result.daily.length, 2);
 });
+
+test('technician breakdown includes a technician whose only activity is receiving help', async () => {
+  const users = [
+    { id: 'helper', name: 'Helper', username: 'helper' },
+    { id: 'receiver', name: 'Receiver', username: 'receiver' },
+  ];
+  const prisma: any = {
+    user: { findMany: async () => users },
+    maintenanceVisit: { findMany: async () => [{
+      id: 'v-help', technicianId: 'helper', assistedForTechnicianId: 'receiver',
+      performedAt: new Date('2026-09-16T08:00:00Z'), enteredLate: false,
+      serviceSlipStatus: PaperworkStatus.PRESENT, confirmationStatus: PaperworkStatus.PRESENT,
+    }] },
+    maintenanceAttempt: { findMany: async () => [] },
+    nonMaintenanceVisit: { findMany: async () => [] },
+    prospectVisit: { findMany: async () => [] },
+  };
+  const engine: any = { dueSnapshot: async () => ({ items: [] }) };
+  const service = new (loadService())(prisma, engine);
+  const result = await service.report({ from: '2026-09-16', to: '2026-09-16' }, now);
+  const receiver = result.technicians.find((row: any) => row.technicianId === 'receiver');
+  assert.ok(receiver);
+  assert.equal(receiver.completedMaintenance, 0);
+  assert.equal(receiver.receivedHelpMaintenance, 1);
+});

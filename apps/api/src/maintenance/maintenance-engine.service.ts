@@ -181,7 +181,7 @@ export class MaintenanceEngineService {
           deletedAt: null,
           maintenanceType: MaintenanceType.STANDARD,
           maintenanceWeek: { in: [1, 2] },
-          createdAt: { lte: asOf },
+          createdAt: { lt: cutoff },
         },
         include: { region: true },
       });
@@ -227,8 +227,9 @@ export class MaintenanceEngineService {
     }
 
     const standardRows = Array.from(standardByPoint.values()).flatMap((obligations) => {
-      const oldest = obligations[0];
-      const overdueCount = obligations.filter((item) => item.dueEnd < asOf).length;
+      const ordered = [...obligations].sort((a, b) => a.dueStart.getTime() - b.dueStart.getTime());
+      const oldest = ordered[0];
+      const overdueCount = ordered.filter((item) => item.dueEnd < asOf).length;
       if (!oldest.point.region) return [];
       return [{
         pointId: oldest.point.id,

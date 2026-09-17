@@ -27,14 +27,15 @@ function shift(key: string, days: number) {
 }
 
 export function startKpiRequest(filters: Filters, set: Setters,
-  fetcher: (url: string) => Promise<FetchResult> = (url) => fetch(url)) {
+  fetcher: (url: string, init?: RequestInit) => Promise<FetchResult> = (url, init) => fetch(url, init)) {
   let active = true;
+  const controller = new AbortController();
   set.report(null);
   set.error('');
   set.loading(true);
   const params = new URLSearchParams({ from: filters.from, to: filters.to });
   if (filters.technicianId) params.set('technicianId', filters.technicianId);
-  void fetcher(`/api/backend/maintenance/admin-kpi-reporting?${params.toString()}`)
+  void fetcher(`/api/backend/maintenance/admin-kpi-reporting?${params.toString()}`, { signal: controller.signal })
     .then(async response => {
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
@@ -42,7 +43,7 @@ export function startKpiRequest(filters: Filters, set: Setters,
     })
     .catch(error => { if (active) set.error(error instanceof Error ? error.message : String(error)); })
     .finally(() => { if (active) set.loading(false); });
-  return () => { active = false; };
+  return () => { active = false; controller.abort(); };
 }
 
 function StatusRow({ label, value }: { label: string; value: Statuses }) {

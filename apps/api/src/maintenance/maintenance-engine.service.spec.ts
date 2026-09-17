@@ -124,3 +124,58 @@ test('read-only snapshot reconstructs missing cycles without writes and does not
   assert.equal(closed.items.length, 0, 'persisted resolved cycle must not be synthesized');
   assert.equal(writes, 0);
 });
+
+test('read-only snapshot includes a standard point created during the selected Istanbul day', async () => {
+  const point = {
+    id: 'p-day', code: 'PD', name: 'Created today', regionId: 'r1', address: null,
+    canonicalLatitude: null, canonicalLongitude: null, maintenanceType: 'STANDARD',
+    maintenanceWeek: 1, createdAt: new Date('2026-09-17T10:00:00Z'),
+    coolerCount: 0, towerCount: 0, tapCount: 0, smarttapCount: 0, region: { id: 'r1', name: 'Region' },
+  };
+  const prisma: any = {
+    point: { findMany: async (q: any) => {
+      if (q.where.maintenanceType !== 'STANDARD') return [];
+      const created = q.where.createdAt;
+      if (created?.lte && point.createdAt > created.lte) return [];
+      if (created?.lt && point.createdAt >= created.lt) return [];
+      return [point];
+    } },
+    maintenanceObligation: { findMany: async () => [] },
+  };
+  const config: any = { get: (key: string) => ({
+    STANDARD_WEEK1_ANCHOR: '2026-09-14', STANDARD_OPERATIONS_START_DATE: '2026-09-14',
+  } as Record<string, string>)[key] };
+  const assignments: any = { resolveMany: async () => new Map([['p-day', { technicianId: 't1', source: 'REGION' }]]) };
+  const engine = new MaintenanceEngineService(prisma, config, assignments);
+  const result = await engine.dueSnapshot('2026-09-17', { readOnly: true });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].pointId, 'p-day');
+});
+
+test('read-only snapshot orders persisted and synthesized cycles before choosing the oldest', async () => {
+  const point = {
+    id: 'p-order', code: 'PO', name: 'Ordered', regionId: 'r1', address: null,
+    canonicalLatitude: null, canonicalLongitude: null, maintenanceType: 'STANDARD',
+    maintenanceWeek: 1, createdAt: new Date('2026-09-01T00:00:00Z'),
+    coolerCount: 0, towerCount: 0, tapCount: 0, smarttapCount: 0, region: { id: 'r1', name: 'Region' },
+  };
+  const newer = {
+    id: 'o-new', pointId: point.id, cycleKey: 'STD:2026-09-28',
+    dueStart: new Date('2026-09-28T00:00:00Z'), dueEnd: new Date('2026-10-04T00:00:00Z'),
+    status: 'OPEN', resolvedAt: null, completedAt: null, resolvedByVisitId: null,
+    resolvedByAttemptId: null, createdAt: new Date('2026-09-28T00:00:00Z'), point,
+  };
+  const prisma: any = {
+    point: { findMany: async (q: any) => q.where.maintenanceType === 'STANDARD' ? [point] : [] },
+    maintenanceObligation: { findMany: async (q: any) => q.select ? [{ pointId: point.id, cycleKey: newer.cycleKey }] : [newer] },
+  };
+  const config: any = { get: (key: string) => ({
+    STANDARD_WEEK1_ANCHOR: '2026-09-14', STANDARD_OPERATIONS_START_DATE: '2026-09-14',
+  } as Record<string, string>)[key] };
+  const assignments: any = { resolveMany: async () => new Map([['p-order', { technicianId: 't1', source: 'REGION' }]]) };
+  const engine = new MaintenanceEngineService(prisma, config, assignments);
+  const result = await engine.dueSnapshot('2026-10-01', { readOnly: true });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].dueStart.toISOString().slice(0, 10), '2026-09-14');
+  assert.equal(result.items[0].obligationId, 'snapshot:p-order:STD:2026-09-14');
+});

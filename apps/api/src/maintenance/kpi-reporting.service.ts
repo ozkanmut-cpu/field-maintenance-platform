@@ -95,6 +95,8 @@ export class KpiReportingService {
     });
 
     const involvedIds = new Set([...visits.map(v => v.technicianId), ...attempts.map(v => v.technicianId),
+      ...visits.flatMap(v => v.assistedForTechnicianId ? [v.assistedForTechnicianId] : []),
+      ...attempts.flatMap(v => v.assistedForTechnicianId ? [v.assistedForTechnicianId] : []),
       ...otherVisits.map(v => v.technicianId), ...prospectVisits.map(v => v.technicianId)]);
     const technicianSource = query.technicianId ? [selected!] : users.filter(u => involvedIds.has(u.id));
     const technicians = technicianSource.map(user => {

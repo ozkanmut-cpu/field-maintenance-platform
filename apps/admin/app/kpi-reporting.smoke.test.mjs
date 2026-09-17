@@ -72,3 +72,19 @@ test('KPI loader surfaces HTTP failure without leaving stale results', async () 
   assert.deepEqual(values, [null]);
   assert.ok(errors.includes('Geçersiz tarih'));
 });
+
+test('cancel aborts the previous KPI HTTP request', () => {
+  const { startKpiRequest } = panel();
+  let signal;
+  const pending = new Promise(() => {});
+  const cancel = startKpiRequest({ from: '2026-09-15', to: '2026-09-16', technicianId: '' }, {
+    report: () => {}, error: () => {}, loading: () => {},
+  }, (_url, init) => {
+    signal = init?.signal;
+    return pending;
+  });
+  assert.ok(signal);
+  assert.equal(signal.aborted, false);
+  cancel();
+  assert.equal(signal.aborted, true);
+});
