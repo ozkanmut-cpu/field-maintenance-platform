@@ -909,7 +909,6 @@ test('real PostGIS query returns only assigned located points nearest first', as
 });
 ```
 
-Before committing, compare required `User` fields against the generated Prisma type. If the repository's authentication migrations require a different non-secret password field name, use the exact schema field already present; keep the fixture value test-only.
 
 - [ ] **Step 2: Run integration test before a migrated PostGIS database and record expected RED**
 
