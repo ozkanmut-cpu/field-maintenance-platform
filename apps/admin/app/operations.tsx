@@ -1,6 +1,7 @@
 'use client';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import KpiReportingPanel from './kpi-reporting';
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Region = {
 id: string;
@@ -434,6 +435,7 @@ return (
 </tbody></table></div>
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Teknisyen özeti hazırlanıyor</strong><span>Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor.</span></div>}
 </section>
+<KpiReportingPanel technicians={technicians} />
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">
 <div className="panelHeader">

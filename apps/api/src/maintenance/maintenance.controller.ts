@@ -14,6 +14,7 @@ import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { ReviewAttemptDto } from './dto/review-attempt.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { MaintenanceService } from './maintenance.service';
+import { KpiReportingService } from './kpi-reporting.service';
 import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 
@@ -25,6 +26,7 @@ export class MaintenanceController {
     private readonly locationLearning: PointLocationLearningService,
     private readonly googlePlaces: GooglePlaceMatchService,
     private readonly nonMaintenanceVisits: NonMaintenanceVisitService,
+    private readonly kpiReporting: KpiReportingService,
   ) {}
 
   @Get('due')
@@ -105,6 +107,16 @@ export class MaintenanceController {
   @Post('attempt-review')
   reviewAttempt(@CurrentUser() user: AuthenticatedUser, @Body() dto: ReviewAttemptDto) {
     return this.maintenance.reviewAttempt(user.id, dto);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('admin-kpi-reporting')
+  adminKpiReporting(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('technicianId') technicianId?: string,
+  ) {
+    return this.kpiReporting.report({ from, to, technicianId });
   }
 
   @Roles(UserRole.ADMIN)

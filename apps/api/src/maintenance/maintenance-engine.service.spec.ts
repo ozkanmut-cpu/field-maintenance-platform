@@ -91,3 +91,36 @@ test('historical due snapshot constrains resolved obligations and SmartClean evi
   assert.equal(smartQuery.include.visits.where.performedAt.lt.toISOString(), '2026-09-20T21:00:00.000Z');
   assert.equal(smartQuery.include.attempts.where.reviewedAt.lt.toISOString(), '2026-09-20T21:00:00.000Z');
 });
+
+test('read-only snapshot reconstructs missing cycles without writes and does not reopen resolved cycles', async () => {
+  let writes = 0;
+  const point = {
+    id: 'p1', code: 'P1', name: 'Point', regionId: 'r1', address: null,
+    canonicalLatitude: null, canonicalLongitude: null, maintenanceType: 'STANDARD',
+    maintenanceWeek: 1, createdAt: new Date('2026-09-01T00:00:00Z'),
+    coolerCount: 0, towerCount: 0, tapCount: 0, smarttapCount: 0, region: { id: 'r1', name: 'Region' },
+  };
+  let resolved = false;
+  const prisma: any = {
+    point: { findMany: async (q: any) => q.where.maintenanceType === 'STANDARD' ? [point] : [] },
+    maintenanceObligation: {
+      upsert: async () => { writes++; },
+      findMany: async (q: any) => q.select?.cycleKey && resolved
+        ? [{ pointId: 'p1', cycleKey: 'STD:2026-09-14' }] : [],
+    },
+  };
+  const config: any = { get: (key: string) => ({
+    STANDARD_WEEK1_ANCHOR: '2026-09-14', STANDARD_OPERATIONS_START_DATE: '2026-09-14',
+  } as Record<string, string>)[key] };
+  const assignments: any = { resolveMany: async () => new Map([['p1', { technicianId: 't1', source: 'REGION' }]]) };
+  const engine = new MaintenanceEngineService(prisma, config, assignments);
+  const r = await (engine as any).dueSnapshot('2026-09-17', { readOnly: true });
+  assert.equal(writes, 0, 'a report must never upsert obligations');
+  assert.equal(r.items.length, 1);
+  assert.equal(r.items[0].priority, 'CURRENT');
+  assert.equal(r.items[0].technicianId, 't1');
+  resolved = true;
+  const closed = await (engine as any).dueSnapshot('2026-09-17', { readOnly: true });
+  assert.equal(closed.items.length, 0, 'persisted resolved cycle must not be synthesized');
+  assert.equal(writes, 0);
+});
