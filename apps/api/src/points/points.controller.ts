@@ -4,6 +4,7 @@ import { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { PointAddressDiscoveryService } from './point-address-discovery.service';
+import { PointSpatialService } from './point-spatial.service';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
@@ -14,7 +15,11 @@ import { PointsService } from './points.service';
 
 @Controller('points')
 export class PointsController {
-  constructor(private readonly points: PointsService, private readonly addressDiscovery: PointAddressDiscoveryService) {}
+  constructor(
+    private readonly points: PointsService,
+    private readonly addressDiscovery: PointAddressDiscoveryService,
+    private readonly spatial: PointSpatialService,
+  ) {}
 
   @Get()
   list() { return this.points.list(); }
@@ -56,6 +61,23 @@ export class PointsController {
   @Roles(UserRole.TECHNICIAN)
   @Get('my-customers')
   myCustomers(@CurrentUser() user: AuthenticatedUser) { return this.points.myCustomers(user.id); }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Get('nearby')
+  nearby(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
+    @Query('radiusMeters') radiusMeters?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.spatial.nearbyAssigned(user.id, {
+      latitude,
+      longitude,
+      radiusMeters,
+      limit,
+    });
+  }
 
   @Roles(UserRole.TECHNICIAN)
   @Patch(':id/equipment')

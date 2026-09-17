@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { AssignmentsModule } from '../assignments/assignments.module';
 import { PointAddressDiscoveryService } from './point-address-discovery.service';
+import { PointSpatialService } from './point-spatial.service';
 import { PointsController } from './points.controller';
 import { PointsService } from './points.service';
 
 @Module({
   imports: [AssignmentsModule],
   controllers: [PointsController],
-  providers: [PointsService, PointAddressDiscoveryService],
-  exports: [PointsService, PointAddressDiscoveryService],
+  providers: [PointsService, PointAddressDiscoveryService, PointSpatialService],
+  exports: [PointsService, PointAddressDiscoveryService, PointSpatialService],
 })
 export class PointsModule {}

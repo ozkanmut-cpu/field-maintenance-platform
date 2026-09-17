@@ -9,7 +9,7 @@
 - [x] Backend API foundation
 - [x] Admin web foundation
 - [x] Technician mobile foundation
-- [ ] PostgreSQL/PostGIS migrations — PostgreSQL/Prisma migrations are active; PostGIS itself is not yet used
+- [x] PostgreSQL/PostGIS migrations — point coordinates now project into indexed PostGIS geography and power the technician-only nearby-points API
 - [x] Authentication and role authorization
 - [x] Audit log foundation
 - [x] Device/server time metadata
@@ -84,12 +84,11 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Add real PostGIS usage on top of the existing PostgreSQL/Prisma migration foundation.
-2. Complete mobile search coverage for address/old-name aliases on technician screens.
-3. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
-4. Add mobile favorites/pinned/recent if retained for V1.
-5. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
-6. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
+1. Complete mobile search coverage for address/old-name aliases on technician screens.
+2. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+3. Add mobile favorites/pinned/recent if retained for V1.
+4. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+5. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
 
 AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
