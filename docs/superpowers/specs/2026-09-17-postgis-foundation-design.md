@@ -14,7 +14,7 @@ Add real PostGIS-backed spatial querying to the existing PostgreSQL/Prisma appli
 - `Point` stores `canonicalLatitude` and `canonicalLongitude` as nullable `Decimal(9,6)` values.
 - Google address discovery and field location learning update those decimal fields.
 - Distance calculations currently happen in TypeScript with Haversine formulas.
-- No PostGIS extension migration, spatial column, GiST index, or PostGIS-backed application query exists.
+- The initial core migration already runs `CREATE EXTENSION IF NOT EXISTS postgis`, but no spatial column, GiST index, or PostGIS-backed application query exists.
 - Effective technician ownership can come from a current temporary assignment, a point override, or the point's region technician.
 
 ## Chosen Approach
@@ -33,7 +33,7 @@ This preserves all existing coordinate-writing flows. It avoids dual-write drift
 
 A manual Prisma migration will:
 
-1. Run `CREATE EXTENSION IF NOT EXISTS postgis`.
+1. Re-run the idempotent `CREATE EXTENSION IF NOT EXISTS postgis` guard so upgraded and partially provisioned environments fail safely if PostGIS is unavailable.
 2. Validate existing coordinate pairs before structural changes:
    - latitude and longitude must either both be null or both be non-null;
    - latitude must be between -90 and 90;
