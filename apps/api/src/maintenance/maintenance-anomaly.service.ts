@@ -129,7 +129,7 @@ export class MaintenanceAnomalyService {
     return this.prisma.maintenanceVisit.findMany({
       where: {
         status: VisitStatus.VALID,
-        reviewRecommended: true,
+        OR: [{ reviewRecommended: true }, { locationReviewRequired: true }],
       },
       select: {
         id: true,
@@ -139,11 +139,20 @@ export class MaintenanceAnomalyService {
         suspiciousBatch: true,
         reviewReason: true,
         locationLearningEligible: true,
+        locationReviewRequired: true,
+        locationPresenceConfirmed: true,
         latitude: true,
         longitude: true,
         accuracyMeters: true,
         technician: { select: { id: true, name: true } },
-        point: { select: { id: true, code: true, name: true, regionId: true } },
+        point: {
+          select: {
+            id: true, code: true, name: true, regionId: true, address: true,
+            canonicalLatitude: true, canonicalLongitude: true,
+            locationSource: true, locationConfidence: true,
+            googlePlaceId: true, googleBusinessName: true,
+          },
+        },
       },
       orderBy: { recordedAtServer: 'desc' },
       take: Math.min(Math.max(limit, 1), 500),
@@ -163,14 +172,16 @@ export class MaintenanceAnomalyService {
 
     const keepOpen = dto.decision === ReviewDecision.NEEDS_FOLLOWUP;
     const clearAnomaly = dto.decision === ReviewDecision.NO_ISSUE;
-    const locationEligible =
-      clearAnomaly && visit.status === VisitStatus.VALID && !visit.enteredLate;
+    // Review resolution must not promote a visit into location learning. Eligibility
+    // is decided at completion from presence, distance, accuracy and anomaly data.
+    const locationEligible = visit.locationLearningEligible;
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.maintenanceVisit.update({
         where: { id: visit.id },
         data: {
           reviewRecommended: keepOpen,
+          locationReviewRequired: keepOpen ? visit.locationReviewRequired : false,
           suspiciousBatch: clearAnomaly ? false : visit.suspiciousBatch,
           locationLearningEligible:
             dto.decision === ReviewDecision.KEEP_LOCATION_EXCLUDED

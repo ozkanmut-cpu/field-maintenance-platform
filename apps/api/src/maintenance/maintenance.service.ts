@@ -17,6 +17,7 @@ import {
   Prisma,
   UserRole,
   VisitStatus,
+  LocationSource,
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { businessDateKey, businessDayRange, dateOnlyForBusinessDate } from '../common/business-time';
@@ -32,6 +33,8 @@ import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { MaintenanceEngineService } from './maintenance-engine.service';
 import { PointLocationLearningService } from './point-location-learning.service';
+import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
+import { evaluateMaintenanceLocation } from './maintenance-location-policy';
 
 @Injectable()
 export class MaintenanceService {
@@ -305,6 +308,17 @@ export class MaintenanceService {
       throw new BadRequestException('Soğutucu, kule, musluk ve SmartTap adetlerinin tamamı girilmelidir');
     }
     const equipmentChanged = point.coolerCount !== equipment.coolerCount || point.towerCount !== equipment.towerCount || point.tapCount !== equipment.tapCount || point.smarttapCount !== equipment.smarttapCount;
+    const locationPresenceConfirmed = dto.locationPresenceConfirmed ?? true;
+    const locationDecision = evaluateMaintenanceLocation({
+      enteredLate,
+      suspiciousBatch: false,
+      locationPresenceConfirmed,
+      accuracyMeters: dto.accuracyMeters,
+      visitLatitude: dto.latitude,
+      visitLongitude: dto.longitude,
+      canonicalLatitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
+      canonicalLongitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
+    });
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -323,11 +337,13 @@ export class MaintenanceService {
             longitude: new Prisma.Decimal(dto.longitude),
             accuracyMeters:
               dto.accuracyMeters !== undefined ? new Prisma.Decimal(dto.accuracyMeters) : null,
+            locationPresenceConfirmed,
             locationCapturedAt,
-            locationLearningEligible: !enteredLate,
+            locationLearningEligible: locationDecision.locationLearningEligible,
+            locationReviewRequired: locationDecision.locationReviewRequired,
             suspiciousBatch: false,
-            reviewRecommended: enteredLate,
-            reviewReason: enteredLate ? 'GERİYE DÖNÜK GİRİŞ' : null,
+            reviewRecommended: enteredLate || locationDecision.locationReviewRequired,
+            reviewReason: [enteredLate ? 'GERİYE DÖNÜK GİRİŞ' : null, locationDecision.reviewReason].filter(Boolean).join(' | ') || null,
             coolerCount: equipment.coolerCount!,
             towerCount: equipment.towerCount!,
             tapCount: equipment.tapCount!,
@@ -390,6 +406,70 @@ export class MaintenanceService {
       }
       throw error;
     }
+  }
+
+  async approveVisitLocation(adminUserId: string, dto: ApproveVisitLocationDto) {
+    const [visit, admin] = await Promise.all([
+      this.prisma.maintenanceVisit.findUnique({
+        where: { id: dto.visitId },
+        include: {
+          point: {
+            select: {
+              id: true, canonicalLatitude: true, canonicalLongitude: true,
+              locationSource: true, locationConfidence: true,
+              googlePlaceId: true, googleBusinessName: true,
+            },
+          },
+        },
+      }),
+      this.prisma.user.findFirst({ where: { id: adminUserId, active: true } }),
+    ]);
+    if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
+    if (!admin || admin.role !== UserRole.ADMIN) throw new ForbiddenException('Konum onayını yalnızca admin verebilir');
+    if (visit.status !== VisitStatus.VALID) throw new BadRequestException('Yalnızca geçerli bakım kaydının konumu onaylanabilir');
+
+    return this.prisma.$transaction(async (tx) => {
+      const point = await tx.point.update({
+        where: { id: visit.pointId },
+        data: {
+          canonicalLatitude: visit.latitude,
+          canonicalLongitude: visit.longitude,
+          locationSource: LocationSource.MANUAL,
+          locationConfidence: 100,
+        },
+      });
+      const updatedVisit = await tx.maintenanceVisit.update({
+        where: { id: visit.id },
+        data: {
+          locationReviewRequired: false,
+          // A location approval must not clear unrelated anomaly evidence.
+          reviewRecommended: visit.suspiciousBatch || visit.enteredLate,
+        },
+      });
+      const audit = await tx.adminAuditLog.create({
+        data: {
+          actorId: admin.id,
+          entityType: 'POINT_LOCATION',
+          entityId: visit.pointId,
+          action: 'POINT_LOCATION_CONFIRMED_FROM_VISIT',
+          oldValue: {
+            canonicalLatitude: visit.point.canonicalLatitude?.toString() ?? null,
+            canonicalLongitude: visit.point.canonicalLongitude?.toString() ?? null,
+            locationSource: visit.point.locationSource,
+            locationConfidence: visit.point.locationConfidence,
+          },
+          newValue: {
+            canonicalLatitude: visit.latitude.toString(),
+            canonicalLongitude: visit.longitude.toString(),
+            locationSource: LocationSource.MANUAL,
+            locationConfidence: 100,
+            maintenanceVisitId: visit.id,
+          },
+          note: dto.note?.trim() || null,
+        },
+      });
+      return { point, visit: updatedVisit, audit };
+    });
   }
 
   async revert(dto: RevertMaintenanceDto) {

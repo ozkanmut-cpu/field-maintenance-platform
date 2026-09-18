@@ -27,6 +27,10 @@ export class CompleteMaintenanceDto {
   @Min(0)
   accuracyMeters?: number;
 
+  @IsOptional()
+  @IsBoolean()
+  locationPresenceConfirmed?: boolean;
+
   @IsString()
   locationCapturedAt!: string;
 

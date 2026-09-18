@@ -4,6 +4,14 @@ const path = require('path');
 const file = path.resolve(__dirname, '../src/CorporateApp.tsx');
 let source = fs.readFileSync(file, 'utf8');
 
+if (
+  source.includes("import { Feather as ExpoFeather } from '@expo/vector-icons';") &&
+  !source.includes("const ICON_SPRITE = require('../assets/icons-sprite.png');")
+) {
+  console.log('CorporateApp already uses @expo/vector-icons/Feather');
+  process.exit(0);
+}
+
 source = source.replace(
   "import React, { useEffect, useMemo, useState } from 'react';\nimport { ActivityIndicator, Alert, Image, ImageSourcePropType, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';",
   "import React, { useEffect, useMemo, useState } from 'react';\nimport { Feather as ExpoFeather } from '@expo/vector-icons';\nimport { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';"

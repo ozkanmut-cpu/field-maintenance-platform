@@ -3,7 +3,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ImageSourcePropType, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Feather as ExpoFeather } from '@expo/vector-icons';
+import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
@@ -19,14 +20,18 @@ import { NearbyScreen } from './NearbyScreen';
 type Screen = 'TASKS' | 'NEARBY' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
 
 const APP_ICON = require('../assets/fici-bakim-icon.png');
-const ICON_SPRITE = require('../assets/icons-sprite.png');
-const ICON_ORDER = ['home','building','support','clock','check','check-circle','x','alert-circle','alert-triangle','chevron-right','arrow-left','arrow-right','log-out','log-in','navigation','refresh-cw','refresh','rotate-ccw','calendar','hash','map-pin','crosshair','info','search','save','image','inbox','snowflake','tower','tap','smarttap','tool','clipboard','users','user-plus'] as const;
-const ICON_INDEX = Object.fromEntries(ICON_ORDER.map((name,index)=>[name,index])) as Record<string,number>;
-const ICON_COLS = 6;
+const FEATHER_ALIASES: Record<string, React.ComponentProps<typeof ExpoFeather>['name']> = {
+  building: 'home',
+  support: 'life-buoy',
+  snowflake: 'wind',
+  tower: 'radio',
+  tap: 'droplet',
+  smarttap: 'cpu',
+  refresh: 'refresh-cw',
+};
 function Feather({name,size=18,color='#075A96'}:{name:string;size?:number;color?:string}) {
-  const index = ICON_INDEX[name] ?? ICON_INDEX.tool;
-  const col = index % ICON_COLS, row = Math.floor(index / ICON_COLS);
-  return <View style={{width:size,height:size,overflow:'hidden'}}><Image source={ICON_SPRITE} style={{position:'absolute',width:size*ICON_COLS,height:size*6,left:-col*size,top:-row*size,tintColor:color}} resizeMode="stretch" /></View>;
+  const iconName = FEATHER_ALIASES[name] ?? name as React.ComponentProps<typeof ExpoFeather>['name'];
+  return <ExpoFeather name={iconName} size={size} color={color} />;
 }
 
 export default function CorporateApp() {
@@ -198,9 +203,9 @@ export default function CorporateApp() {
     return r*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
 
-  async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, loc: Awaited<ReturnType<typeof currentLocation>>) {
+  async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, loc: Awaited<ReturnType<typeof currentLocation>>, locationPresenceConfirmed = true) {
     const equipmentValues = parsedEquipment();
-    await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
+    await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationPresenceConfirmed, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
     setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setScreen('SUCCESS'); setHelpDashboard(null); await loadTasks();
   }
 
@@ -215,8 +220,9 @@ export default function CorporateApp() {
       }
       const detail = distance === null ? 'Bu noktanın kayıtlı konumu yok.' : `Kayıtlı noktadan yaklaşık ${Math.round(distance)} metre uzaktasınız.`;
       Alert.alert('Noktada mısınız?', `${detail}\n\nYine de ${task.pointName} noktasında olduğunuzu onaylıyor musunuz?`, [
-        { text: 'Hayır', style: 'cancel' },
-        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },
+        { text: 'İptal et', style: 'cancel' },
+        { text: 'Hayır, ama bakımı yaptım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, false).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },
+        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, true).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },
       ]);
     } catch (e) { Alert.alert('Bakım kaydedilemedi', message(e)); }
     finally { setBusy(false); }

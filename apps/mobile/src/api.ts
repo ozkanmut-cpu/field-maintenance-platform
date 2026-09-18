@@ -199,6 +199,7 @@ export function completeMaintenance(input: {
   latitude: number;
   longitude: number;
   accuracyMeters?: number;
+  locationPresenceConfirmed?: boolean;
   locationCapturedAt: string;
   deviceRecordedAt?: string;
   coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
