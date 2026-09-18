@@ -15,6 +15,7 @@ id: string;
 code: string;
 name: string;
 address?: string | null;
+aliases?: string[];
 status: 'ACTIVE' | 'PASSIVE' | 'CANCELLED';
 maintenanceType: 'STANDARD' | 'SMARTCLEAN';
 maintenanceWeek?: number | null;
@@ -121,7 +122,14 @@ const visiblePoints = useMemo(() => {
 const q = pointSearch.trim().toLocaleLowerCase('tr-TR');
 return points.filter((point) => {
 const statusOk = pointStatusFilter === 'ALL' || point.status === pointStatusFilter;
-const searchOk = !q || `${point.code} ${point.name} ${point.address ?? ''} ${point.region?.name ?? ''}`.toLocaleLowerCase('tr-TR').includes(q);
+const searchValues = [
+point.code,
+point.name,
+point.address ?? '',
+point.region?.name ?? '',
+...(point.aliases ?? []),
+];
+const searchOk = !q || searchValues.join(' ').toLocaleLowerCase('tr-TR').includes(q);
 return statusOk && searchOk;
 });
 }, [points, pointSearch, pointStatusFilter]);
