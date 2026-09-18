@@ -19,4 +19,8 @@ test('point detail stays read only until explicit edit mode', () => {
     'Assignments tab must use real point assignments');
   assert.match(source, /audit\?entityId=/,
     'Audit tab must use the real audit endpoint filtered by point id');
+  assert.match(source, /maintenance\/point\/\$\{pointId\}\/paperwork-history/,
+    'Paperwork tab must use the real point-scoped paperwork history endpoint');
+  assert.doesNotMatch(source, /Bu ayrıntılar mevcut Evrak Yönetimi ekranında korunur/,
+    'Paperwork must be inspectable from the point detail rather than a placeholder');
 });
