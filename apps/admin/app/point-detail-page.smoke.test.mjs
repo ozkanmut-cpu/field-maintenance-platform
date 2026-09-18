@@ -15,6 +15,16 @@ test('point detail stays read only until explicit edit mode', () => {
     'Timeline tab must use the real point timeline endpoint');
   assert.match(source, /maintenance\/obligations\/point\/\$\{pointId\}\/history/,
     'Maintenance tab must use real obligation history');
+  assert.match(source, /Açık yükümlülük/,
+    'Maintenance tab must make the real obligation totals readable without exposing raw objects');
+  assert.match(source, /Dönem/,
+    'Maintenance tab must show the real obligation cycle');
+  assert.match(source, /Vade aralığı/,
+    'Maintenance tab must show the real obligation due window');
+  assert.match(source, /Gerçekleşen ziyaretler/,
+    'Maintenance tab must expose the visits linked to each obligation');
+  assert.doesNotMatch(source, /completedAt \?\? item\.resolvedAt/,
+    'A missed obligation resolution must not be presented as a completed maintenance');
   assert.match(source, /assignments\/point\/\$\{pointId\}/,
     'Assignments tab must use real point assignments');
   assert.match(source, /audit\?entityId=/,
