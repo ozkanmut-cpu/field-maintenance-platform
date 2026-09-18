@@ -7,6 +7,7 @@ on:
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
+      - 'apps/admin/app/operations.search.smoke.test.mjs'
       - 'docs/V1_TODO.md'
       - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
@@ -16,6 +17,7 @@ on:
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
+      - 'apps/admin/app/operations.search.smoke.test.mjs'
       - 'docs/V1_TODO.md'
       - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
@@ -48,8 +50,11 @@ jobs:
         run: npm --prefix apps/api run lint
       - name: API build
         run: npm --prefix apps/api run build
-      - name: Admin bulk operation smoke tests
-        run: node --test apps/admin/app/operations.bulk.smoke.test.mjs
+      - name: Admin point operation smoke tests
+        run: >-
+          node --test
+          apps/admin/app/operations.bulk.smoke.test.mjs
+          apps/admin/app/operations.search.smoke.test.mjs
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
