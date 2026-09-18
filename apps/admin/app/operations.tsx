@@ -2,6 +2,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AdminIcon } from './admin-icons';
 import KpiReportingPanel from './kpi-reporting';
+import type { AdminSection } from './admin-navigation';
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Region = {
 id: string;
@@ -78,7 +79,7 @@ return date.toISOString().slice(0, 10);
 }
 export type OperationsSection = 'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points';
 type Section = OperationsSection;
-type Props = { users: Technician[]; activeSection: Section; onNavigate: (section: Section) => void };
+type Props = { users: Technician[]; activeSection: Section; onNavigate: (section: AdminSection, values?: { pointId?: string; detailTab?: string }) => void };
 export default function Operations({ users, activeSection, onNavigate }: Props) {
 const [regions, setRegions] = useState<Region[]>([]);
 const [points, setPoints] = useState<Point[]>([]);
@@ -373,6 +374,9 @@ if (reason === 'TECHNICIAN_MISSING') return 'Teknisyen bekliyor';
 if (reason === 'DUPLICATE_CODE') return 'Mükerrer müşteri no';
 return 'SmartClean referans tarihi bekliyor';
 }
+function setupDetailTab(reason: SetupPendingReason) {
+return reason === 'STANDARD_WEEK_MISSING' || reason === 'SMARTCLEAN_REFERENCE_MISSING' ? 'maintenance' : reason === 'TECHNICIAN_MISSING' ? 'assignments' : 'general';
+}
 return (
 <>
 {error ? <div className="error banner">{error}</div> : null}
@@ -494,7 +498,7 @@ return (
 <td>{point.region?.name || 'Bölge bekliyor'}</td>
 <td>{point.setupReasons.map((reason) => <div key={reason}><span className="pill">{setupReasonLabel(reason)}</span></div>)}</td>
 <td className="actions">{point.setupReasons.map((reason) => (
-<button className="small" key={reason} disabled={busy} onClick={() => void fixSetup(point, reason)}>Düzelt</button>
+<button className="small" key={reason} onClick={() => onNavigate('point-detail', { pointId: point.id, detailTab: setupDetailTab(reason) })}>Detayda Düzelt</button>
 ))}</td>
 </tr>
 ))}
