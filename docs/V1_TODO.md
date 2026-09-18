@@ -50,7 +50,7 @@
 - [x] Distance-aware task ordering — overdue first, then nearest-to-farthest within each priority group
 - [ ] Dedicated `YAKINIMDAKILER` screen
 - [ ] Map screen — directions/open-in-map exists, but no dedicated in-app map screen yet
-- [x] Search by point code/name/address/region/old name — admin and technician Jobs/My Customers now cover point code, name, address, region and old-name aliases
+- [ ] Search by point code/name/address/region/old name — technician Jobs/My Customers now cover all fields; admin covers code/name/address/region but still needs old-name alias matching
 - [ ] Favorites / pinned / recent
 - [x] Admin dashboard
 - [x] Unified point chronology
@@ -84,10 +84,11 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
-2. Add mobile favorites/pinned/recent if retained for V1.
-3. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
-4. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the remaining mobile V1 scope is closed.
+1. Complete old-name alias matching in admin point search.
+2. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+3. Add mobile favorites/pinned/recent if retained for V1.
+4. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+5. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the remaining mobile V1 scope is closed.
 
 AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
