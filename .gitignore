@@ -70,3 +70,7 @@ backups/
 # Browser test artifacts
 apps/admin/test-results/
 apps/admin/playwright-report/
+
+# Local agent and linked-worktree state
+.superpowers/
+.worktrees/
