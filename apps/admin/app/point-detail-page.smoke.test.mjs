@@ -11,4 +11,10 @@ test('point detail stays read only until explicit edit mode', () => {
   assert.match(source, /Kaydet/);
   assert.match(source, /İptal/);
   assert.match(source, /method: 'PATCH'/);
+  assert.match(source, /maintenance\/point-timeline\?pointId=/,
+    'Timeline tab must use the real point timeline endpoint');
+  assert.match(source, /maintenance\/obligations\/point\/\$\{pointId\}\/history/,
+    'Maintenance tab must use real obligation history');
+  assert.match(source, /assignments\/point\/\$\{pointId\}/,
+    'Assignments tab must use real point assignments');
 });
