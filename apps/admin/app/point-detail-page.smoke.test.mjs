@@ -27,6 +27,12 @@ test('point detail stays read only until explicit edit mode', () => {
     'A missed obligation resolution must not be presented as a completed maintenance');
   assert.match(source, /assignments\/point\/\$\{pointId\}/,
     'Assignments tab must use real point assignments');
+  assert.match(source, /Görevlendirme türü/,
+    'Assignments tab must give the real assignment kind a readable label');
+  assert.match(source, /Başlangıç/,
+    'Assignments tab must show the real assignment start time');
+  assert.match(source, /Aktiflik/,
+    'Assignments tab must expose whether the assignment remains active');
   assert.match(source, /audit\?entityId=/,
     'Audit tab must use the real audit endpoint filtered by point id');
   assert.match(source, /maintenance\/point\/\$\{pointId\}\/paperwork-history/,
