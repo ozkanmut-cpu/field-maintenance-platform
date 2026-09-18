@@ -13,6 +13,7 @@ import { ResolveReviewDto } from './dto/resolve-review.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { ReviewAttemptDto } from './dto/review-attempt.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
+import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
 import { MaintenanceService } from './maintenance.service';
 import { KpiReportingService } from './kpi-reporting.service';
 import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
@@ -166,6 +167,12 @@ export class MaintenanceController {
   @Get('review-history')
   reviewHistory(@Query('visitId') visitId: string) {
     return this.anomaly.reviewHistory(visitId);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('location-review/approve-visit')
+  approveVisitLocation(@CurrentUser() user: AuthenticatedUser, @Body() dto: ApproveVisitLocationDto) {
+    return this.maintenance.approveVisitLocation(user.id, dto);
   }
 
   @Roles(UserRole.TECHNICIAN)
