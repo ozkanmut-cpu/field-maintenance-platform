@@ -48,7 +48,7 @@
 - [x] Anti-batch / implausible travel detection
 - [x] Location-learning eligibility gate
 - [x] Distance-aware task ordering — overdue first, then nearest-to-farthest within each priority group
-- [ ] Dedicated `YAKINIMDAKILER` screen
+- [x] Dedicated `YAKINIMDAKİLER` screen — foreground location permission/services checks, assigned active points, server-distance ordering and directions
 - [ ] Map screen — directions/open-in-map exists, but no dedicated in-app map screen yet
 - [x] Search by point code/name/address/region/old name — admin and technician surfaces cover aliases
 - [x] Admin dashboard
@@ -83,7 +83,7 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+1. Decide and, if retained for V1, implement the dedicated in-app map screen.
 2. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
 3. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the remaining mobile V1 scope is closed.
 
