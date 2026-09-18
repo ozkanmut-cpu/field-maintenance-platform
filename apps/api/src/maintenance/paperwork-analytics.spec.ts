@@ -114,6 +114,20 @@ test('paperwork analytics rejects reversed date ranges and ranges over 180 days'
   await assert.rejects(() => h.service.paperworkAnalytics({ from: '2026-01-01', to: '2026-09-10' }), /180/i);
 });
 
+test('point paperwork history is read-only and scoped to one point', async () => {
+  const h = harness([visit({
+    id: 'visit-1', recordedAtServer: '2026-09-10T10:00:00.000Z',
+    serviceSlipStatus: PaperworkStatus.PRESENT, confirmationStatus: PaperworkStatus.PENDING,
+    paperworkHistory: [history(PaperworkKind.SERVICE_SLIP, PaperworkStatus.PRESENT, '2026-09-10T10:15:00.000Z')],
+  })]);
+
+  const result = await h.service.pointPaperworkHistory('point-1');
+
+  assert.equal(result.count, 1);
+  assert.equal(result.items[0].id, 'visit-1');
+  assert.deepEqual(h.lastWhere(), { pointId: 'point-1' });
+});
+
 test('paperwork analytics controller route is admin-only and forwards filters', async () => {
   const { MaintenanceController } = await import('./maintenance.controller');
   const { ROLES_KEY } = await import('../auth/auth.constants');
@@ -126,4 +140,17 @@ test('paperwork analytics controller route is admin-only and forwards filters', 
   const result = await controller.paperworkAnalytics('2026-09-01', '2026-09-10', 'tech-1');
   assert.deepEqual(calls, [{ from: '2026-09-01', to: '2026-09-10', technicianId: 'tech-1' }]);
   assert.equal(result.totalVisits, 0);
+});
+
+test('point paperwork history controller route is admin-only and forwards point id', async () => {
+  const { MaintenanceController } = await import('./maintenance.controller');
+  const { ROLES_KEY } = await import('../auth/auth.constants');
+  const calls: string[] = [];
+  const maintenance: any = { pointPaperworkHistory: async (pointId: string) => { calls.push(pointId); return { count: 0, items: [] }; } };
+  const controller: any = new MaintenanceController(maintenance, {} as never, {} as never, {} as never, {} as never, {} as never);
+  const handler = controller.pointPaperworkHistory;
+  assert.ok(typeof handler === 'function');
+  assert.deepEqual(Reflect.getMetadata(ROLES_KEY, handler), [UserRole.ADMIN]);
+  assert.deepEqual(await controller.pointPaperworkHistory('point-1'), { count: 0, items: [] });
+  assert.deepEqual(calls, ['point-1']);
 });
