@@ -18,6 +18,7 @@ import AdminShell from './admin-shell';
 import { buildAdminLocation, parseAdminLocation, type AdminLocation, type AdminSection } from './admin-navigation';
 import PointList from './point-list';
 import PointDetailPage from './point-detail-page';
+import BulkOperations from './bulk-operations';
 
 type User = {
   id: string;
@@ -217,7 +218,7 @@ export default function Home() {
           <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></button>
         </section>
       </> : null}
-      {section === 'points' ? <PointList location={location} onNavigate={navigate} /> : section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-detail' ? <PointDetailPage location={location} /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : section === 'sap-sync' ? <SapSyncStatus /> : section === 'dashboard' || section === 'approvals' || section === 'setup-pending' || section === 'regions' ? <Operations users={users} activeSection={section} onNavigate={navigate} /> : null}
+      {section === 'points' ? <PointList location={location} onNavigate={navigate} /> : section === 'bulk-operations' ? <BulkOperations /> : section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-detail' ? <PointDetailPage location={location} /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : section === 'sap-sync' ? <SapSyncStatus /> : section === 'dashboard' || section === 'approvals' || section === 'setup-pending' || section === 'regions' ? <Operations users={users} activeSection={section} onNavigate={navigate} /> : null}
       {section === 'users' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
