@@ -17,4 +17,6 @@ test('point detail stays read only until explicit edit mode', () => {
     'Maintenance tab must use real obligation history');
   assert.match(source, /assignments\/point\/\$\{pointId\}/,
     'Assignments tab must use real point assignments');
+  assert.match(source, /audit\?entityId=/,
+    'Audit tab must use the real audit endpoint filtered by point id');
 });
