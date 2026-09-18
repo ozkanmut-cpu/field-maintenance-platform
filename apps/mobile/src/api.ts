@@ -68,19 +68,37 @@ async function saveSessionToken(token: string) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
 }
 
-async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
+export class ApiError extends Error {
+  constructor(message: string, readonly status?: number, readonly code?: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+
+  get isTransportFailure() { return this.status === undefined; }
+}
+
+export async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    throw new ApiError(error instanceof Error ? error.message : 'Ağ isteği başarısız oldu');
+  }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const message = body?.message;
-    throw new Error(Array.isArray(message) ? message.join(', ') : typeof message === 'string' ? message : `HTTP ${response.status}`);
+    throw new ApiError(
+      Array.isArray(message) ? message.join(', ') : typeof message === 'string' ? message : `HTTP ${response.status}`,
+      response.status,
+      typeof body?.code === 'string' ? body.code : undefined,
+    );
   }
   return body as T;
 }
@@ -135,6 +153,17 @@ export type MyCustomer = EquipmentProfile & {
   id: string; code: string; name: string; address?: string | null; aliases?: string[]; region?: { id: string; name: string } | null;
   canonicalLatitude?: number | null; canonicalLongitude?: number | null; locationSource?: string; locationConfidence?: number;
   equipmentComplete: boolean; equipmentVerifiedAt?: string | null; assignmentSource: string;
+};
+
+export type NearbyPoint = {
+  id: string; code: string; name: string; address: string | null;
+  regionId: string | null; regionName: string | null;
+  latitude: number; longitude: number; distanceMeters: number; assignmentSource: string;
+};
+
+export type NearbyPointsResult = {
+  origin: { latitude: number; longitude: number };
+  radiusMeters: number; limit: number; count: number; items: NearbyPoint[];
 };
 
 export function myCustomers() {
