@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -155,6 +155,12 @@ export class MaintenanceController {
   @Get('paperwork-history')
   paperworkHistory(@Query('visitId') visitId: string) {
     return this.maintenance.paperworkHistory(visitId);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('point/:pointId/paperwork-history')
+  pointPaperworkHistory(@Param('pointId') pointId: string) {
+    return this.maintenance.pointPaperworkHistory(pointId);
   }
 
   @Roles(UserRole.ADMIN)
