@@ -1,6 +1,6 @@
 # V1 TODO
 
-> Last synchronized with `main` and current production state: 2026-09-16.
+> Last synchronized with `main` and current production state: 2026-09-18.
 > `[x]` means implemented and present in the current system. Open items are still missing, incomplete, or intentionally left for a later pass.
 
 ## P0 — Core operating system
@@ -50,7 +50,7 @@
 - [x] Distance-aware task ordering — overdue first, then nearest-to-farthest within each priority group
 - [ ] Dedicated `YAKINIMDAKILER` screen
 - [ ] Map screen — directions/open-in-map exists, but no dedicated in-app map screen yet
-- [ ] Search by point code/name/address/region/old name — admin supports code/name/address/region; mobile Jobs/My Customers supports name/code/region; old-name/address coverage is not complete on mobile
+- [x] Search by point code/name/address/region/old name — admin and technician Jobs/My Customers now cover point code, name, address, region and old-name aliases
 - [ ] Favorites / pinned / recent
 - [x] Admin dashboard
 - [x] Unified point chronology
@@ -84,11 +84,10 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Complete mobile search coverage for address/old-name aliases on technician screens.
-2. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
-3. Add mobile favorites/pinned/recent if retained for V1.
-4. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
-5. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the non-mobile V1 backlog above is closed.
+1. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+2. Add mobile favorites/pinned/recent if retained for V1.
+3. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+4. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the remaining mobile V1 scope is closed.
 
 AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
