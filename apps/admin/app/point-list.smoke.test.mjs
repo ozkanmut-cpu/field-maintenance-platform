@@ -9,6 +9,8 @@ test('point list is a read-only finding surface', () => {
   const source = readFileSync(pointListPath, 'utf8');
   assert.match(source, /Detay/);
   assert.match(source, /Toplu İşlemler/);
+  assert.match(source, /point\.aliases\.map\(\(item\) => item\.alias\)/,
+    'alias records returned by GET /points must participate in search');
   assert.doesNotMatch(source, /method: 'PATCH'/);
   assert.doesNotMatch(source, /bulk-update/);
   assert.doesNotMatch(source, /onChange=.*point\.status/);
