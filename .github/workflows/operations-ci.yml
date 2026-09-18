@@ -43,6 +43,7 @@ jobs:
           src/points/point-spatial.integration-config.spec.ts
           src/points/point-spatial.service.spec.ts
           src/points/points.nearby.controller.spec.ts
+          src/points/points.mobile-search.spec.ts
       - name: API typecheck
         run: npm --prefix apps/api run lint
       - name: API build

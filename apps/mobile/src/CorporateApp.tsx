@@ -11,6 +11,7 @@ import {
   ProspectVisitPurpose, recordMaintenanceAttempt, restoreSessionToken, revertMaintenance, technicianDashboard,
   TechnicianDashboard, technicianHistory, TechnicianHistoryItem, myCustomers, updateCustomerEquipment, MyCustomer,
 } from './api';
+import { matchesSearch } from './search';
 
 type Screen = 'TASKS' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
 
@@ -271,7 +272,6 @@ export default function CorporateApp() {
 }
 
 function SearchBox({value,onChange,placeholder}:{value:string;onChange:(v:string)=>void;placeholder:string}) { return <View style={styles.searchBox}><Feather name="search" size={18} color="#667989" /><TextInput style={styles.searchInput} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#8795A1" autoCorrect={false} returnKeyType="search" />{value?<TouchableOpacity onPress={()=>onChange('')}><Feather name="x" size={18} color="#8795A1" /></TouchableOpacity>:null}</View>; }
-function normalizeSearch(value:string){return value.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
 function distanceMetersStatic(lat1:number,lon1:number,lat2:number,lon2:number){const r=6371000;const p1=lat1*Math.PI/180,p2=lat2*Math.PI/180;const dp=(lat2-lat1)*Math.PI/180,dl=(lon2-lon1)*Math.PI/180;const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return r*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function formatDistance(m:number){return m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(m<10000?1:0)} km`;}
 function Login(p: { username:string; password:string; setUsername:(v:string)=>void; setPassword:(v:string)=>void; busy:boolean; signIn:()=>void }) {
@@ -291,8 +291,7 @@ function Login(p: { username:string; password:string; setUsername:(v:string)=>vo
 
 function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=>void;search:string;setSearch:(v:string)=>void;deviceLocation:{latitude:number;longitude:number}|null;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   const tasks = useMemo(() => {
-    const q = normalizeSearch(p.search);
-    const filtered = (p.dashboard?.due ?? []).filter(t => !q || normalizeSearch(`${t.pointName} ${t.pointCode} ${t.regionName}`).includes(q));
+    const filtered = (p.dashboard?.due ?? []).filter(t => matchesSearch(p.search, [t.pointName, t.pointCode, t.regionName, t.address ?? '', ...(t.aliases ?? [])]));
     return filtered.slice().sort((a,b) => {
       const priority = Number(a.priority !== 'OVERDUE') - Number(b.priority !== 'OVERDUE');
       if (priority) return priority;
@@ -302,7 +301,7 @@ function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=
       return da-db;
     });
   }, [p.dashboard,p.search,p.deviceLocation]);
-  return <><Summary dashboard={p.dashboard} /><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod veya bölge ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
+  return <><Summary dashboard={p.dashboard} /><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
 }
 function HelpView(p:{people:HelpTarget[];dashboard:TechnicianDashboard|null;busy:boolean;select:(t:HelpTarget)=>void;change:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   if (!p.dashboard) return <View style={styles.card}>
@@ -335,9 +334,8 @@ function EquipmentFields({equipment,setEquipment}:{equipment:{coolerCount:string
 }
 
 function CustomersView({customers,search,setSearch,open}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;open:(c:MyCustomer)=>void}) {
-  const q=normalizeSearch(search);
-  const visible=customers.filter(c=>!q||normalizeSearch(`${c.name} ${c.code} ${c.region?.name??''}`).includes(q));
-  return <><SectionHeader title="Müşterilerim" subtitle="Ekipman bilgilerini bakım zamanı gelmeden tamamlayabilirsin"/><SearchBox value={search} onChange={setSearch} placeholder="Müşteri adı, kod veya bölge ara" />{customers.length===0?<Empty icon="users" title="Atanmış müşteri yok" text="Aktif müşterilerin burada listelenecek."/>:visible.length===0?<Empty icon="search" title="Sonuç bulunamadı" text="Arama ifadesini değiştirip tekrar dene."/>:<View style={styles.listCard}>{visible.map(c=><TouchableOpacity key={c.id} style={styles.customerRow} onPress={()=>open(c)}><View style={[styles.customerIcon,c.equipmentComplete&&styles.customerIconComplete]}><Feather name={c.equipmentComplete?'check':'tool'} size={18} color={c.equipmentComplete?GREEN:ORANGE}/></View><View style={styles.personText}><Text style={styles.personName}>{c.name}</Text><Text style={styles.personMeta}>{c.code}{c.region?.name?` · ${c.region.name}`:''}</Text><Text style={c.equipmentComplete?styles.okText:styles.warningText}>{c.equipmentComplete?'Ekipman bilgisi tamam':'Ekipman bilgisi eksik'}</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>)}</View>}</>;
+  const visible=customers.filter(c=>matchesSearch(search, [c.name, c.code, c.region?.name ?? '', c.address ?? '', ...(c.aliases ?? [])]));
+  return <><SectionHeader title="Müşterilerim" subtitle="Ekipman bilgilerini bakım zamanı gelmeden tamamlayabilirsin"/><SearchBox value={search} onChange={setSearch} placeholder="Müşteri adı, kod, bölge, adres veya eski ad ara" />{customers.length===0?<Empty icon="users" title="Atanmış müşteri yok" text="Aktif müşterilerin burada listelenecek."/>:visible.length===0?<Empty icon="search" title="Sonuç bulunamadı" text="Arama ifadesini değiştirip tekrar dene."/>:<View style={styles.listCard}>{visible.map(c=><TouchableOpacity key={c.id} style={styles.customerRow} onPress={()=>open(c)}><View style={[styles.customerIcon,c.equipmentComplete&&styles.customerIconComplete]}><Feather name={c.equipmentComplete?'check':'tool'} size={18} color={c.equipmentComplete?GREEN:ORANGE}/></View><View style={styles.personText}><Text style={styles.personName}>{c.name}</Text><Text style={styles.personMeta}>{c.code}{c.region?.name?` · ${c.region.name}`:''}</Text><Text style={c.equipmentComplete?styles.okText:styles.warningText}>{c.equipmentComplete?'Ekipman bilgisi tamam':'Ekipman bilgisi eksik'}</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>)}</View>}</>;
 }
 function CustomerView({customer,equipment,setEquipment,save,back,busy}:{customer:MyCustomer;equipment:any;setEquipment:(v:any)=>void;save:()=>void;back:()=>void;busy:boolean}) {
   const hasLocation=customer.canonicalLatitude!=null&&customer.canonicalLongitude!=null;

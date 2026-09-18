@@ -354,6 +354,7 @@ export class PointsService {
         canonicalLatitude: true, canonicalLongitude: true, locationSource: true, locationConfidence: true,
         coolerCount: true, towerCount: true, tapCount: true, smarttapCount: true,
         equipmentVerifiedAt: true, equipmentVerifiedById: true,
+        aliases: { select: { alias: true } },
         region: { select: { id: true, name: true } },
       },
       orderBy: [{ name: 'asc' }],
@@ -363,6 +364,7 @@ export class PointsService {
       ...point,
       canonicalLatitude: point.canonicalLatitude === null ? null : Number(point.canonicalLatitude),
       canonicalLongitude: point.canonicalLongitude === null ? null : Number(point.canonicalLongitude),
+      aliases: point.aliases.map((item) => item.alias),
       equipmentComplete: [point.coolerCount, point.towerCount, point.tapCount, point.smarttapCount].every((value) => value !== null),
       assignmentSource: resolved.get(point.id)?.source ?? 'REGION',
     }));
