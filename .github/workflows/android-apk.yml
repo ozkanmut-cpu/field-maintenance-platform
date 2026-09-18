@@ -43,8 +43,8 @@ jobs:
         run: |
           node -e "const r=require('./node_modules/react/package.json').version; const rn=require('./node_modules/react-native/package.json').version; console.log('react='+r+' react-native='+rn); if(r!=='19.1.0') process.exit(1); if(rn!=='0.81.4') process.exit(1);"
 
-      - name: Mobile search tests
-        run: node --test apps/mobile/src/mobile-search.unit.test.mjs apps/mobile/src/mobile-search.smoke.test.mjs
+      - name: Mobile unit and smoke tests
+        run: node --test apps/mobile/src/*.test.mjs
 
       - name: Apply mobile build patches
         run: |
