@@ -32,6 +32,7 @@ test('point detail stays read only until explicit edit mode', () => {
     'Paperwork dates must be rendered as readable timestamps');
   assert.match(source, /paperworkChanges/,
     'Each visit must expose the real per-visit paperwork changes, not only a count');
-  assert.match(source, /oldStatus/);
+  assert.match(source, /previousStatus/,
+    'Paperwork history must use the real Prisma previousStatus field');
   assert.match(source, /newStatus/);
 });
