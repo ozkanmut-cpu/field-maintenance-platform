@@ -1103,6 +1103,28 @@ export class MaintenanceService {
     return { visit, history };
   }
 
+  async pointPaperworkHistory(pointId: string) {
+    const items = await this.prisma.maintenanceVisit.findMany({
+      where: { pointId },
+      select: {
+        id: true,
+        performedAt: true,
+        recordedAtServer: true,
+        status: true,
+        serviceSlipStatus: true,
+        confirmationStatus: true,
+        technician: { select: { id: true, name: true, username: true } },
+        paperworkHistory: {
+          include: { changedBy: { select: { id: true, name: true } } },
+          orderBy: { changedAt: 'asc' },
+        },
+      },
+      orderBy: { performedAt: 'desc' },
+      take: 200,
+    });
+    return { count: items.length, items };
+  }
+
   private async runPostProcessing(technicianId: string, pointId: string) {
     try {
       await this.anomaly.scanTechnician(technicianId, 24);
