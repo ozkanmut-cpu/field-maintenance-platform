@@ -123,9 +123,10 @@ Synchronization runs:
 Only one synchronization pass runs at a time. Records are processed FIFO. The service sends the original payload unchanged:
 
 - success removes the item;
-- an idempotent “already recorded” response is treated as success and removes the item;
+- a replay that the server resolves through the original idempotency key returns success and removes the item;
+- a race-time duplicate response is treated as success only when the API returns the structured `IDEMPOTENCY_REPLAY` code; arbitrary 409 messages are never parsed as duplicates;
 - timeout, DNS, connection, and 5xx failures remain `PENDING` for later retry;
-- 400/404/409/422 domain or validation failures become `CONFLICT`;
+- other 400/404/409/422 domain or validation failures become `CONFLICT`;
 - 401/403 stops the pass and requires a valid session;
 - an unexpected client error becomes `CONFLICT` rather than retrying forever.
 
@@ -136,7 +137,8 @@ After successful replay, tasks/customers are refreshed when possible so stale ca
 ## Error and Security Rules
 
 - Tokens and credentials never enter AsyncStorage or logs.
-- API error classification uses an explicit error type with HTTP status rather than parsing arbitrary message text.
+- API error classification uses an explicit error type with HTTP status and optional structured code rather than parsing arbitrary message text.
+- The maintenance endpoints return the structured `IDEMPOTENCY_REPLAY` code for race-time uniqueness conflicts; normal repeated keys continue to return the existing record successfully.
 - Storage failures surface as user-visible errors; the app does not claim an operation was saved unless persistence succeeded.
 - Concurrent sync triggers coalesce into one pass.
 - Queue entries are isolated by user ID and cannot be submitted under another session.
