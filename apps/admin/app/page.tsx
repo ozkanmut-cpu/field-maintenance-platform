@@ -19,6 +19,8 @@ import { buildAdminLocation, parseAdminLocation, type AdminLocation, type AdminS
 import PointList from './point-list';
 import PointDetailPage from './point-detail-page';
 import BulkOperations from './bulk-operations';
+import KpiReportingPanel from './kpi-reporting';
+import TechnicianDailySummaryPanel from './technician-daily-summary';
 
 type User = {
   id: string;
@@ -218,8 +220,8 @@ export default function Home() {
           <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></button>
         </section>
       </> : null}
-      {section === 'points' ? <PointList location={location} onNavigate={navigate} /> : section === 'bulk-operations' ? <BulkOperations /> : section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-detail' ? <PointDetailPage location={location} /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : section === 'sap-sync' ? <SapSyncStatus /> : section === 'dashboard' || section === 'approvals' || section === 'setup-pending' || section === 'regions' ? <Operations users={users} activeSection={section} onNavigate={navigate} /> : null}
-      {section === 'users' ? <section className="panel" id="users">
+      {section === 'points' ? <PointList location={location} onNavigate={navigate} /> : section === 'bulk-operations' ? <BulkOperations /> : section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-detail' ? <PointDetailPage location={location} /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : section === 'sap-sync' ? <SapSyncStatus /> : section === 'kpi-reporting' ? <KpiReportingPanel technicians={users.filter((user) => user.role === 'TECHNICIAN' && user.active)} /> : section === 'technician-daily-summary' ? <TechnicianDailySummaryPanel users={users} /> : section === 'dashboard' || section === 'approvals' || section === 'setup-pending' || section === 'regions' ? <Operations users={users} activeSection={section} onNavigate={navigate} /> : null}
+      {section === 'users' || section === 'help-targets' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
           <div className="rowActions"><button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button><button onClick={() => setCreateUserOpen(true)}>Yeni Kullanıcı</button></div>
@@ -246,7 +248,7 @@ export default function Home() {
           </table>
         </div>
       </section> : null}
-      {section === 'users' && helpEditorId ? <section className="panel">
+      {section === 'users' || section === 'help-targets' ? helpEditorId ? <section className="panel">
         <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => setHelpEditorId('')}>Kapat</button></div>
         <div className="helpGrid">
           {users.filter((u) => u.role === 'TECHNICIAN' && u.active && u.id !== helpEditorId).map((target) => (
@@ -257,9 +259,9 @@ export default function Home() {
           ))}
         </div>
         <button onClick={() => void saveHelpSettings()} disabled={busy}>YARDIM YETKİLERİNİ KAYDET</button>
-      </section> : null}
+      </section> : section === 'help-targets' ? <section className="panel"><div className="emptyState compact"><strong>Teknisyen seçin</strong><span>Yardım yetkilerini düzenlemek için kullanıcı satırındaki Yardım aksiyonunu kullanın.</span></div></section> : null : null}
 
-      {section === 'users' && createUserOpen ? <section className="panel" id="new-user">
+      {(section === 'users' || section === 'help-targets') && createUserOpen ? <section className="panel" id="new-user">
         <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />

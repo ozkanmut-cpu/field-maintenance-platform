@@ -1,0 +1,41 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+type Technician = { id: string; name: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
+type Summary = {
+  technician: { name: string }; date: string;
+  metrics: { completedMaintenance: number; attemptCount: number; nonMaintenanceVisitCount: number; prospectVisitCount: number; currentOpen: number; overdueOpen: number; helpedMaintenance: number; helpedAttempts: number; receivedHelpMaintenance: number; receivedHelpAttempts: number };
+  paperwork: { serviceSlip: { pending: number; present: number; missing: number }; confirmation: { pending: number; present: number; missing: number } };
+  events: Array<{ id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'PROSPECT_VISIT'; at: string; point?: { name: string; code?: string } | null; prospect?: { name: string } | null; relation: 'OWN' | 'HELPED_OTHER' | 'RECEIVED_HELP'; technician?: { name: string } | null; serviceSlipStatus?: string | null; confirmationStatus?: string | null; reason?: string | null; purpose?: string | null }>;
+};
+
+function istanbulDateKey() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+function eventType(type: Summary['events'][number]['type']) { return type === 'MAINTENANCE' ? 'Bakım' : type === 'ATTEMPT' ? 'Yapılamadı' : type === 'NON_MAINTENANCE_VISIT' ? 'Diğer ziyaret' : 'Prospect'; }
+
+export default function TechnicianDailySummaryPanel({ users }: { users: Technician[] }) {
+  const technicians = users.filter((user) => user.role === 'TECHNICIAN' && user.active);
+  const [technicianId, setTechnicianId] = useState('');
+  const [date, setDate] = useState(istanbulDateKey);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => setTechnicianId((current) => current || technicians[0]?.id || ''), [technicians]);
+  async function load() {
+    if (!technicianId || !date) return;
+    setLoading(true); setError(''); setSummary(null);
+    try {
+      const response = await fetch(`/api/backend/maintenance/admin-technician-daily-summary?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
+      setSummary(body as Summary);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [technicianId, date]);
+  return <section className="panel">
+    <div className="panelHeader"><div><h2>Teknisyen Günlük Özeti</h2><p>Seçilen İstanbul iş günündeki gerçek saha hareketleri, yardım ilişkileri ve evrak durumu.</p></div><div className="rowActions"><select value={technicianId} onChange={(e) => setTechnicianId(e.target.value)} aria-label="Teknisyen seç"><option value="">Teknisyen seç</option>{technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select><input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Teknisyen özet tarihi" /><button className="ghost" onClick={() => void load()} disabled={loading || !technicianId}>{loading ? 'Yükleniyor' : 'Yenile'}</button></div></div>
+    {error ? <div className="error">{error}</div> : null}
+    {summary ? <><p className="muted"><strong>{summary.technician.name}</strong> · {summary.date}</p><section className="dashboardGrid"><div className="dashboardCard"><span>Kendi bakımı</span><strong>{summary.metrics.completedMaintenance}</strong><small>Başka teknisyen adına yapılanlar hariç</small></div><div className="dashboardCard"><span>Yapılamadı / diğer / prospect</span><strong>{summary.metrics.attemptCount} / {summary.metrics.nonMaintenanceVisitCount} / {summary.metrics.prospectVisitCount}</strong><small>Kendi saha hareketleri</small></div><div className="dashboardCard"><span>Gün sonu açık / geciken</span><strong>{summary.metrics.currentOpen} / {summary.metrics.overdueOpen}</strong><small>Tarihsel görev snapshot</small></div><div className="dashboardCard"><span>Yardım verdi</span><strong>{summary.metrics.helpedMaintenance} / {summary.metrics.helpedAttempts}</strong><small>Bakım / yapılamadı</small></div><div className="dashboardCard"><span>Yardım aldı</span><strong>{summary.metrics.receivedHelpMaintenance} / {summary.metrics.receivedHelpAttempts}</strong><small>Başka teknisyenin onun adına yaptığı</small></div></section><div className="tableWrap"><table><thead><tr><th>Evrak</th><th>Bekliyor</th><th>Var</th><th>Eksik</th></tr></thead><tbody><tr><td><strong>Servis fişi</strong></td><td>{summary.paperwork.serviceSlip.pending}</td><td>{summary.paperwork.serviceSlip.present}</td><td>{summary.paperwork.serviceSlip.missing}</td></tr><tr><td><strong>Teyit</strong></td><td>{summary.paperwork.confirmation.pending}</td><td>{summary.paperwork.confirmation.present}</td><td>{summary.paperwork.confirmation.missing}</td></tr></tbody></table></div><div className="tableWrap"><table><thead><tr><th>Hareket</th><th>Tür</th><th>Nokta / müşteri</th><th>İlişki</th><th>Detay</th></tr></thead><tbody>{summary.events.length === 0 ? <tr><td colSpan={5}>Seçili günde saha hareketi yok.</td></tr> : summary.events.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td><td>{eventType(item.type)}</td><td><strong>{item.point?.name || item.prospect?.name || '—'}</strong>{item.point?.code ? <div className="muted">{item.point.code}</div> : null}</td><td>{item.relation === 'HELPED_OTHER' ? 'Yardım verdi' : item.relation === 'RECEIVED_HELP' ? `Yardım aldı${item.technician?.name ? ` · ${item.technician.name}` : ''}` : 'Kendi işi'}</td><td className="muted">{item.type === 'MAINTENANCE' ? `Servis fişi: ${item.serviceSlipStatus ?? '—'} · Teyit: ${item.confirmationStatus ?? '—'}` : item.reason || item.purpose || '—'}</td></tr>)}</tbody></table></div></> : <div className="emptyState compact"><strong>{loading ? 'Teknisyen özeti hazırlanıyor' : 'Teknisyen seçin'}</strong><span>Seçilen tarihin gerçek saha verileri burada gösterilir.</span></div>}
+  </section>;
+}
