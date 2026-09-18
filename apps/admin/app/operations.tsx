@@ -76,7 +76,8 @@ const date = new Date(`${dateKey}T12:00:00.000Z`);
 date.setUTCDate(date.getUTCDate() + days);
 return date.toISOString().slice(0, 10);
 }
-type Section = 'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'users' | 'new-user';
+export type OperationsSection = 'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points';
+type Section = OperationsSection;
 type Props = { users: Technician[]; activeSection: Section; onNavigate: (section: Section) => void };
 export default function Operations({ users, activeSection, onNavigate }: Props) {
 const [regions, setRegions] = useState<Region[]>([]);
