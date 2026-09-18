@@ -10,10 +10,12 @@ import {
   DueTask, EfesimExtractResult, extractEfesim, HelpTarget, helpTargets, login, me, ProspectRecord,
   ProspectVisitPurpose, recordMaintenanceAttempt, restoreSessionToken, revertMaintenance, technicianDashboard,
   TechnicianDashboard, technicianHistory, TechnicianHistoryItem, myCustomers, updateCustomerEquipment, MyCustomer,
+  NearbyPoint,
 } from './api';
 import { matchesSearch } from './search';
+import { nearbyPoints, sortNearbyItems } from './nearby';
 
-type Screen = 'TASKS' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
+type Screen = 'TASKS' | 'NEARBY' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
 
 const APP_ICON = require('../assets/fici-bakim-icon.png');
 const ICON_SPRITE = require('../assets/icons-sprite.png');
@@ -54,6 +56,9 @@ export default function CorporateApp() {
   const [taskSearch, setTaskSearch] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [deviceLocation, setDeviceLocation] = useState<{ latitude:number; longitude:number } | null>(null);
+  const [nearbyItems, setNearbyItems] = useState<NearbyPoint[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
 
   const google = efesim?.googleMatch;
   const strongGoogleMatch = Boolean(google?.matched && google.placeId);
@@ -131,6 +136,19 @@ export default function CorporateApp() {
     return values;
   }
   async function openCustomers() { setBusy(true); try { setCustomers(await myCustomers()); setScreen('CUSTOMERS'); } catch(e){ Alert.alert('Müşteriler alınamadı',message(e)); } finally{ setBusy(false); } }
+  async function loadNearby() {
+    setNearbyLoading(true); setNearbyError(null);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) throw new Error('Konum izni gerekli. Yakınındaki noktaları görmek için izin ver.');
+      if (!(await Location.hasServicesEnabledAsync())) throw new Error('Telefonun konum servisini açmalısın.');
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const result = await nearbyPoints({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      setNearbyItems(sortNearbyItems(result.items));
+    } catch (e) { setNearbyError(message(e)); }
+    finally { setNearbyLoading(false); }
+  }
+  async function openNearby() { setScreen('NEARBY'); await loadNearby(); }
   function openCustomer(customer:MyCustomer){ setSelectedCustomer(customer); equipmentFrom(customer); setScreen('CUSTOMER'); }
   async function saveCustomerEquipment(){ if(!selectedCustomer)return; setBusy(true); try { const values=parsedEquipment(); await updateCustomerEquipment(selectedCustomer.id,values); const refreshed=await myCustomers(); setCustomers(refreshed); const next=refreshed.find(x=>x.id===selectedCustomer.id)??null; setSelectedCustomer(next); if(next) equipmentFrom(next); Alert.alert('Kaydedildi','Müşteri ekipman bilgileri güncellendi.'); } catch(e){ Alert.alert('Kaydedilemedi',message(e)); } finally{setBusy(false);} }
   function prepareComplete(task:DueTask, assistedForTechnicianId?:string){ setPendingTask(task); setPendingAssist(assistedForTechnicianId); equipmentFrom(task); setScreen('EQUIPMENT_CONFIRM'); }
@@ -145,6 +163,10 @@ export default function CorporateApp() {
   async function openDirections(task: DueTask) {
     const destination = task.latitude != null && task.longitude != null ? `${task.latitude},${task.longitude}` : [task.pointName, task.regionName].filter(Boolean).join(' ');
     try { await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`); }
+    catch { Alert.alert('Harita açılamadı', 'Google Maps veya tarayıcı açılamadı.'); }
+  }
+  async function openNearbyDirections(point: NearbyPoint) {
+    try { await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${point.latitude},${point.longitude}`)}`); }
     catch { Alert.alert('Harita açılamadı', 'Google Maps veya tarayıcı açılamadı.'); }
   }
 
@@ -242,7 +264,7 @@ export default function CorporateApp() {
   if (sessionLoading) return <SafeAreaView edges={['top','bottom']} style={styles.center}><ActivityIndicator size="large" /><Text>Oturum kontrol ediliyor...</Text></SafeAreaView>;
   if (!user) return <Login username={username} password={password} setUsername={setUsername} setPassword={setPassword} busy={busy} signIn={signIn} />;
 
-  const title = screen === 'CUSTOMERS' || screen === 'CUSTOMER' ? 'Müşterilerim' : screen === 'EQUIPMENT_CONFIRM' ? 'Ekipman Kontrolü' : screen === 'HELP' ? 'Yardım Et' : screen === 'NEW' || screen === 'EFESIM_RESULT' || screen === 'PROSPECT' || screen === 'VISIT_SAVED' ? 'Yeni Nokta' : screen === 'HISTORY' ? 'Geçmiş' : 'İşler';
+  const title = screen === 'CUSTOMERS' || screen === 'CUSTOMER' ? 'Müşterilerim' : screen === 'NEARBY' ? 'Yakınımdakiler' : screen === 'EQUIPMENT_CONFIRM' ? 'Ekipman Kontrolü' : screen === 'HELP' ? 'Yardım Et' : screen === 'NEW' || screen === 'EFESIM_RESULT' || screen === 'PROSPECT' || screen === 'VISIT_SAVED' ? 'Yeni Nokta' : screen === 'HISTORY' ? 'Geçmiş' : 'İşler';
   return <SafeAreaView edges={['top','bottom']} style={styles.safe}><StatusBar style="light" /><View style={styles.shell}>
     <View style={styles.header}>
       <View style={styles.headerIdentity}>
@@ -255,6 +277,7 @@ export default function CorporateApp() {
     </View>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} search={taskSearch} setSearch={setTaskSearch} deviceLocation={deviceLocation} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
+      {screen === 'NEARBY' && <NearbyView items={nearbyItems} loading={nearbyLoading} error={nearbyError} refresh={() => void loadNearby()} onDirections={openNearbyDirections} />}
       {screen === 'HELP' && <HelpView people={helpPeople} dashboard={helpDashboard} busy={busy} select={selectHelper} change={() => setHelpDashboard(null)} onDirections={openDirections} onAttempt={task => attemptReason(task, helpDashboard?.technician.id)} onComplete={task => prepareComplete(task, helpDashboard?.technician.id)} />}
       {screen === 'CUSTOMERS' && <CustomersView customers={customers} search={customerSearch} setSearch={setCustomerSearch} open={openCustomer} />}
       {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={() => setScreen('CUSTOMERS')} busy={busy} />}
@@ -267,7 +290,7 @@ export default function CorporateApp() {
       {screen === 'VISIT_SAVED' && prospect && <SuccessView point={prospect.name} assisted="" title={visitPurpose === 'SURVEY' ? 'Keşif kaydedildi' : 'Kurma kaydedildi'} done={() => setScreen('TASKS')} />}
       {busy && <ActivityIndicator size="large" style={styles.loader} />}
     </ScrollView>
-    <View style={styles.nav}><Nav label="İşler" icon="home" active={screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM'} onPress={() => setScreen('TASKS')} /><Nav label="Müşterilerim" icon="building" active={screen === 'CUSTOMERS' || screen === 'CUSTOMER'} onPress={() => void openCustomers()} /><Nav label="Yardım Et" icon="support" active={screen === 'HELP'} onPress={() => void openHelp()} /><Nav label="Geçmiş" icon="clock" active={screen === 'HISTORY'} onPress={() => void openHistory()} /></View>
+    <View style={styles.nav}><Nav label="İşler" icon="home" active={screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM'} onPress={() => setScreen('TASKS')} /><Nav label="Yakınımdakiler" icon="map-pin" active={screen === 'NEARBY'} onPress={() => void openNearby()} /><Nav label="Müşterilerim" icon="building" active={screen === 'CUSTOMERS' || screen === 'CUSTOMER'} onPress={() => void openCustomers()} /><Nav label="Yardım Et" icon="support" active={screen === 'HELP'} onPress={() => void openHelp()} /><Nav label="Geçmiş" icon="clock" active={screen === 'HISTORY'} onPress={() => void openHistory()} /></View>
   </View></SafeAreaView>;
 }
 
@@ -303,6 +326,11 @@ function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=
   }, [p.dashboard,p.search,p.deviceLocation]);
   return <><Summary dashboard={p.dashboard} /><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
 }
+function NearbyView({items,loading,error,refresh,onDirections}:{items:NearbyPoint[];loading:boolean;error:string|null;refresh:()=>void;onDirections:(point:NearbyPoint)=>void}) {
+  return <><View style={styles.sectionHead}><View style={styles.sectionHeadText}><Text style={styles.sectionTitle}>Yakınımdakiler</Text><Text style={styles.sectionSubtitle}>Atandığın aktif noktalar, en yakından başlayarak</Text></View><TouchableOpacity onPress={refresh} disabled={loading}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View>
+    {loading ? <ActivityIndicator size="large" style={styles.loader} /> : error ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={error} /> : items.length === 0 ? <Empty icon="map-pin" title="Yakınında atanmış aktif nokta yok" text="Konumuna yakın atanmış aktif nokta bulunamadı." /> : <View style={styles.listCard}>{items.map(point => <View key={point.id} style={styles.customerRow}><View style={styles.customerIcon}><Feather name="map-pin" size={18} color={BLUE}/></View><View style={styles.personText}><Text style={styles.personName}>{point.name}</Text><Text style={styles.personMeta}>{point.code}{point.regionName?` · ${point.regionName}`:''} · {formatDistance(point.distanceMeters)}</Text>{point.address?<Text style={styles.help}>{point.address}</Text>:null}</View><TouchableOpacity style={styles.routeButton} onPress={()=>onDirections(point)}><Feather name="navigation" size={16} color={BLUE}/><Text style={styles.routeText}>Yol tarifi</Text></TouchableOpacity></View>)}</View>}
+  </>;
+}
 function HelpView(p:{people:HelpTarget[];dashboard:TechnicianDashboard|null;busy:boolean;select:(t:HelpTarget)=>void;change:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   if (!p.dashboard) return <View style={styles.card}>
     <View style={styles.cardIcon}><Feather name="user-plus" size={20} color={BLUE}/></View><Text style={styles.cardTitle}>Kime yardım edeceksin?</Text><Text style={styles.help}>Yalnızca yöneticinin sana yardım yetkisi verdiği teknisyenleri görebilirsin.</Text>
@@ -330,7 +358,7 @@ function Task({task,busy,deviceLocation,onDirections,onAttempt,onComplete}:{task
 }
 function EquipmentFields({equipment,setEquipment}:{equipment:{coolerCount:string;towerCount:string;tapCount:string;smarttapCount:string};setEquipment:(v:any)=>void}) {
   const row=(key:keyof typeof equipment,label:string,icon:React.ComponentProps<typeof Feather>['name'])=><View style={styles.equipmentRow}><View style={styles.equipmentInfo}><View style={styles.equipmentIcon}><Feather name={icon} size={17} color={BLUE}/></View><Text style={styles.equipmentLabel}>{label}</Text></View><TextInput style={styles.equipmentInput} value={equipment[key]} onChangeText={v=>setEquipment({...equipment,[key]:v.replace(/[^0-9]/g,'')})} keyboardType="number-pad" placeholder="0" placeholderTextColor="#9AA7B2" /></View>;
-  return <View style={styles.card}>{row('coolerCount','Soğutucu','snowflake')}{row('towerCount','Kule','tower')}{row('tapCount','Musluk','tap')}{row('smarttapCount','SmartTap')}</View>;
+  return <View style={styles.card}>{row('coolerCount','Soğutucu','snowflake')}{row('towerCount','Kule','tower')}{row('tapCount','Musluk','tap')}{row('smarttapCount','SmartTap','smarttap')}</View>;
 }
 
 function CustomersView({customers,search,setSearch,open}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;open:(c:MyCustomer)=>void}) {
