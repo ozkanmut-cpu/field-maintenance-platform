@@ -181,6 +181,7 @@ export class MaintenanceAnomalyService {
         where: { id: visit.id },
         data: {
           reviewRecommended: keepOpen,
+          locationReviewRequired: keepOpen ? visit.locationReviewRequired : false,
           suspiciousBatch: clearAnomaly ? false : visit.suspiciousBatch,
           locationLearningEligible:
             dto.decision === ReviewDecision.KEEP_LOCATION_EXCLUDED

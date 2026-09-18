@@ -33,6 +33,13 @@ test('poor GPS accuracy requires review and is not learnable', () => {
   assert.match(result.reviewReason ?? '', /GPS HASSASİYETİ/);
 });
 
+test('missing GPS accuracy requires review and is not learnable', () => {
+  const result = evaluateMaintenanceLocation({ ...base, accuracyMeters: null });
+  assert.equal(result.locationLearningEligible, false);
+  assert.equal(result.locationReviewRequired, true);
+  assert.match(result.reviewReason ?? '', /GPS HASSASİYETİ/);
+});
+
 test('technician can complete maintenance without confirming presence, but the location is never learnable', () => {
   const result = evaluateMaintenanceLocation({ ...base, locationPresenceConfirmed: false });
   assert.equal(result.locationLearningEligible, false);

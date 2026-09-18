@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { LocationSource, VisitStatus } from '@prisma/client';
+import { LocationSource, ReviewDecision, VisitStatus } from '@prisma/client';
+import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { MaintenanceService } from './maintenance.service';
 
 test('admin approval promotes visit GPS to MANUAL canonical location, preserves Google metadata, and audits without clearing suspicious batch', async () => {
@@ -35,4 +36,26 @@ test('admin approval promotes visit GPS to MANUAL canonical location, preserves 
   assert.equal(audits[0].data.action, 'POINT_LOCATION_CONFIRMED_FROM_VISIT');
   assert.equal(audits[0].data.newValue.googlePlaceId, undefined);
   assert.equal(result.visit.suspiciousBatch, true);
+});
+
+test('closing a location-only review clears its location queue flag without promoting learning', async () => {
+  const updates: any[] = [];
+  const visit = {
+    id: 'visit-1', status: VisitStatus.VALID, enteredLate: false,
+    suspiciousBatch: false, locationLearningEligible: false, locationReviewRequired: true,
+  };
+  const prisma: any = {
+    maintenanceVisit: { findUnique: async () => visit },
+    user: { findFirst: async () => ({ id: 'admin-1', role: 'ADMIN', active: true }) },
+    $transaction: async (fn: any) => fn({
+      maintenanceVisit: { update: async (args: any) => { updates.push(args); return { ...visit, ...args.data }; } },
+      maintenanceReviewResolution: { create: async (args: any) => args.data },
+    }),
+  };
+  const service = new MaintenanceAnomalyService(prisma, {} as never);
+
+  await service.resolveReview({ visitId: 'visit-1', adminUserId: 'admin-1', decision: ReviewDecision.NO_ISSUE });
+
+  assert.equal(updates[0].data.locationReviewRequired, false);
+  assert.equal(updates[0].data.locationLearningEligible, false);
 });

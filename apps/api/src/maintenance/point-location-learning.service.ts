@@ -64,10 +64,9 @@ export class PointLocationLearningService {
       },
     });
 
-    const usable = visits.filter((visit) => {
-      if (visit.accuracyMeters === null) return true;
-      return Number(visit.accuracyMeters) <= maxAccuracyMeters;
-    });
+    const usable = visits.filter((visit) =>
+      visit.accuracyMeters !== null && Number.isFinite(Number(visit.accuracyMeters)) && Number(visit.accuracyMeters) <= maxAccuracyMeters,
+    );
 
     if (usable.length < 2) {
       return {

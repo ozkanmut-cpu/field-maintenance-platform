@@ -26,13 +26,15 @@ export function evaluateMaintenanceLocation(input: MaintenanceLocationInput): Ma
   const distanceMeters = hasCanonical
     ? distance(input.visitLatitude, input.visitLongitude, input.canonicalLatitude!, input.canonicalLongitude!)
     : null;
-  const accurate = input.accuracyMeters === null || input.accuracyMeters === undefined || input.accuracyMeters <= maxAccuracyMeters;
+  const accurate = typeof input.accuracyMeters === 'number' && Number.isFinite(input.accuracyMeters) && input.accuracyMeters <= maxAccuracyMeters;
   const closeEnough = distanceMeters !== null && distanceMeters <= maxDistanceMeters;
   const locationReviewRequired = input.locationPresenceConfirmed && (!closeEnough || !accurate);
   const reasons: string[] = [];
   if (!hasCanonical) reasons.push('KAYITLI KONUM YOK');
   else if (!closeEnough) reasons.push(`KONUM UYUŞMAZLIĞI: ${Math.round(distanceMeters!)} m`);
-  if (!accurate) reasons.push(`GPS HASSASİYETİ DÜŞÜK: ±${Math.round(input.accuracyMeters!)} m`);
+  if (!accurate) reasons.push(input.accuracyMeters === null || input.accuracyMeters === undefined
+    ? 'GPS HASSASİYETİ YOK'
+    : `GPS HASSASİYETİ DÜŞÜK: ±${Math.round(input.accuracyMeters)} m`);
 
   return {
     distanceMeters,
