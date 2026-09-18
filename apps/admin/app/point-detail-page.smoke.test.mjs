@@ -23,4 +23,15 @@ test('point detail stays read only until explicit edit mode', () => {
     'Paperwork tab must use the real point-scoped paperwork history endpoint');
   assert.doesNotMatch(source, /Bu ayrıntılar mevcut Evrak Yönetimi ekranında korunur/,
     'Paperwork must be inspectable from the point detail rather than a placeholder');
+  assert.match(source, /Evrak durumu/,
+    'Paperwork must have a dedicated, readable operations table rather than raw object JSON');
+  assert.match(source, /Servis fişi/);
+  assert.match(source, /Teyit/);
+  assert.match(source, /Değişiklik geçmişi/);
+  assert.match(source, /formatDateTime/,
+    'Paperwork dates must be rendered as readable timestamps');
+  assert.match(source, /paperworkChanges/,
+    'Each visit must expose the real per-visit paperwork changes, not only a count');
+  assert.match(source, /oldStatus/);
+  assert.match(source, /newStatus/);
 });
