@@ -49,7 +49,7 @@
 - [x] Location-learning eligibility gate
 - [x] Distance-aware task ordering — overdue first, then nearest-to-farthest within each priority group
 - [x] Dedicated `YAKINIMDAKİLER` screen — foreground location permission/services checks, assigned active points, server-distance ordering and directions
-- [ ] Map screen — directions/open-in-map exists, but no dedicated in-app map screen yet
+- [x] Map screen — list and map share one nearby result set, selected marker details and directions
 - [x] Search by point code/name/address/region/old name — admin and technician surfaces cover aliases
 - [x] Admin dashboard
 - [x] Unified point chronology
@@ -63,9 +63,6 @@
 - [x] Immutable visit-level equipment snapshot and audit trail
 - [x] Technician Jobs search
 - [x] Technician My Customers search
-- [ ] Offline point cache
-- [ ] Offline maintenance queue
-- [ ] Auto-sync / conflict handling
 
 ## P2 — Reporting and automation
 
@@ -83,9 +80,7 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
 
-1. Decide and, if retained for V1, implement the dedicated in-app map screen.
-2. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
-3. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the remaining mobile V1 scope is closed.
+1. Keep Android APK CI green. Final APK distribution is excluded from the current V1 scope.
 
 AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
@@ -99,6 +94,8 @@ AI V1 (108/108) and SAP synchronization are closed and are not part of this exec
 - Repair diagnosis/workflow
 - Parts tracking
 - Repair costs
+- Offline point cache, maintenance queue, and auto-sync/conflict handling
+- Final APK distribution
 - AI diagnosis
 - Mandatory photos
 - Mandatory technical checklists

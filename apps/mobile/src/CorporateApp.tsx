@@ -14,6 +14,7 @@ import {
 } from './api';
 import { matchesSearch } from './search';
 import { nearbyPoints, sortNearbyItems } from './nearby';
+import { NearbyScreen } from './NearbyScreen';
 
 type Screen = 'TASKS' | 'NEARBY' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
 
@@ -143,6 +144,7 @@ export default function CorporateApp() {
       if (!permission.granted) throw new Error('Konum izni gerekli. Yakınındaki noktaları görmek için izin ver.');
       if (!(await Location.hasServicesEnabledAsync())) throw new Error('Telefonun konum servisini açmalısın.');
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setDeviceLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       const result = await nearbyPoints({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       setNearbyItems(sortNearbyItems(result.items));
     } catch (e) { setNearbyError(message(e)); }
@@ -277,7 +279,7 @@ export default function CorporateApp() {
     </View>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} search={taskSearch} setSearch={setTaskSearch} deviceLocation={deviceLocation} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
-      {screen === 'NEARBY' && <NearbyView items={nearbyItems} loading={nearbyLoading} error={nearbyError} refresh={() => void loadNearby()} onDirections={openNearbyDirections} />}
+      {screen === 'NEARBY' && (nearbyError ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={nearbyError} /> : <NearbyScreen items={nearbyItems} origin={deviceLocation} loading={nearbyLoading} refresh={() => void loadNearby()} directions={openNearbyDirections} />)}
       {screen === 'HELP' && <HelpView people={helpPeople} dashboard={helpDashboard} busy={busy} select={selectHelper} change={() => setHelpDashboard(null)} onDirections={openDirections} onAttempt={task => attemptReason(task, helpDashboard?.technician.id)} onComplete={task => prepareComplete(task, helpDashboard?.technician.id)} />}
       {screen === 'CUSTOMERS' && <CustomersView customers={customers} search={customerSearch} setSearch={setCustomerSearch} open={openCustomer} />}
       {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={() => setScreen('CUSTOMERS')} busy={busy} />}
@@ -325,11 +327,6 @@ function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=
     });
   }, [p.dashboard,p.search,p.deviceLocation]);
   return <><Summary dashboard={p.dashboard} /><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
-}
-function NearbyView({items,loading,error,refresh,onDirections}:{items:NearbyPoint[];loading:boolean;error:string|null;refresh:()=>void;onDirections:(point:NearbyPoint)=>void}) {
-  return <><View style={styles.sectionHead}><View style={styles.sectionHeadText}><Text style={styles.sectionTitle}>Yakınımdakiler</Text><Text style={styles.sectionSubtitle}>Atandığın aktif noktalar, en yakından başlayarak</Text></View><TouchableOpacity onPress={refresh} disabled={loading}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View>
-    {loading ? <ActivityIndicator size="large" style={styles.loader} /> : error ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={error} /> : items.length === 0 ? <Empty icon="map-pin" title="Yakınında atanmış aktif nokta yok" text="Konumuna yakın atanmış aktif nokta bulunamadı." /> : <View style={styles.listCard}>{items.map(point => <View key={point.id} style={styles.customerRow}><View style={styles.customerIcon}><Feather name="map-pin" size={18} color={BLUE}/></View><View style={styles.personText}><Text style={styles.personName}>{point.name}</Text><Text style={styles.personMeta}>{point.code}{point.regionName?` · ${point.regionName}`:''} · {formatDistance(point.distanceMeters)}</Text>{point.address?<Text style={styles.help}>{point.address}</Text>:null}</View><TouchableOpacity style={styles.routeButton} onPress={()=>onDirections(point)}><Feather name="navigation" size={16} color={BLUE}/><Text style={styles.routeText}>Yol tarifi</Text></TouchableOpacity></View>)}</View>}
-  </>;
 }
 function HelpView(p:{people:HelpTarget[];dashboard:TechnicianDashboard|null;busy:boolean;select:(t:HelpTarget)=>void;change:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   if (!p.dashboard) return <View style={styles.card}>
