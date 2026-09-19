@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const operationsWorkflow = fs.readFileSync(new URL('../../../.github/workflows/operations-ci.yml', import.meta.url), 'utf8');
 
 function panel() {
   const filename = new URL('./assignment-management.tsx', import.meta.url);
@@ -191,4 +192,12 @@ test('a cancelled boundary refresh cannot replace the effective technician for a
   pending[1].resolve({ ok: true, status: 200, json: async () => ({ pointId: 'new-point', technicianId: 'new-tech' }) });
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(effective, [{ pointId: 'new-point', technicianId: 'new-tech' }]);
+});
+
+test('Operations CI runs assignment reliability changes on pushes and pull requests', () => {
+  for (const path of ['apps/admin/app/assignment-management.tsx', 'apps/admin/app/assignment-management.smoke.test.mjs']) {
+    assert.equal(operationsWorkflow.split(`'${path}'`).length - 1, 2, `${path} must trigger both push and pull-request validation`);
+  }
+  assert.match(operationsWorkflow, /apps\/admin\/app\/assignment-management\.smoke\.test\.mjs/,
+    'Operations CI must run the assignment smoke regression');
 });
