@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import type { AdminLocation, AdminSection } from './admin-navigation';
 type Region = { id: string; name: string };
 type Prospect = {
 id: string; name: string; sapNo?: string | null; source: 'GOOGLE_MAPS' | 'MANUAL' | 'EFESIM'; status: string;
@@ -14,7 +15,7 @@ visits: Array<{ id: string; purpose: 'SURVEY' | 'INSTALLATION'; note?: string | 
 };
 audit: Array<{ id: string; action: string; note?: string | null; createdAt: string; actor?: { id: string; name: string } | null }>;
 };
-export default function Prospects() {
+export default function Prospects({ onNavigate }: { onNavigate: (section: AdminSection, values?: Omit<AdminLocation, 'section'>) => void }) {
 const [items, setItems] = useState<Prospect[]>([]);
 const [regions, setRegions] = useState<Region[]>([]);
 const [history, setHistory] = useState<ProspectHistory | null>(null);
@@ -71,9 +72,8 @@ if (note) payload.note = note;
 if (!window.confirm(`${item.name} gerçek noktaya dönüştürülsün mü?`)) return;
 setBusy(true); setError('');
 try {
-await api(`/api/backend/prospects/${item.id}/convert`, { method: 'POST', body: JSON.stringify(payload) });
-setHistory(null);
-await load();
+const result = await api<{ point: { id: string } }>(`/api/backend/prospects/${item.id}/convert`, { method: 'POST', body: JSON.stringify(payload) });
+onNavigate('point-detail', { pointId: result.point.id, detailTab: 'general' });
 } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
 finally { setBusy(false); }
 }
@@ -104,6 +104,6 @@ return <>
 <td className="actions"><button className="small" disabled={busy} onClick={() => void openHistory(item.id)}>GEÇMİŞ</button><button disabled={busy} onClick={() => void convert(item)}>NOKTAYA DÖNÜŞTÜR</button></td>
 </tr>)}</tbody></table></div>
 </section>
-{history ? <section className="panel"><div className="panelHeader"><div><h2>{history.prospect.name} · Geçmiş</h2><p>{history.prospect.sapNo ? `SAP ${history.prospect.sapNo}` : 'SAP No yok'}</p></div><button className="ghost" onClick={() => setHistory(null)}>KAPAT</button></div><div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Teknisyen</th><th>Amaç</th><th>Not</th></tr></thead><tbody>{history.prospect.visits.length === 0 ? <tr><td colSpan={4}>Henüz prospect ziyareti yok.</td></tr> : history.prospect.visits.map((visit) => <tr key={visit.id}><td>{new Date(visit.visitedAt).toLocaleString('tr-TR')}</td><td>{visit.technician.name}</td><td>{visit.purpose === 'SURVEY' ? 'Keşif' : 'Kurulum'}</td><td>{visit.note || '—'}</td></tr>)}</tbody></table></div>{history.audit.length ? <div className="muted">Audit: {history.audit.map((entry) => `${entry.action} · ${entry.actor?.name || '—'} · ${new Date(entry.createdAt).toLocaleString('tr-TR')}`).join(' | ')}</div> : null}</section> : null}
+{history ? (() => { const convertedPoint = history.prospect.convertedPoint; return <section className="panel"><div className="panelHeader"><div><h2>{history.prospect.name} · Geçmiş</h2><p>{history.prospect.sapNo ? `SAP ${history.prospect.sapNo}` : 'SAP No yok'}</p></div><div className="rowActions">{convertedPoint ? <button className="small" onClick={() => onNavigate('point-detail', { pointId: convertedPoint.id, detailTab: 'general' })}>NOKTA DETAYI</button> : null}<button className="ghost" onClick={() => setHistory(null)}>KAPAT</button></div></div><div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Teknisyen</th><th>Amaç</th><th>Not</th></tr></thead><tbody>{history.prospect.visits.length === 0 ? <tr><td colSpan={4}>Henüz prospect ziyareti yok.</td></tr> : history.prospect.visits.map((visit) => <tr key={visit.id}><td>{new Date(visit.visitedAt).toLocaleString('tr-TR')}</td><td>{visit.technician.name}</td><td>{visit.purpose === 'SURVEY' ? 'Keşif' : 'Kurulum'}</td><td>{visit.note || '—'}</td></tr>)}</tbody></table></div>{history.audit.length ? <div className="muted">Audit: {history.audit.map((entry) => `${entry.action} · ${entry.actor?.name || '—'} · ${new Date(entry.createdAt).toLocaleString('tr-TR')}`).join(' | ')}</div> : null}</section>; })() : null}
 </>;
 }
