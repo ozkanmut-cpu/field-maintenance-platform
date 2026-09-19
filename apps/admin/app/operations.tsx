@@ -24,7 +24,7 @@ smartcleanReferenceAt?: string | null;
 region: Region | null;
 };
 type BulkPointAction = 'SET_REGION' | 'SET_STATUS' | 'SET_STANDARD_WEEK' | 'SET_SMARTCLEAN';
-type SetupPendingReason = 'TEMPORARY_CODE' | 'REGION_MISSING' | 'TECHNICIAN_MISSING' | 'STANDARD_WEEK_MISSING' | 'SMARTCLEAN_REFERENCE_MISSING' | 'DUPLICATE_CODE';
+type SetupPendingReason = 'TEMPORARY_CODE' | 'REGION_MISSING' | 'TECHNICIAN_MISSING' | 'STANDARD_WEEK_MISSING' | 'SMARTCLEAN_WEEK_MISSING' | 'SMARTCLEAN_REFERENCE_MISSING' | 'DUPLICATE_CODE';
 type SetupPendingItem = Point & { setupReasons: SetupPendingReason[] };
 type AttemptReviewItem = {
 id: string; reason: 'BUSINESS_CLOSED' | 'AUTHORIZED_PERSON_UNAVAILABLE' | 'ACCESS_FAILED' | 'OTHER';
@@ -319,67 +319,23 @@ await load();
 finally { setBusy(false); }
 }
 
-async function fixSetup(point: SetupPendingItem, reason: SetupPendingReason) {
-let payload: Record<string, unknown> | null = null;
-if (reason === 'REGION_MISSING') {
-const choices = regions.filter((region) => !/^(BELİRLENMEDİ|BELIRLENMEDI|AYAR BEKLİYOR|AYAR BEKLIYOR)$/i.test(region.name));
-const value = window.prompt(`Bölge adını girin:\n${choices.map((region) => region.name).join(', ')}`);
-if (value === null) return;
-const selected = choices.find((region) => region.name.toLocaleLowerCase('tr-TR') === value.trim().toLocaleLowerCase('tr-TR'));
-if (!selected) { setError('Listede bulunan geçerli bir bölge adı girilmelidir.'); return; }
-payload = { regionId: selected.id };
-} else if (reason === 'STANDARD_WEEK_MISSING') {
-const value = window.prompt('Rut haftası seçin: 1 veya 2');
-if (value === null) return;
-if (value !== '1' && value !== '2') {
-setError('Rut haftası yalnızca 1 veya 2 olabilir. 0 manuel girilemez.');
-return;
-}
-payload = { maintenanceWeek: Number(value) };
-} else if (reason === 'TECHNICIAN_MISSING') {
-setError('Bu noktanın bölgesine önce Bölge bölümünden aktif teknisyen atayın.');
-return;
-} else if (reason === 'DUPLICATE_CODE') {
-const value = window.prompt('Bu nokta için doğru benzersiz müşteri numarasını girin:', point.code);
-if (value === null) return;
-const code = value.trim();
-if (!code || code === point.code) { setError('Farklı ve geçerli bir müşteri numarası girilmelidir.'); return; }
-payload = { code };
-} else if (reason === 'TEMPORARY_CODE') {
-const value = window.prompt('Gerçek müşteri numarasını girin:', point.code);
-if (value === null) return;
-const code = value.trim();
-if (!code || /^GECICI-/i.test(code)) {
-setError('Geçerli gerçek müşteri numarası girilmelidir.');
-return;
-}
-payload = { code };
-} else {
-const value = window.prompt('SmartClean referans tarihi (YYYY-MM-DD):');
-if (value === null) return;
-if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-setError('Tarih YYYY-MM-DD formatında olmalıdır.');
-return;
-}
-payload = { smartcleanReferenceAt: value.trim() };
-}
-setBusy(true); setError('');
-try {
-await api(`/api/backend/points/${point.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-await load();
-} catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-finally { setBusy(false); }
-}
 function setupReasonLabel(reason: SetupPendingReason) {
 if (reason === 'REGION_MISSING') return 'Bölge bekliyor';
 if (reason === 'STANDARD_WEEK_MISSING') return 'Rut haftası bekliyor';
+if (reason === 'SMARTCLEAN_WEEK_MISSING') return 'SmartClean rut haftası bekliyor';
 if (reason === 'TEMPORARY_CODE') return 'Geçici müşteri no';
 if (reason === 'TECHNICIAN_MISSING') return 'Teknisyen bekliyor';
 if (reason === 'DUPLICATE_CODE') return 'Mükerrer müşteri no';
 return 'SmartClean referans tarihi bekliyor';
 }
 function setupDetailTab(reason: SetupPendingReason) {
-return reason === 'STANDARD_WEEK_MISSING' || reason === 'SMARTCLEAN_REFERENCE_MISSING' ? 'maintenance' : reason === 'TECHNICIAN_MISSING' ? 'assignments' : 'general';
+return reason === 'STANDARD_WEEK_MISSING' || reason === 'SMARTCLEAN_WEEK_MISSING' || reason === 'SMARTCLEAN_REFERENCE_MISSING' ? 'maintenance' : 'general';
+}
+function setupAction(point: SetupPendingItem, reason: SetupPendingReason) {
+if (reason === 'TECHNICIAN_MISSING') return <><button className="small" onClick={() => onNavigate('regions')}>Bölgede teknisyen ata</button><small className="muted">Nokta istisnası, bölgenin eksik teknisyenini çözmez.</small></>;
+if (reason === 'DUPLICATE_CODE') return <><button className="small" onClick={() => onNavigate('duplicates')}>Mükerrerleri incele</button><small className="muted">Kod değişikliği bu kuyrukta desteklenmez.</small></>;
+if (reason === 'TEMPORARY_CODE') return <><button className="small" onClick={() => onNavigate('point-detail', { pointId: point.id, detailTab: 'general' })}>Kaydı incele</button><small className="muted">Geçici kodun kaynak kayıtta düzeltilmesi gerekir; burada kod değişikliği yoktur.</small></>;
+return <button className="small" onClick={() => onNavigate('point-detail', { pointId: point.id, detailTab: setupDetailTab(reason) })}>Detayda Düzelt</button>;
 }
 return (
 <>
@@ -501,9 +457,7 @@ return (
 <td><strong>{point.name}</strong><div className="muted">{point.code}</div></td>
 <td>{point.region?.name || 'Bölge bekliyor'}</td>
 <td>{point.setupReasons.map((reason) => <div key={reason}><span className="pill">{setupReasonLabel(reason)}</span></div>)}</td>
-<td className="actions">{point.setupReasons.map((reason) => (
-<button className="small" key={reason} onClick={() => onNavigate('point-detail', { pointId: point.id, detailTab: setupDetailTab(reason) })}>Detayda Düzelt</button>
-))}</td>
+<td className="actions">{point.setupReasons.map((reason) => <div key={reason}>{setupAction(point, reason)}</div>)}</td>
 </tr>
 ))}
 </tbody>

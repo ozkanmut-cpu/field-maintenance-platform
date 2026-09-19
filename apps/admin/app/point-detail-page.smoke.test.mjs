@@ -15,6 +15,26 @@ test('point detail stays read only until explicit edit mode', () => {
   assert.match(source, /Kaydet/);
   assert.match(source, /İptal/);
   assert.match(source, /method: 'PATCH'/);
+  assert.match(source, /\/api\/backend\/regions/,
+    'A missing region must be selectable from the real regions endpoint before PATCHing the point');
+  assert.match(source, /regionId/,
+    'Point Detail must PATCH the selected region id rather than accepting a free-form region name');
+  assert.match(source, /<option value="1">Hafta 1<\/option><option value="2">Hafta 2<\/option>/,
+    'Single-point schedule edits must constrain the maintenance week to the backend-supported 1/2 values');
+  assert.match(source, /function scheduleWeekValue\(value: number \| null \| undefined\) \{ return value === 1 \|\| value === 2 \? String\(value\) : ''; \}/,
+    'Missing or invalid weeks must render as an explicit blank selection, never as a misleading week 1');
+  assert.match(source, /<option value="" disabled>Rut haftası seçin<\/option>/,
+    'An invalid schedule must require an explicit supported week selection before it can be saved');
+  assert.match(source, /value=\{scheduleWeekValue\(value\.maintenanceWeek\)\}/,
+    'Selecting week 1 from an invalid schedule must create a real draft change and PATCH payload');
+  assert.match(source, /const payload = Object\.fromEntries\(Object\.entries\(\{ name: draft\.name, status: draft\.status, regionId: draft\.region\?\.id, maintenanceWeek: draft\.maintenanceWeek, smartcleanReferenceAt: draft\.smartcleanReferenceAt \}\)/,
+    'A shared draft must PATCH all supported changes together after switching detail tabs');
+  assert.match(source, /scheduleTouched && !scheduleWeekValue\(draft\.maintenanceWeek\)/,
+    'Editing a SmartClean reference alone must not submit an invalid inherited week');
+  assert.match(source, /type="date"[\s\S]*SmartClean referans tarihi/,
+    'SmartClean schedule corrections need a real reference-date control in the Maintenance tab');
+  assert.match(source, /activeTab === 'maintenance'[\s\S]*Bakım ayarları/,
+    'Schedule controls belong in the Maintenance tab, not the general point form');
   assert.match(source, /maintenance\/point-timeline\?pointId=/,
     'Timeline tab must use the real point timeline endpoint');
   assert.match(source, /Bakım ziyaretleri/,
