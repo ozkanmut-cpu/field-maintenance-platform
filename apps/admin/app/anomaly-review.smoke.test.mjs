@@ -28,3 +28,14 @@ test('anomaly review retains an explicit empty filtered queue state and ignores 
   assert.match(source, /return\s*\(\)\s*=>\s*controller\.abort\(\)/);
   assert.match(source, /if\s*\(!selected\)\s*\{\s*setHistory\(null\);\s*setHistoryLoading\(false\);/);
 });
+
+test('anomaly queue refreshes ignore stale responses after a location or resolution decision', () => {
+  assert.match(source, /useRef/,
+    'the queue needs a persistent request generation between refreshes');
+  assert.match(source, /const loadGeneration = useRef\(0\);/);
+  assert.match(source, /const generation = \+\+loadGeneration\.current;/);
+  assert.match(source, /if \(generation !== loadGeneration\.current\) return;/,
+    'a stale queue response must not reopen an item after a decision');
+  assert.match(source, /if \(generation === loadGeneration\.current\) setLoading\(false\);/,
+    'only the active refresh may settle loading');
+});
