@@ -1,7 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { DueTask } from '../api';
 import { EquipmentCounts, EquipmentInput, equipmentDiff, equipmentFields, equipmentInputChangesIntent, equipmentInputFrom, hasRecordedEquipment, parseEquipment } from './equipment';
 import { completionDateBounds, isAllowedCompletionDate } from './completion-date';
@@ -26,8 +25,6 @@ export function CompleteMaintenanceScreen({ task, submitting, onBack, onIntentCh
   const parsed = useMemo(() => parseEquipment(equipment), [equipment]);
   const diff = 'values' in parsed ? equipmentDiff(task, parsed.values) : [];
   const { min: minPerformedOnKey, max: maxPerformedOnKey } = completionDateBounds();
-  const minPerformedOn = pickerDate(minPerformedOnKey);
-  const maxPerformedOn = pickerDate(maxPerformedOnKey);
 
   useEffect(() => {
     if (!submitting) writeLocked.current = false;
@@ -86,10 +83,7 @@ export function CompleteMaintenanceScreen({ task, submitting, onBack, onIntentCh
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Bakım tarihi seç" accessibilityHint={`En erken ${formatDate(minPerformedOnKey)}, en geç ${formatDate(maxPerformedOnKey)}`} style={styles.dateInput} onPress={() => setShowDatePicker(true)} disabled={submitting}>
           <Feather name="calendar" size={18} color="#075A96" /><Text style={styles.dateText}>{formatDate(performedOn)}</Text>
         </TouchableOpacity>
-        {showDatePicker && <DateTimePicker value={pickerDate(performedOn)} mode="date" display={Platform.OS === 'ios' ? 'inline' : 'default'} minimumDate={minPerformedOn} maximumDate={maxPerformedOn} onChange={(_event, date) => {
-          if (Platform.OS !== 'ios') setShowDatePicker(false);
-          if (date) setPerformedOn(dateKey(date));
-        }} />}
+        <CompletionDateCalendar visible={showDatePicker} value={performedOn} min={minPerformedOnKey} max={maxPerformedOnKey} onClose={() => setShowDatePicker(false)} onSelect={(value) => { setPerformedOn(value); setShowDatePicker(false); }} />
       </View>
 
       <View style={styles.card}>
@@ -117,17 +111,46 @@ export function CompleteMaintenanceScreen({ task, submitting, onBack, onIntentCh
   </View>;
 }
 
-function pickerDate(key: string) {
-  return new Date(`${key}T12:00:00.000Z`);
-}
+function pickerDate(key: string) { return new Date(`${key}T12:00:00.000Z`); }
 
-function dateKey(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-}
+function dateKey(value: Date) { return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`; }
 
 function formatDate(key: string) {
   const [year, month, day] = key.split('-');
   return `${day}.${month}.${year}`;
+}
+
+function CompletionDateCalendar({ visible, value, min, max, onClose, onSelect }: { visible: boolean; value: string; min: string; max: string; onClose: () => void; onSelect: (value: string) => void }) {
+  const [month, setMonth] = useState(() => monthStart(value));
+  useEffect(() => { if (visible) setMonth(monthStart(value)); }, [value, visible]);
+  const first = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 12));
+  const leadingDays = (first.getUTCDay() + 6) % 7;
+  const monthEnd = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0, 12));
+  const previousMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1, 12));
+  const nextMonth = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 12));
+  const days = Array.from({ length: leadingDays + monthEnd.getUTCDate() }, (_, index) => index < leadingDays ? null : new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), index - leadingDays + 1, 12)));
+
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <View style={styles.calendarBackdrop}><View style={styles.calendarSheet}>
+      <View style={styles.calendarHeader}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Önceki ay" style={styles.calendarNav} onPress={() => setMonth(previousMonth)} disabled={dateKey(previousMonth) < min}><Feather name="chevron-left" size={22} color="#075A96" /></TouchableOpacity>
+        <Text style={styles.calendarTitle}>{month.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Sonraki ay" style={styles.calendarNav} onPress={() => setMonth(nextMonth)} disabled={dateKey(nextMonth) > max}><Feather name="chevron-right" size={22} color="#075A96" /></TouchableOpacity>
+      </View>
+      <View style={styles.weekdays}>{['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map(day => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
+      <View style={styles.calendarGrid}>{days.map((day, index) => {
+        if (!day) return <View key={`blank-${index}`} style={styles.calendarDay} />;
+        const key = dateKey(day); const allowed = key >= min && key <= max; const selected = key === value;
+        return <TouchableOpacity key={key} accessibilityRole="button" accessibilityLabel={formatDate(key)} accessibilityState={{ selected, disabled: !allowed }} style={[styles.calendarDay, selected && styles.calendarDaySelected]} onPress={() => onSelect(key)} disabled={!allowed}><Text style={[styles.calendarDayText, !allowed && styles.calendarDayDisabled, selected && styles.calendarDaySelectedText]}>{day.getUTCDate()}</Text></TouchableOpacity>;
+      })}</View>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Takvimi kapat" style={styles.calendarClose} onPress={onClose}><Text style={styles.calendarCloseText}>VAZGEÇ</Text></TouchableOpacity>
+    </View></View>
+  </Modal>;
+}
+
+function monthStart(key: string) {
+  const value = pickerDate(key);
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1, 12));
 }
 
 function EquipmentConfirmation({ equipment }: { equipment: EquipmentInput }) {
@@ -152,6 +175,7 @@ const styles = StyleSheet.create({
   reviewCard: { flexDirection: 'row', gap: 10, backgroundColor: '#FFF3DE', borderWidth: 1, borderColor: '#F2C475', borderRadius: 12, padding: 13 }, reviewCopy: { flex: 1, gap: 3 }, reviewTitle: { color: '#864E09', fontWeight: '900', fontSize: 13 }, reviewText: { color: '#805C2F', fontSize: 13, lineHeight: 18 },
   card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDE5EB', borderRadius: 14, padding: 15, gap: 10 }, cardHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardTitle: { color: '#173349', fontSize: 16, fontWeight: '900' }, confirmed: { color: '#075A96', fontSize: 10, fontWeight: '900' },
   dateInput: { minHeight: 48, borderWidth: 1, borderColor: '#C8D8E4', borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }, dateText: { color: '#173349', fontSize: 15, fontWeight: '800' },
+  calendarBackdrop: { flex: 1, backgroundColor: 'rgba(23, 51, 73, .45)', justifyContent: 'flex-end' }, calendarSheet: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, gap: 12 }, calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, calendarNav: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }, calendarTitle: { color: '#173349', fontSize: 17, fontWeight: '900', textTransform: 'capitalize' }, weekdays: { flexDirection: 'row' }, weekday: { width: '14.2857%', color: '#70818E', fontSize: 11, fontWeight: '800', textAlign: 'center' }, calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' }, calendarDay: { width: '14.2857%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 22 }, calendarDaySelected: { backgroundColor: '#0877D1' }, calendarDayText: { color: '#173349', fontSize: 14, fontWeight: '800' }, calendarDayDisabled: { color: '#B8C4CC' }, calendarDaySelectedText: { color: '#fff' }, calendarClose: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#C8D8E4', borderRadius: 10 }, calendarCloseText: { color: '#075A96', fontSize: 12, fontWeight: '900' },
   equipmentList: { gap: 1 }, equipmentRow: { minHeight: 48, borderTopWidth: 1, borderColor: '#EDF1F4', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, editorRow: { minHeight: 56, borderTopWidth: 1, borderColor: '#EDF1F4', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, equipmentLabel: { color: '#334E60', fontSize: 14, fontWeight: '800' }, count: { color: '#173349', fontSize: 16, fontWeight: '900' }, stepper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#C8D8E4', borderRadius: 10, overflow: 'hidden' }, stepButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F8FB' }, input: { width: 52, height: 48, color: '#173349', fontSize: 16, fontWeight: '900', textAlign: 'center', borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#C8D8E4' },
   diffCard: { backgroundColor: '#EAF4FC', borderWidth: 1, borderColor: '#C8DFF0', borderRadius: 12, padding: 13, gap: 4 }, diffTitle: { color: '#075A96', fontSize: 10, fontWeight: '900', letterSpacing: .5 }, diffText: { color: '#315A78', fontSize: 13, fontWeight: '700' }, error: { color: '#B7372F', fontSize: 13, fontWeight: '800' },
   stickyActions: { backgroundColor: '#fff', borderTopWidth: 1, borderColor: '#DDE5EB', padding: 12, gap: 8 }, primaryAction: { minHeight: 48, borderRadius: 10, backgroundColor: '#0877D1', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }, primaryActionText: { color: '#fff', fontSize: 13, fontWeight: '900' }, secondaryAction: { minHeight: 48, borderRadius: 10, borderWidth: 1, borderColor: '#C8D8E4', alignItems: 'center', justifyContent: 'center' }, secondaryActionText: { color: '#075A96', fontSize: 12, fontWeight: '900' }, disabled: { opacity: .55 },

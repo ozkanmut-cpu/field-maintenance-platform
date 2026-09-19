@@ -46,9 +46,9 @@ test('completion exposes an optional date that defaults to today and is bounded 
   const screen = source(screenFile);
   const app = source(appFile);
 
-  assert.match(screen, /import DateTimePicker from '@react-native-community\/datetimepicker';/);
+  assert.match(screen, /function CompletionDateCalendar/);
   assert.match(screen, /accessibilityLabel="Bakım tarihi seç"/);
-  assert.match(screen, /<DateTimePicker[\s\S]*minimumDate=\{minPerformedOn\}[\s\S]*maximumDate=\{maxPerformedOn\}/);
+  assert.match(screen, /<CompletionDateCalendar[\s\S]*min=\{minPerformedOnKey\}[\s\S]*max=\{maxPerformedOnKey\}/);
   assert.match(screen, /Bakım tarihi/);
   assert.match(screen, /isAllowedCompletionDate/);
   assert.match(screen, /onSubmit: \(equipment: EquipmentCounts, performedOn: string\)/);
