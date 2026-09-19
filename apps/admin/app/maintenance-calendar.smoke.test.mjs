@@ -1,7 +1,9 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('./maintenance-calendar.tsx', import.meta.url), 'utf8');
 const smokeTestSource = readFileSync(new URL(import.meta.url), 'utf8');
 
@@ -21,6 +23,20 @@ function calendarModule() {
 
 test('maintenance calendar deferred-fetch harness avoids runtime TypeScript evaluation', () => {
   assert.doesNotMatch(smokeTestSource, new RegExp('new' + '\\s+Function'));
+});
+
+test('maintenance calendar source is syntactically valid TSX', () => {
+  const ts = require('typescript');
+  const result = ts.transpileModule(source, {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX },
+    reportDiagnostics: true,
+  });
+  const errors = result.diagnostics?.filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error) ?? [];
+  assert.equal(errors.length, 0, ts.formatDiagnostics(errors, {
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: () => '',
+    getNewLine: () => '\n',
+  }));
 });
 
 test('maintenance calendar keeps real due and obligation history contracts in an operational queue', () => {
