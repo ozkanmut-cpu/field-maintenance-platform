@@ -8,8 +8,12 @@ type Action = 'SET_REGION' | 'SET_STATUS' | 'SET_STANDARD_WEEK' | 'SET_SMARTCLEA
 
 export function invalidateForFilterChange() { return { selected: [], preview: false, confirmed: false }; }
 
-/** @param {() => Promise<void>} mutate @param {() => void} reset @param {() => Promise<void>} reload @param {() => void} warn */
-export async function completeBulkMutation(mutate, reset, reload, warn) {
+export async function completeBulkMutation(
+  mutate: () => Promise<void>,
+  reset: () => void,
+  reload: () => Promise<void>,
+  warn: () => void,
+): Promise<boolean> {
   await mutate();
   reset();
   try { await reload(); return true; } catch { warn(); return false; }
