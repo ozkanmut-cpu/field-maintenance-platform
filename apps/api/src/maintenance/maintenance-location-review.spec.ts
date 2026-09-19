@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { BadRequestException } from '@nestjs/common';
 import { LocationSource, ReviewDecision, VisitStatus } from '@prisma/client';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { MaintenanceService } from './maintenance.service';
@@ -58,4 +59,18 @@ test('closing a location-only review clears its location queue flag without prom
 
   assert.equal(updates[0].data.locationReviewRequired, false);
   assert.equal(updates[0].data.locationLearningEligible, false);
+});
+
+test('a past-dated maintenance visit cannot be promoted into an official point location', async () => {
+  const prisma: any = {
+    maintenanceVisit: { findUnique: async () => ({
+      id: 'past-visit', pointId: 'point-1', status: VisitStatus.VALID, enteredLate: true,
+      latitude: null, longitude: null, suspiciousBatch: false,
+      point: { id: 'point-1', canonicalLatitude: null, canonicalLongitude: null, locationSource: LocationSource.UNKNOWN, locationConfidence: 0 },
+    }) },
+    user: { findFirst: async () => ({ id: 'admin-1', role: 'ADMIN', active: true }) },
+    $transaction: async () => assert.fail('past dated location approval must not mutate a point'),
+  };
+  const service = new MaintenanceService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  await assert.rejects(() => service.approveVisitLocation('admin-1', { visitId: 'past-visit' }), BadRequestException);
 });
