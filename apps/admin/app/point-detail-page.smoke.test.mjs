@@ -94,3 +94,51 @@ test('point detail stays read only until explicit edit mode', () => {
     'Paperwork history must use the real Prisma previousStatus field');
   assert.match(source, /newStatus/);
 });
+
+test('point detail manages aliases only through the supported list and add contract', () => {
+  const source = readFileSync(path, 'utf8');
+  assert.match(source, /\/api\/backend\/points\/\$\{pointId\}\/aliases/,
+    'Point Detail must list aliases from the dedicated GET endpoint');
+  assert.match(source, /method: 'POST'[\s\S]*JSON\.stringify\(\{ alias: aliasDraft\.trim\(\) \}\)/,
+    'Point Detail must add an alias using the supported POST body only');
+  assert.match(source, /minLength=\{2\}[\s\S]*maxLength=\{160\}/,
+    'Alias input must reflect the API validation range before submitting');
+  assert.match(source, /<label htmlFor="point-alias">Yeni alias<\/label>/,
+    'The alias input needs a persistent accessible label');
+  assert.match(source, /Alias ekle/,
+    'Adding an alias must be a deliberate submit action');
+  assert.doesNotMatch(source, /\/aliases'.*method: 'PATCH'|\/aliases'.*method: 'DELETE'/,
+    'The UI must not advertise unsupported alias mutation endpoints');
+});
+
+test('paperwork rows keep confirmation and change history in their own columns', () => {
+  const source = readFileSync(path, 'utf8');
+  const paperworkStart = source.indexOf("activeTab === 'paperwork'");
+  const paperworkEnd = source.indexOf(" : <div className=\"tableWrap\"><table><tbody>{rows.map", paperworkStart);
+  const paperwork = source.slice(paperworkStart, paperworkEnd);
+  assert.match(paperwork, /<th>Teyit<\/th><th>Değişiklik geçmişi<\/th>/,
+    'Paperwork retains separate headers for confirmation and change history');
+  assert.match(paperwork, /paperworkStatus\(item\.serviceSlipStatus\)\}<\/td><td>\{paperworkStatus\(item\.confirmationStatus\)\}<\/td><td>\{paperworkChanges/,
+    'Each paperwork row needs a dedicated confirmation-status cell before its change history');
+});
+
+test('point detail has keyboard-accessible tabs and Point Timeline and Prospects link into its real record', () => {
+  const source = readFileSync(path, 'utf8');
+  const timeline = readFileSync(new URL('./point-timeline.tsx', import.meta.url), 'utf8');
+  const prospects = readFileSync(new URL('./prospects.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
+  assert.match(source, /role="tab"[\s\S]*aria-controls=/,
+    'Tabs must identify their controlled panel');
+  assert.match(source, /role="tabpanel"[\s\S]*aria-labelledby=/,
+    'Each detail tab needs an announced panel relationship');
+  assert.match(source, /tabIndex=\{activeTab === id \? 0 : -1\}/,
+    'Only the active tab may be reached in the normal tab sequence');
+  assert.match(source, /document\.getElementById\(`point-detail-tab-\$\{detailTabs\[nextIndex\]\[0\]\}`\)\?\.focus\(\)/,
+    'Arrow-key navigation must move focus to the newly selected tab');
+  assert.match(styles, /\.pointDetailAliasForm[\s\S]*:focus-visible/,
+    'Point Detail must give its alias form controls a visible focus treatment');
+  assert.match(timeline, /onNavigate\('point-detail', \{ pointId: timeline\.point\.id, detailTab: 'timeline' \}\)/,
+    'Timeline must open the point whose events are currently shown');
+  assert.match(prospects, /onNavigate\('point-detail', \{ pointId: result\.point\.id, detailTab: 'general' \}\)/,
+    'Converting a prospect must open its resulting point detail before the candidate disappears from the list');
+});
