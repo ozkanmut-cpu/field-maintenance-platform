@@ -67,5 +67,6 @@ table{width:100%;border-collapse:separate;border-spacing:0;min-width:760px}th,td
 @media(max-width:760px){.filterBar.oneFilter{grid-template-columns:1fr}.filterBar.oneFilter .filterCount{justify-self:start}}
 
 .auditFilters{grid-template-columns:minmax(260px,1fr) repeat(3,minmax(140px,190px)) auto}.pointDetailFilters{grid-template-columns:minmax(260px,1fr) minmax(260px,1.1fr) auto}
+.auditJson{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.auditJson details{border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-soft);overflow:hidden}.auditJson summary{cursor:pointer;padding:11px 13px;color:var(--navy);font-size:12px;font-weight:800}.auditJson pre{margin:0;padding:12px 13px;border-top:1px solid var(--line);max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5;color:var(--text);background:#fff}
 @media(max-width:980px){.auditFilters{grid-template-columns:1fr 1fr}.auditFilters .searchField{grid-column:1/-1}.auditFilters button{width:100%}.pointDetailFilters{grid-template-columns:1fr}}
-@media(max-width:760px){.auditFilters{grid-template-columns:1fr}.auditFilters .searchField{grid-column:auto}.pointDetailFilters .filterCount{justify-self:start}}
+@media(max-width:760px){.auditFilters{grid-template-columns:1fr}.auditFilters .searchField{grid-column:auto}.auditJson{grid-template-columns:1fr}.pointDetailFilters .filterCount{justify-self:start}}
