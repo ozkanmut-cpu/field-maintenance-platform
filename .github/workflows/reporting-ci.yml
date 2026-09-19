@@ -83,7 +83,7 @@ jobs:
         run: npm --prefix apps/api run prisma:generate
       - name: Maintenance and reporting regression tests
         working-directory: apps/api
-        run: node --test --require ts-node/register src/maintenance/maintenance-revert.spec.ts src/maintenance/maintenance-engine.service.spec.ts src/maintenance/maintenance-mobile-search-payload.spec.ts src/maintenance/paperwork-analytics.spec.ts src/maintenance/daily-admin-summary.spec.ts src/maintenance/period-admin-summary.spec.ts src/maintenance/technician-daily-summary.spec.ts src/maintenance/kpi-reporting.spec.ts
+        run: node --test --require ts-node/register src/maintenance/maintenance-revert.spec.ts src/maintenance/maintenance-engine.service.spec.ts src/maintenance/maintenance-mobile-search-payload.spec.ts src/maintenance/maintenance-date-policy.spec.ts src/maintenance/maintenance-date-complete.spec.ts src/maintenance/maintenance-location-policy.spec.ts src/maintenance/maintenance-location-review.spec.ts src/maintenance/paperwork-analytics.spec.ts src/maintenance/daily-admin-summary.spec.ts src/maintenance/period-admin-summary.spec.ts src/maintenance/technician-daily-summary.spec.ts src/maintenance/kpi-reporting.spec.ts
       - name: API typecheck
         run: npm --prefix apps/api run lint
       - name: API build
