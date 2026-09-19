@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminIcon } from "./admin-icons";
 type Technician = {
   id: string;
@@ -40,17 +40,66 @@ type ObligationHistory = {
     visits: Array<{ id: string; performedAt: string; status: string }>;
   }>;
 };
+type QueueHandlers = {
+  items: (items: DueItem[]) => void;
+  technicians: (technicians: Technician[]) => void;
+  error: (message: string) => void;
+  loading: (loading: boolean) => void;
+};
+
+export function startMaintenanceQueueRequest(
+  asOf: string,
+  handlers: QueueHandlers,
+  fetcher: typeof fetch = fetch,
+) {
+  const controller = new AbortController();
+  let cancelled = false;
+  handlers.loading(true);
+  handlers.error("");
+  void (async () => {
+    try {
+      const suffix = asOf ? `?asOf=${encodeURIComponent(asOf)}` : "";
+      const [dueResponse, usersResponse] = await Promise.all([
+        fetcher(`/api/backend/maintenance/due${suffix}`, { signal: controller.signal }),
+        fetcher("/api/backend/users", { signal: controller.signal }),
+      ]);
+      const [dueBody, usersBody] = await Promise.all([
+        dueResponse.json().catch(() => null),
+        usersResponse.json().catch(() => null),
+      ]);
+      if (!dueResponse.ok) throw new Error(Array.isArray(dueBody?.message) ? dueBody.message.join(", ") : dueBody?.message || `HTTP ${dueResponse.status}`);
+      if (!usersResponse.ok) throw new Error(Array.isArray(usersBody?.message) ? usersBody.message.join(", ") : usersBody?.message || `HTTP ${usersResponse.status}`);
+      if (cancelled) return;
+      handlers.items((dueBody as { items: DueItem[] }).items);
+      handlers.technicians((usersBody as Technician[]).filter((user) => user.role === "TECHNICIAN" && user.active));
+    } catch (e) {
+      if (!cancelled) handlers.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!cancelled) handlers.loading(false);
+    }
+  })();
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
+}
+
 export default function MaintenanceCalendar() {
   const [items, setItems] = useState<DueItem[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [history, setHistory] = useState<ObligationHistory | null>(null);
+  const [historyStatus, setHistoryStatus] = useState<"IDLE" | "LOADING" | "READY" | "ERROR">("IDLE");
   const [asOf, setAsOf] = useState("");
   const [filter, setFilter] = useState<"ALL" | "OVERDUE" | "CURRENT">("ALL");
   const [technicianFilter, setTechnicianFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState<"ALL" | DueItem["maintenanceType"]>("ALL");
   const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [listLoading, setListLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [listError, setListError] = useState("");
+  const [historyError, setHistoryError] = useState("");
+  const historyRequestId = useRef(0);
+  const cancelQueueRequest = useRef<(() => void) | null>(null);
   async function api<T>(path: string): Promise<T> {
     const response = await fetch(path);
     const body = await response.json().catch(() => null);
@@ -62,41 +111,43 @@ export default function MaintenanceCalendar() {
       );
     return body as T;
   }
-  async function load() {
-    setBusy(true);
-    setError("");
-    try {
-      const suffix = asOf ? `?asOf=${encodeURIComponent(asOf)}` : "";
-      const [due, users] = await Promise.all([
-        api<{ asOf: string; count: number; items: DueItem[] }>(
-          `/api/backend/maintenance/due${suffix}`,
-        ),
-        api<Technician[]>("/api/backend/users"),
-      ]);
-      setItems(due.items);
-      setTechnicians(users.filter((user) => user.role === "TECHNICIAN"));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+  function load() {
+    cancelQueueRequest.current?.();
+    cancelQueueRequest.current = startMaintenanceQueueRequest(asOf, {
+      items: setItems,
+      technicians: setTechnicians,
+      error: setListError,
+      loading: setListLoading,
+    });
   }
   useEffect(() => {
-    void load();
-  }, []);
+    load();
+    return () => {
+      cancelQueueRequest.current?.();
+      cancelQueueRequest.current = null;
+    };
+  }, [asOf]);
   async function openHistory(pointId: string) {
-    setBusy(true);
-    setError("");
+    const requestId = ++historyRequestId.current;
+    setHistory(null);
+    setHistoryStatus("LOADING");
+    setHistoryLoading(true);
+    setHistoryError("");
     try {
-      setHistory(
-        await api<ObligationHistory>(
-          `/api/backend/maintenance/obligations/point/${pointId}/history`,
-        ),
+      const nextHistory = await api<ObligationHistory>(
+        `/api/backend/maintenance/obligations/point/${pointId}/history`,
       );
+      if (historyRequestId.current === requestId) {
+        setHistory(nextHistory);
+        setHistoryStatus("READY");
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (historyRequestId.current === requestId) {
+        setHistoryError(e instanceof Error ? e.message : String(e));
+        setHistoryStatus("ERROR");
+      }
     } finally {
-      setBusy(false);
+      if (historyRequestId.current === requestId) setHistoryLoading(false);
     }
   }
   const technicianNames = useMemo(
@@ -159,7 +210,7 @@ export default function MaintenanceCalendar() {
             />
             <button
               className="ghost iconAction"
-              disabled={busy}
+              disabled={listLoading}
               onClick={() => void load()}
             >
               <AdminIcon name="refresh" size={17} />
@@ -167,7 +218,7 @@ export default function MaintenanceCalendar() {
             </button>
           </div>
         </div>
-        {error ? <div className="error banner">{error}</div> : null}
+        {listError ? <div className="error banner">{listError}</div> : null}
         <div className="filterBar oneFilter">
           <label className="searchField">
             <AdminIcon name="search" size={18} />
@@ -199,7 +250,7 @@ export default function MaintenanceCalendar() {
               </tr>
             </thead>
             <tbody>
-              {busy && items.length === 0 ? (
+              {listLoading && items.length === 0 ? (
                 <tr>
                   <td colSpan={8}>
                     <div className="emptyState compact">
@@ -278,7 +329,7 @@ export default function MaintenanceCalendar() {
                     <td>
                       <button
                         className="small"
-                        disabled={busy}
+                        disabled={historyLoading}
                         onClick={() => void openHistory(item.pointId)}
                       >
                         GEÇMİŞ
@@ -291,19 +342,42 @@ export default function MaintenanceCalendar() {
           </table>
         </div>
       </section>
-      {history ? (
+      {historyStatus === "LOADING" || historyStatus === "ERROR" || history ? (
         <section className="panel">
           <div className="panelHeader">
             <div>
-              <h2>{history.point.name} · Yükümlülük Geçmişi</h2>
-              <p>
-                {history.point.code} · {history.point.maintenanceType}
-              </p>
+              <h2>{history ? `${history.point.name} · ` : ""}Yükümlülük Geçmişi</h2>
+              {history ? (
+                <p>
+                  {history.point.code} · {history.point.maintenanceType}
+                </p>
+              ) : null}
             </div>
-            <button className="ghost" onClick={() => setHistory(null)}>
+            <button className="ghost" onClick={() => {
+              historyRequestId.current += 1;
+              setHistory(null);
+              setHistoryStatus("IDLE");
+              setHistoryLoading(false);
+              setHistoryError("");
+            }}>
               KAPAT
             </button>
           </div>
+          {historyStatus === "LOADING" ? (
+            <div className="emptyState compact">
+              <AdminIcon name="clock" />
+              <strong>Yükümlülük geçmişi yükleniyor</strong>
+              <span>Geçmiş bakım dönemleri hazırlanıyor.</span>
+            </div>
+          ) : historyStatus === "ERROR" ? (
+            <div className="error banner">{historyError}</div>
+          ) : historyStatus === "READY" && history && history.items.length === 0 ? (
+            <div className="emptyState compact success">
+              <AdminIcon name="check" />
+              <strong>Yükümlülük geçmişi bulunamadı</strong>
+              <span>Bu nokta için kayıtlı bakım dönemi yok.</span>
+            </div>
+          ) : history ? <>
           <div className="stats">
             <div className="stat">
               <strong>{history.totals.open}</strong>
@@ -344,32 +418,3 @@ export default function MaintenanceCalendar() {
                           className={
                             item.status === "COMPLETED" ? "pill active" : "pill"
                           }
-                        >
-                          {item.status === "OPEN"
-                            ? "AÇIK"
-                            : item.status === "COMPLETED"
-                              ? "TAMAMLANDI"
-                              : "KAÇIRILDI"}
-                        </span>
-                      </td>
-                      <td>
-                        {item.visits.length
-                          ? item.visits
-                              .map((v) =>
-                                new Date(v.performedAt).toLocaleDateString(
-                                  "tr-TR",
-                                ),
-                              )
-                              .join(", ")
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-    </>
-  );
-}
