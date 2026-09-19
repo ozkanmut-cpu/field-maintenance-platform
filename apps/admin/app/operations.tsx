@@ -1,5 +1,5 @@
 'use client';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
 import KpiReportingPanel from './kpi-reporting';
 import type { AdminSection } from './admin-navigation';
@@ -109,6 +109,7 @@ const [bulkWeek, setBulkWeek] = useState('1');
 const [bulkSmartcleanReferenceAt, setBulkSmartcleanReferenceAt] = useState('');
 const [regionName, setRegionName] = useState('');
 const [regionTechnicianId, setRegionTechnicianId] = useState('');
+const loadGeneration = useRef(0);
 const [pointForm, setPointForm] = useState({
 code: '', name: '', regionId: '', status: 'ACTIVE',
 maintenanceType: 'STANDARD', maintenanceWeek: '1', smartcleanReferenceAt: '',
@@ -176,6 +177,7 @@ setTechnicianDailySummary(await api<TechnicianDailySummary>(`/api/backend/mainte
 } finally { setTechnicianDailySummaryLoading(false); }
 }
 async function load() {
+const generation = ++loadGeneration.current;
 setLoading(true);
 try {
 const [regionList, pointList, setupQueue, attemptReview, reviewHistory] = await Promise.all([
@@ -185,6 +187,7 @@ api<{ count: number; items: SetupPendingItem[] }>('/api/backend/points/setup-pen
 api<{ count: number; items: AttemptReviewItem[] }>('/api/backend/maintenance/attempt-review-queue'),
 api<{ count: number; items: AttemptHistoryItem[] }>('/api/backend/maintenance/attempt-review-history?limit=20'),
 ]);
+if (generation !== loadGeneration.current) return;
 setRegions(regionList);
 setPoints(pointList);
 setSetupPending(setupQueue.items);
@@ -192,10 +195,12 @@ setAttemptQueue(attemptReview.items);
 setAttemptHistory(reviewHistory.items);
 setPointForm((current) => ({ ...current, regionId: current.regionId || regionList[0]?.id || '' }));
 setBulkRegionId((current) => current || regionList[0]?.id || '');
-} finally { setLoading(false); }
+} catch (e) {
+if (generation === loadGeneration.current) setError(e instanceof Error ? e.message : String(e));
+} finally { if (generation === loadGeneration.current) setLoading(false); }
 }
 useEffect(() => {
-void load().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+void load();
 }, []);
 useEffect(() => {
 if (activeSection !== 'dashboard') return;
