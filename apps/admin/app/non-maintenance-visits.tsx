@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
 
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
@@ -32,31 +32,49 @@ export default function NonMaintenanceVisits() {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const loadRequestId = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
 
-  async function api<T>(path: string): Promise<T> {
-    const response = await fetch(path);
+  async function api<T>(path: string, signal: AbortSignal): Promise<T> {
+    const response = await fetch(path, { signal });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
     return body as T;
   }
 
   async function load() {
+    const requestId = ++loadRequestId.current;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setBusy(true); setError('');
     try {
-      const users = await api<Technician[]>('/api/backend/users');
+      const users = await api<Technician[]>('/api/backend/users', controller.signal);
+      if (loadRequestId.current !== requestId) return;
       const techs = users.filter((u) => u.role === 'TECHNICIAN' && u.active);
       setTechnicians(techs);
       const targets = technicianId === 'ALL' ? techs : techs.filter((t) => t.id === technicianId);
       const results = await Promise.all(targets.map(async (tech) => {
-        const data = await api<HistoryResponse>(`/api/backend/maintenance/non-maintenance-visits?technicianId=${encodeURIComponent(tech.id)}&date=${encodeURIComponent(date)}`);
+        const data = await api<HistoryResponse>(`/api/backend/maintenance/non-maintenance-visits?technicianId=${encodeURIComponent(tech.id)}&date=${encodeURIComponent(date)}`, controller.signal);
         return data.items.map((item) => ({ ...item, technician: { id: tech.id, name: tech.name } }));
       }));
-      setVisits(results.flat().sort((a, b) => new Date(b.visitedAt).getTime() - new Date(a.visitedAt).getTime()));
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+      if (loadRequestId.current === requestId) {
+        setVisits(results.flat().sort((a, b) => new Date(b.visitedAt).getTime() - new Date(a.visitedAt).getTime()));
+      }
+    } catch (e) {
+      if (loadRequestId.current === requestId && !controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (loadRequestId.current === requestId) {
+        setBusy(false);
+        if (requestController.current === controller) requestController.current = null;
+      }
+    }
   }
 
-  useEffect(() => { void load(); }, [date, technicianId]);
+  useEffect(() => {
+    void load();
+    return () => { requestController.current?.abort(); };
+  }, [date, technicianId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr-TR');
