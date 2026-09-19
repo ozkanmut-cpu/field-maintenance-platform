@@ -16,11 +16,13 @@ export class CompleteMaintenanceDto {
   @IsString()
   performedAt?: string;
 
+  @IsOptional()
   @IsNumber()
-  latitude!: number;
+  latitude?: number;
 
+  @IsOptional()
   @IsNumber()
-  longitude!: number;
+  longitude?: number;
 
   @IsOptional()
   @IsNumber()
@@ -31,8 +33,9 @@ export class CompleteMaintenanceDto {
   @IsBoolean()
   locationPresenceConfirmed?: boolean;
 
+  @IsOptional()
   @IsString()
-  locationCapturedAt!: string;
+  locationCapturedAt?: string;
 
   @IsOptional()
   @IsString()
