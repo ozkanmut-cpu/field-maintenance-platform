@@ -14,6 +14,8 @@ on:
       - 'apps/admin/app/anomaly-review.smoke.test.mjs'
       - 'apps/admin/app/maintenance-calendar.tsx'
       - 'apps/admin/app/maintenance-calendar.smoke.test.mjs'
+      - 'apps/admin/app/assignment-management.tsx'
+      - 'apps/admin/app/assignment-management.smoke.test.mjs'
       - 'apps/admin/app/location-matching.tsx'
       - 'apps/admin/app/location-matching.smoke.test.mjs'
       - 'apps/admin/app/duplicate-suggestions.tsx'
@@ -36,6 +38,8 @@ on:
       - 'apps/admin/app/anomaly-review.smoke.test.mjs'
       - 'apps/admin/app/maintenance-calendar.tsx'
       - 'apps/admin/app/maintenance-calendar.smoke.test.mjs'
+      - 'apps/admin/app/assignment-management.tsx'
+      - 'apps/admin/app/assignment-management.smoke.test.mjs'
       - 'apps/admin/app/location-matching.tsx'
       - 'apps/admin/app/location-matching.smoke.test.mjs'
       - 'apps/admin/app/duplicate-suggestions.tsx'
@@ -83,6 +87,7 @@ jobs:
           apps/admin/app/setup-pending-navigation.smoke.test.mjs
           apps/admin/app/anomaly-review.smoke.test.mjs
           apps/admin/app/maintenance-calendar.smoke.test.mjs
+          apps/admin/app/assignment-management.smoke.test.mjs
           apps/admin/app/location-matching.smoke.test.mjs
           apps/admin/app/duplicate-suggestions.smoke.test.mjs
           apps/admin/app/bulk-operations.smoke.test.mjs
