@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
+// Eksikler ayrı bir ikincil akıştır; ana sekme sayısını artırmaz.
+
 const app = fs.readFileSync(new URL('./CorporateApp.tsx', import.meta.url), 'utf8');
 const api = fs.readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 
