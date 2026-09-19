@@ -39,7 +39,7 @@ export const navigationItems: NavigationItem[] = [
   { section: 'audit-log', label: 'İşlem Geçmişi', group: 'Sistem', icon: 'history' },
 ];
 
-export type AdminLocation = { section: AdminSection; pointId?: string; detailTab?: string; query?: string; status?: string; page?: string; scrollY?: string };
+export type AdminLocation = { section: AdminSection; pointId?: string; detailTab?: string; query?: string; status?: string; page?: string; scrollY?: string; userId?: string; createUser?: boolean };
 
 const sections = new Set<AdminSection>(navigationItems.map((item) => item.section).concat('point-detail'));
 
@@ -54,6 +54,8 @@ export function parseAdminLocation(search: string): AdminLocation {
     ...(params.get('status') ? { status: params.get('status')! } : {}),
     ...(params.get('page') ? { page: params.get('page')! } : {}),
     ...(params.get('scrollY') ? { scrollY: params.get('scrollY')! } : {}),
+    ...(params.get('userId') ? { userId: params.get('userId')! } : {}),
+    ...(params.get('createUser') === '1' ? { createUser: true } : {}),
   };
 }
 
@@ -65,6 +67,8 @@ export function buildAdminLocation(section: AdminSection, values: Omit<AdminLoca
   if (values.status) params.set('status', values.status);
   if (values.page) params.set('page', values.page);
   if (values.scrollY) params.set('scrollY', values.scrollY);
+  if (values.userId) params.set('userId', values.userId);
+  if (values.createUser) params.set('createUser', '1');
   return `?${params.toString()}`;
 }
 
