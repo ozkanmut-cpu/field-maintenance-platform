@@ -59,6 +59,8 @@ export default function CorporateApp() {
   const [selectedCustomer, setSelectedCustomer] = useState<MyCustomer | null>(null);
   const [pendingTask, setPendingTask] = useState<DueTask | null>(null);
   const [pendingAssist, setPendingAssist] = useState<string | undefined>();
+  const [selectedDateKey, setSelectedDateKey] = useState(todayDateKey);
+  const [lateEntryReason, setLateEntryReason] = useState('');
   const [equipment, setEquipment] = useState({ coolerCount:'', towerCount:'', tapCount:'', smarttapCount:'' });
   const [taskSearch, setTaskSearch] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -184,7 +186,7 @@ export default function CorporateApp() {
   async function openNearby() { navigate('NEARBY'); await loadNearby(); }
   function openCustomer(customer:MyCustomer){ setSelectedCustomer(customer); equipmentFrom(customer); navigate('CUSTOMER'); }
   async function saveCustomerEquipment(){ if(!selectedCustomer)return; setBusy(true); try { const values=parsedEquipment(); await updateCustomerEquipment(selectedCustomer.id,values); const refreshed=await myCustomers(); setCustomers(refreshed); const next=refreshed.find(x=>x.id===selectedCustomer.id)??null; setSelectedCustomer(next); if(next) equipmentFrom(next); Alert.alert('Kaydedildi','Müşteri ekipman bilgileri güncellendi.'); } catch(e){ Alert.alert('Kaydedilemedi',message(e)); } finally{setBusy(false);} }
-  function prepareComplete(task:DueTask, assistedForTechnicianId?:string){ setPendingTask(task); setPendingAssist(assistedForTechnicianId); equipmentFrom(task); navigate('EQUIPMENT_CONFIRM'); }
+  function prepareComplete(task:DueTask, assistedForTechnicianId?:string){ setPendingTask(task); setPendingAssist(assistedForTechnicianId); setSelectedDateKey(todayDateKey()); setLateEntryReason(''); equipmentFrom(task); navigate('EQUIPMENT_CONFIRM'); }
 
   async function currentLocation() {
     const permission = await Location.requestForegroundPermissionsAsync();
@@ -231,13 +233,24 @@ export default function CorporateApp() {
 
   async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, loc: Awaited<ReturnType<typeof currentLocation>>, locationPresenceConfirmed = true) {
     const equipmentValues = parsedEquipment();
-    await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationPresenceConfirmed, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
+    await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, performedAt: maintenanceTimestamp(selectedDateKey), latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationPresenceConfirmed, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
+  }
+
+  async function savePastCompletedTask(task: DueTask, assistedForTechnicianId?: string) {
+    if (!lateEntryReason.trim()) throw new Error('Geriye dönük bakım nedeni zorunludur.');
+    const equipmentValues = parsedEquipment();
+    await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, performedAt: maintenanceTimestamp(selectedDateKey), lateEntryReason: lateEntryReason.trim(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
     setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
   }
 
   async function completeTask(task: DueTask, assistedForTechnicianId?: string) {
     setBusy(true);
     try {
+      if (isPastMaintenanceDate(selectedDateKey)) {
+        await savePastCompletedTask(task, assistedForTechnicianId);
+        return;
+      }
       const loc = await currentLocation();
       const distance = task.latitude != null && task.longitude != null ? distanceMeters(loc.coords.latitude, loc.coords.longitude, task.latitude, task.longitude) : null;
       if (distance !== null && distance <= 250) {
@@ -315,7 +328,7 @@ export default function CorporateApp() {
       {screen === 'HELP' && <HelpView people={helpPeople} dashboard={helpDashboard} busy={busy} select={selectHelper} change={() => setHelpDashboard(null)} onDirections={openDirections} onAttempt={task => attemptReason(task, helpDashboard?.technician.id)} onComplete={task => prepareComplete(task, helpDashboard?.technician.id)} />}
       {screen === 'CUSTOMERS' && <CustomersView customers={customers} search={customerSearch} setSearch={setCustomerSearch} open={openCustomer} />}
       {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={goBack} busy={busy} />}
-      {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); goBack(); }} busy={busy} />}
+      {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} selectedDateKey={selectedDateKey} setSelectedDateKey={setSelectedDateKey} lateEntryReason={lateEntryReason} setLateEntryReason={setLateEntryReason} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); goBack(); }} busy={busy} />}
       {screen === 'HISTORY' && <HistoryView items={historyItems} busy={busy} onRevert={confirmRevert} />}
       {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); resetNavigation(); }} />}
       {screen === 'NEW' && <NewPointView begin={() => void beginEfesim()} busy={busy} />}
@@ -399,9 +412,17 @@ function CustomerView({customer,equipment,setEquipment,save,back,busy}:{customer
   return <><TouchableOpacity style={styles.backLink} onPress={back}><Feather name="arrow-left" size={17} color={BLUE}/><Text style={styles.backText}>MÜŞTERİLERİM</Text></TouchableOpacity><View style={styles.card}><View style={styles.cardIcon}><Feather name="map-pin" size={20} color={BLUE}/></View><Text style={styles.taskName}>{customer.name}</Text><Text style={styles.taskMeta}>{customer.code}{customer.region?.name?` · ${customer.region.name}`:''}</Text>{customer.address?<Text style={styles.help}>{customer.address}</Text>:null}{hasLocation?<View style={styles.locationChip}><Feather name="crosshair" size={14} color={BLUE}/><Text style={styles.locationText}>{customer.canonicalLatitude?.toFixed(5)}, {customer.canonicalLongitude?.toFixed(5)} · güven {customer.locationConfidence ?? 0}%</Text></View>:<Text style={styles.personMeta}>Konum bilgisi henüz yok</Text>}</View><SectionHeader title="Ekipman" subtitle="Kayıtlı adetleri kontrol et ve gerekirse güncelle"/><EquipmentFields equipment={equipment} setEquipment={setEquipment}/><PrimaryButton title="EKİPMAN BİLGİLERİNİ KAYDET" icon="save" onPress={save} disabled={busy}/></>;
 }
 
-function EquipmentConfirmView({task,equipment,setEquipment,confirm,cancel,busy}:{task:DueTask;equipment:any;setEquipment:(v:any)=>void;confirm:()=>void;cancel:()=>void;busy:boolean}) {
+function EquipmentConfirmView({task,equipment,setEquipment,selectedDateKey,setSelectedDateKey,lateEntryReason,setLateEntryReason,confirm,cancel,busy}:{task:DueTask;equipment:any;setEquipment:(v:any)=>void;selectedDateKey:string;setSelectedDateKey:(v:string)=>void;lateEntryReason:string;setLateEntryReason:(v:string)=>void;confirm:()=>void;cancel:()=>void;busy:boolean}) {
   const known=[task.coolerCount,task.towerCount,task.tapCount,task.smarttapCount].every(v=>v!=null);
-  return <><View style={styles.card}><View style={styles.cardIcon}><Feather name="tool" size={20} color={BLUE}/></View><Text style={styles.cardTitle}>{task.pointName}</Text><Text style={styles.help}>{known?'Kayıtlı ekipman bilgilerini kontrol et. Bir fark varsa adetleri düzenle.':'İlk bakım için ekipman adetlerini eksiksiz gir.'}</Text></View><EquipmentFields equipment={equipment} setEquipment={setEquipment}/><PrimaryButton title={known?'BİLGİLER DOĞRU · BAKIMI KAYDET':'BİLGİLERİ KAYDET · BAKIMI TAMAMLA'} icon="check-circle" onPress={confirm} disabled={busy}/><SecondaryButton title="Vazgeç" icon="x" danger onPress={cancel} disabled={busy}/></>;
+  const past = isPastMaintenanceDate(selectedDateKey);
+  return <><View style={styles.card}><View style={styles.cardIcon}><Feather name="tool" size={20} color={BLUE}/></View><Text style={styles.cardTitle}>{task.pointName}</Text><Text style={styles.help}>{known?'Kayıtlı ekipman bilgilerini kontrol et. Bir fark varsa adetleri düzenle.':'İlk bakım için ekipman adetlerini eksiksiz gir.'}</Text></View><MaintenanceDatePicker value={selectedDateKey} onChange={setSelectedDateKey}/>{past?<View style={styles.card}><Text style={styles.sectionLabel}>GERİYE DÖNÜK BAKIM NEDENİ</Text><Text style={styles.help}>Bu kayıt geç tarihli olarak işaretlenir. Konum alınmaz, konum incelemesi ve konum öğrenmesi yapılmaz.</Text><TextInput accessibilityLabel="Geriye dönük bakım nedeni" style={styles.input} value={lateEntryReason} onChangeText={setLateEntryReason} placeholder="Geriye dönük bakım nedeni" multiline maxLength={120}/></View>:null}<EquipmentFields equipment={equipment} setEquipment={setEquipment}/><PrimaryButton title={known?'BİLGİLER DOĞRU · BAKIMI KAYDET':'BİLGİLERİ KAYDET · BAKIMI TAMAMLA'} icon="check-circle" onPress={confirm} disabled={busy || (past && !lateEntryReason.trim())}/><SecondaryButton title="Vazgeç" icon="x" danger onPress={cancel} disabled={busy}/></>;
+}
+
+function MaintenanceDatePicker({value,onChange}:{value:string;onChange:(value:string)=>void}) {
+  const today = todayDateKey();
+  const earliest = previousWeekMonday(today);
+  const dates = dateRange(earliest, today).reverse();
+  return <View style={styles.card}><Text style={styles.sectionLabel}>BAKIM TARİHİ</Text><Text style={styles.help}>Bugün varsayılan seçilidir. En eski seçilebilir tarih geçen haftanın pazartesidir.</Text><View style={styles.dateGrid}>{dates.map(date => <TouchableOpacity key={date} accessibilityRole="button" accessibilityState={{selected:value===date}} style={[styles.dateChoice,value===date&&styles.dateChoiceSelected]} onPress={()=>onChange(date)}><Text style={[styles.dateChoiceText,value===date&&styles.dateChoiceTextSelected]}>{formatMaintenanceDate(date)}</Text></TouchableOpacity>)}</View></View>;
 }
 
 function HistoryView({items,busy,onRevert}:{items:TechnicianHistoryItem[];busy:boolean;onRevert:(i:TechnicianHistoryItem)=>void}) {
@@ -425,6 +446,29 @@ function Nav({label,icon,active,onPress}:{label:string;icon:React.ComponentProps
 function initials(name:string){return name.split(' ').filter(Boolean).map(x=>x[0]).join('').slice(0,2).toUpperCase();}
 function message(e:unknown){return e instanceof Error?e.message:String(e);}
 
+function dateKeyInIstanbul(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+function todayDateKey() { return dateKeyInIstanbul(); }
+function previousWeekMonday(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) - 7);
+  return date.toISOString().slice(0, 10);
+}
+function dateRange(from: string, to: string) {
+  const dates: string[] = [];
+  const cursor = new Date(`${from}T12:00:00.000Z`);
+  const end = new Date(`${to}T12:00:00.000Z`);
+  while (cursor <= end) { dates.push(cursor.toISOString().slice(0, 10)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
+  return dates;
+}
+function isPastMaintenanceDate(dateKey: string) { return dateKey < todayDateKey(); }
+function maintenanceTimestamp(dateKey: string) { return `${dateKey}T12:00:00.000Z`; }
+function formatMaintenanceDate(dateKey: string) { return new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(`${dateKey}T12:00:00.000Z`)); }
+
 const BLUE='#075A96', DARK_BLUE='#064C80', BRIGHT_BLUE='#0877D1', LIGHT='#F3F6F9', TEXT='#182633', MUTED='#68798A', LINE='#E2E9EF', RED='#E7473C', ORANGE='#F39A22', GREEN='#27A867';
 const styles=StyleSheet.create({
   safe:{flex:1,backgroundColor:DARK_BLUE}, shell:{flex:1,backgroundColor:LIGHT}, scroll:{flex:1}, container:{padding:18,paddingBottom:32,gap:14}, center:{flex:1,alignItems:'center',justifyContent:'center',gap:12,backgroundColor:LIGHT},
@@ -443,4 +487,5 @@ const styles=StyleSheet.create({
   successCard:{backgroundColor:'#fff',borderRadius:17,padding:26,gap:10,alignItems:'center',borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.035,shadowRadius:10,elevation:1}, successCircle:{width:76,height:76,borderRadius:24,backgroundColor:GREEN,alignItems:'center',justifyContent:'center',marginBottom:6}, successEyebrow:{fontSize:9,fontWeight:'900',letterSpacing:1,color:GREEN}, successTitle:{fontSize:23,fontWeight:'900',color:TEXT,textAlign:'center'}, successPoint:{fontSize:18,fontWeight:'900',color:BLUE,textAlign:'center'}, successMetaRow:{flexDirection:'row',alignItems:'center',gap:6,marginBottom:8}, successMeta:{fontSize:12,color:'#6E7D89',textAlign:'center'},
   empty:{backgroundColor:'#fff',borderRadius:14,padding:24,alignItems:'center',borderWidth:1,borderColor:LINE,gap:7}, emptyIcon:{width:50,height:50,borderRadius:15,backgroundColor:'#F0F4F7',alignItems:'center',justifyContent:'center',marginBottom:3}, emptyTitle:{fontSize:16,fontWeight:'900',color:'#4F6271',textAlign:'center'}, emptyText:{fontSize:12,lineHeight:18,color:'#7B8A97',textAlign:'center',maxWidth:280}, loader:{marginVertical:16},
   newChoice:{borderWidth:1,borderColor:'#DCE5EC',borderRadius:12,padding:15,flexDirection:'row',alignItems:'center',gap:14}, infoBox:{backgroundColor:'#EAF4FC',borderRadius:10,padding:12,flexDirection:'row',gap:9,alignItems:'flex-start'}, infoText:{flex:1,fontSize:13,lineHeight:19,color:'#315A78'}, sectionLabel:{fontSize:10,fontWeight:'900',letterSpacing:.9,color:'#5C7080'}, input:{borderWidth:1,borderColor:'#D6E0E8',backgroundColor:'#F8FAFC',borderRadius:10,padding:12,fontSize:16,color:TEXT}, choiceRow:{flexDirection:'row',gap:8}, choice:{flex:1,borderWidth:1,borderColor:'#C7D3DD',borderRadius:10,padding:12,alignItems:'center'}, choiceSelected:{backgroundColor:BLUE,borderColor:BLUE}, choiceText:{fontSize:11,fontWeight:'900',color:'#415565'}, choiceTextSelected:{color:'#fff'}, locked:{fontSize:12,color:'#7D8A95',fontWeight:'700'},
+  dateGrid:{flexDirection:'row',flexWrap:'wrap',gap:8}, dateChoice:{borderWidth:1,borderColor:'#C7D3DD',borderRadius:9,paddingHorizontal:10,paddingVertical:9,minWidth:88,alignItems:'center'}, dateChoiceSelected:{backgroundColor:BLUE,borderColor:BLUE}, dateChoiceText:{fontSize:11,fontWeight:'900',color:'#415565'}, dateChoiceTextSelected:{color:'#fff'},
 });

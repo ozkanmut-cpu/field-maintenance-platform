@@ -35,6 +35,7 @@ import { MaintenanceEngineService } from './maintenance-engine.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
 import { evaluateMaintenanceLocation } from './maintenance-location-policy';
+import { evaluateMaintenanceDate } from './maintenance-date-policy';
 
 @Injectable()
 export class MaintenanceService {
@@ -242,15 +243,14 @@ export class MaintenanceService {
 
     const now = new Date();
     const performedAt = dto.performedAt ? new Date(dto.performedAt) : now;
-    const locationCapturedAt = new Date(dto.locationCapturedAt);
+    const locationCapturedAt = dto.locationCapturedAt ? new Date(dto.locationCapturedAt) : null;
     const deviceRecordedAt = dto.deviceRecordedAt ? new Date(dto.deviceRecordedAt) : null;
 
     this.assertValidDate(performedAt, 'performedAt');
-    this.assertValidDate(locationCapturedAt, 'locationCapturedAt');
+    if (locationCapturedAt) this.assertValidDate(locationCapturedAt, 'locationCapturedAt');
     if (deviceRecordedAt) this.assertValidDate(deviceRecordedAt, 'deviceRecordedAt');
-    if (performedAt.getTime() > now.getTime() + 5 * 60_000) {
-      throw new BadRequestException('Bakım tarihi gelecekte olamaz');
-    }
+    const dateDecision = evaluateMaintenanceDate(performedAt, now);
+    if (!dateDecision.allowed) throw new BadRequestException(dateDecision.reason);
 
     const effectiveAssignment = await this.assignments.effectiveForPoint(point.id, performedAt);
     if (!effectiveAssignment.technicianId) {
@@ -265,9 +265,15 @@ export class MaintenanceService {
       throw new BadRequestException('Yardım hedefi bu noktanın atanmış teknisyeni değil');
     }
 
-    const enteredLate = this.dateKey(performedAt) < this.dateKey(now);
+    const enteredLate = dateDecision.enteredLate;
     if (enteredLate && !dto.lateEntryReason) {
       throw new BadRequestException('Geriye dönük bakım girişinde neden zorunludur');
+    }
+    if (dateDecision.locationRequired && (dto.latitude === undefined || dto.longitude === undefined || !locationCapturedAt)) {
+      throw new BadRequestException('Bugünün bakımında konum bilgisi zorunludur');
+    }
+    if (!dateDecision.locationRequired && (dto.latitude !== undefined || dto.longitude !== undefined || dto.accuracyMeters !== undefined || locationCapturedAt)) {
+      throw new BadRequestException('Geriye dönük bakımda konum bilgisi kaydedilemez');
     }
 
     await this.engine.ensureStandardObligations(performedAt);
@@ -308,17 +314,19 @@ export class MaintenanceService {
       throw new BadRequestException('Soğutucu, kule, musluk ve SmartTap adetlerinin tamamı girilmelidir');
     }
     const equipmentChanged = point.coolerCount !== equipment.coolerCount || point.towerCount !== equipment.towerCount || point.tapCount !== equipment.tapCount || point.smarttapCount !== equipment.smarttapCount;
-    const locationPresenceConfirmed = dto.locationPresenceConfirmed ?? true;
-    const locationDecision = evaluateMaintenanceLocation({
-      enteredLate,
-      suspiciousBatch: false,
-      locationPresenceConfirmed,
-      accuracyMeters: dto.accuracyMeters,
-      visitLatitude: dto.latitude,
-      visitLongitude: dto.longitude,
-      canonicalLatitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
-      canonicalLongitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
-    });
+    const locationPresenceConfirmed = dateDecision.locationRequired ? dto.locationPresenceConfirmed ?? true : false;
+    const locationDecision = dateDecision.locationRequired
+      ? evaluateMaintenanceLocation({
+          enteredLate,
+          suspiciousBatch: false,
+          locationPresenceConfirmed,
+          accuracyMeters: dto.accuracyMeters,
+          visitLatitude: dto.latitude!,
+          visitLongitude: dto.longitude!,
+          canonicalLatitude: point.canonicalLatitude ? Number(point.canonicalLatitude) : null,
+          canonicalLongitude: point.canonicalLongitude ? Number(point.canonicalLongitude) : null,
+        })
+      : { distanceMeters: null, locationLearningEligible: false, locationReviewRequired: false, reviewReason: null };
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -333,16 +341,16 @@ export class MaintenanceService {
             enteredLate,
             lateEntryMinutes,
             lateEntryReason: enteredLate ? dto.lateEntryReason ?? null : null,
-            latitude: new Prisma.Decimal(dto.latitude),
-            longitude: new Prisma.Decimal(dto.longitude),
+            latitude: dateDecision.locationRequired ? new Prisma.Decimal(dto.latitude!) : null,
+            longitude: dateDecision.locationRequired ? new Prisma.Decimal(dto.longitude!) : null,
             accuracyMeters:
               dto.accuracyMeters !== undefined ? new Prisma.Decimal(dto.accuracyMeters) : null,
             locationPresenceConfirmed,
-            locationCapturedAt,
+            locationCapturedAt: dateDecision.locationRequired ? locationCapturedAt : null,
             locationLearningEligible: locationDecision.locationLearningEligible,
             locationReviewRequired: locationDecision.locationReviewRequired,
             suspiciousBatch: false,
-            reviewRecommended: enteredLate || locationDecision.locationReviewRequired,
+            reviewRecommended: dateDecision.locationRequired && locationDecision.locationReviewRequired,
             reviewReason: [enteredLate ? 'GERİYE DÖNÜK GİRİŞ' : null, locationDecision.reviewReason].filter(Boolean).join(' | ') || null,
             coolerCount: equipment.coolerCount!,
             towerCount: equipment.towerCount!,
@@ -364,6 +372,19 @@ export class MaintenanceService {
               actorId: dto.technicianId, entityType: 'POINT_EQUIPMENT', entityId: point.id, action: 'MAINTENANCE_VERIFIED_CHANGED',
               oldValue: { coolerCount: point.coolerCount, towerCount: point.towerCount, tapCount: point.tapCount, smarttapCount: point.smarttapCount },
               newValue: equipment, note: 'Bakım sırasında ekipman bilgisi doğrulandı ve güncellendi',
+            },
+          });
+        }
+        if (enteredLate) {
+          await tx.adminAuditLog.create({
+            data: {
+              actorId: dto.technicianId,
+              entityType: 'MAINTENANCE_VISIT',
+              entityId: created.id,
+              action: 'MAINTENANCE_ENTERED_LATE',
+              oldValue: Prisma.JsonNull,
+              newValue: { performedAt: performedAt.toISOString(), lateEntryMinutes, lateEntryReason: dto.lateEntryReason, locationCaptured: false },
+              note: 'Geriye dönük bakım girişi; konum değerlendirmesi uygulanmadı',
             },
           });
         }
@@ -395,7 +416,7 @@ export class MaintenanceService {
         return { visit: created, missedPeriods: backlogToMiss.length };
       });
 
-      await this.runPostProcessing(dto.technicianId, point.id);
+      if (dateDecision.locationRequired) await this.runPostProcessing(dto.technicianId, point.id);
 
       const visit =
         (await this.prisma.maintenanceVisit.findUnique({ where: { id: result.visit.id } })) ?? result.visit;
@@ -427,13 +448,18 @@ export class MaintenanceService {
     if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
     if (!admin || admin.role !== UserRole.ADMIN) throw new ForbiddenException('Konum onayını yalnızca admin verebilir');
     if (visit.status !== VisitStatus.VALID) throw new BadRequestException('Yalnızca geçerli bakım kaydının konumu onaylanabilir');
+    if (visit.enteredLate || visit.latitude === null || visit.longitude === null) {
+      throw new BadRequestException('Geriye dönük veya konumsuz bakım kaydının konumu onaylanamaz');
+    }
+    const visitLatitude = visit.latitude;
+    const visitLongitude = visit.longitude;
 
     return this.prisma.$transaction(async (tx) => {
       const point = await tx.point.update({
         where: { id: visit.pointId },
         data: {
-          canonicalLatitude: visit.latitude,
-          canonicalLongitude: visit.longitude,
+          canonicalLatitude: visitLatitude,
+          canonicalLongitude: visitLongitude,
           locationSource: LocationSource.MANUAL,
           locationConfidence: 100,
         },
@@ -459,8 +485,8 @@ export class MaintenanceService {
             locationConfidence: visit.point.locationConfidence,
           },
           newValue: {
-            canonicalLatitude: visit.latitude.toString(),
-            canonicalLongitude: visit.longitude.toString(),
+            canonicalLatitude: visitLatitude.toString(),
+            canonicalLongitude: visitLongitude.toString(),
             locationSource: LocationSource.MANUAL,
             locationConfidence: 100,
             maintenanceVisitId: visit.id,

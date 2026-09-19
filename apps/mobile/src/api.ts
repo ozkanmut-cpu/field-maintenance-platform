@@ -196,12 +196,14 @@ export function technicianDashboard(technicianId?: string) {
 export function completeMaintenance(input: {
   pointId: string;
   assistedForTechnicianId?: string;
-  latitude: number;
-  longitude: number;
+  performedAt?: string;
+  latitude?: number;
+  longitude?: number;
   accuracyMeters?: number;
   locationPresenceConfirmed?: boolean;
-  locationCapturedAt: string;
+  locationCapturedAt?: string;
   deviceRecordedAt?: string;
+  lateEntryReason?: string;
   coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
   idempotencyKey: string;
 }) {

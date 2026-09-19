@@ -45,14 +45,15 @@ export class MaintenanceAnomalyService {
       },
     });
 
+    const locationVisits: VisitSample[] = visits.filter((visit): visit is VisitSample => visit.latitude !== null && visit.longitude !== null);
     const flagged = new Map<string, string[]>();
     const windowMinutes = this.numberConfig('ANTI_BATCH_WINDOW_MINUTES', 12);
     const stationaryMeters = this.numberConfig('ANTI_BATCH_STATIONARY_METERS', 150);
     const maxSpeedKmh = this.numberConfig('ANTI_BATCH_MAX_SPEED_KMH', 160);
 
-    for (let index = 1; index < visits.length; index += 1) {
-      const previous = visits[index - 1];
-      const current = visits[index];
+    for (let index = 1; index < locationVisits.length; index += 1) {
+      const previous = locationVisits[index - 1];
+      const current = locationVisits[index];
       if (previous.pointId === current.pointId) continue;
 
       const elapsedMinutes =
@@ -87,7 +88,7 @@ export class MaintenanceAnomalyService {
 
     let appliedFlags = 0;
     for (const [visitId, reasons] of flagged.entries()) {
-      const visit = visits.find((item) => item.id === visitId);
+      const visit = locationVisits.find((item) => item.id === visitId);
       if (!visit) continue;
 
       const latestResolution = await this.prisma.maintenanceReviewResolution.findFirst({
