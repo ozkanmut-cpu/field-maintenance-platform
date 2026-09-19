@@ -112,6 +112,7 @@ export default function PaperworkManagement() {
     if (!q) return visits;
     return visits.filter((v) => `${v.point?.code ?? ''} ${v.point?.name ?? ''}`.toLocaleLowerCase('tr-TR').includes(q));
   }, [visits, search]);
+  const actionableSelected = selected.filter((id) => visible.some((visit) => visit.id === id));
 
   function toggle(id: string) { setSelected((items) => items.includes(id) ? items.filter((x) => x !== id) : [...items, id]); }
   function toggleAll() {
@@ -133,15 +134,15 @@ export default function PaperworkManagement() {
   }
 
   async function bulkUpdate() {
-    if (!selected.length) { setError('Toplu işlem için en az bir bakım seç.'); return; }
-    if (!window.confirm(`${selected.length} bakım kaydında ${bulkKind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'} durumu ${statusLabel[bulkStatus]} yapılsın mı?`)) return;
+    if (!actionableSelected.length) { setError('Toplu işlem için en az bir görünür bakım seç.'); return; }
+    if (!window.confirm(`${actionableSelected.length} bakım kaydında ${bulkKind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'} durumu ${statusLabel[bulkStatus]} yapılsın mı?`)) return;
     setBusy(true); setError(''); setNotice('');
     try {
       await api('/api/backend/maintenance/paperwork/bulk', {
         method: 'POST',
-        body: JSON.stringify({ items: selected.map((visitId) => ({ visitId, kind: bulkKind, status: bulkStatus, ...(bulkNote.trim() ? { note: bulkNote.trim() } : {}) })) }),
+        body: JSON.stringify({ items: actionableSelected.map((visitId) => ({ visitId, kind: bulkKind, status: bulkStatus, ...(bulkNote.trim() ? { note: bulkNote.trim() } : {}) })) }),
       });
-      setNotice(`${selected.length} bakım kaydının evrak durumu güncellendi.`);
+      setNotice(`${actionableSelected.length} bakım kaydının evrak durumu güncellendi.`);
       setBulkNote(''); await loadVisits();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -166,7 +167,7 @@ export default function PaperworkManagement() {
       <div className="dashboardCard"><span>Bakım</span><strong>{visits.length}</strong><small>{date}</small></div>
       <div className="dashboardCard"><span>Servis fişi bekleyen</span><strong>{pendingSlip}</strong><small>Eksik: {missingSlip}</small></div>
       <div className="dashboardCard"><span>Teyit bekleyen</span><strong>{pendingConfirmation}</strong><small>Eksik: {missingConfirmation}</small></div>
-      <div className="dashboardCard"><span>Seçili</span><strong>{selected.length}</strong><small>Toplu işlem için</small></div>
+      <div className="dashboardCard"><span>Seçili</span><strong>{actionableSelected.length}</strong><small>Toplu işlem için</small></div>
     </section>
 
     <section className="panel">
@@ -174,9 +175,9 @@ export default function PaperworkManagement() {
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
-        <select value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / nokta ara" />
+        <select value={technicianId} onChange={(e) => { setSelected([]); setTechnicianId(e.target.value); }}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
+        <input type="date" value={date} onChange={(e) => { setSelected([]); setDate(e.target.value); }} />
+        <input value={search} onChange={(e) => { setSelected([]); setSearch(e.target.value); }} placeholder="Müşteri no / nokta ara" />
       </div>
     </section>
 
@@ -210,7 +211,7 @@ export default function PaperworkManagement() {
         <select value={bulkKind} onChange={(e) => setBulkKind(e.target.value as PaperworkKind)}><option value="SERVICE_SLIP">Servis Fişi</option><option value="CONFIRMATION">Teyit</option></select>
         <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as PaperworkStatus)}><option value="PRESENT">Var</option><option value="MISSING">Eksik</option><option value="PENDING">Bekliyor</option></select>
         <input value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} maxLength={250} placeholder="Toplu işlem notu (opsiyonel)" />
-        <button disabled={busy || !selected.length} onClick={() => void bulkUpdate()}>SEÇİLİLERİ GÜNCELLE</button>
+        <button disabled={busy || !actionableSelected.length} onClick={() => void bulkUpdate()}>SEÇİLİLERİ GÜNCELLE</button>
       </div>
     </section>
 
