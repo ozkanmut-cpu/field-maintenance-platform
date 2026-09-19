@@ -12,6 +12,7 @@
     "bundle:android": "expo export --platform android"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "^8.4.4",
     "expo": "^54.0.0",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "^17.0.0",
