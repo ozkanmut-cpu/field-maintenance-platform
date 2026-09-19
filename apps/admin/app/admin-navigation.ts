@@ -39,7 +39,7 @@ export const navigationItems: NavigationItem[] = [
   { section: 'audit-log', label: 'İşlem Geçmişi', group: 'Sistem', icon: 'history' },
 ];
 
-export type AdminLocation = { section: AdminSection; pointId?: string; detailTab?: string; query?: string; page?: string };
+export type AdminLocation = { section: AdminSection; pointId?: string; detailTab?: string; query?: string; status?: string; page?: string; scrollY?: string };
 
 const sections = new Set<AdminSection>(navigationItems.map((item) => item.section).concat('point-detail'));
 
@@ -51,7 +51,9 @@ export function parseAdminLocation(search: string): AdminLocation {
     ...(params.get('pointId') ? { pointId: params.get('pointId')! } : {}),
     ...(params.get('tab') ? { detailTab: params.get('tab')! } : {}),
     ...(params.get('query') ? { query: params.get('query')! } : {}),
+    ...(params.get('status') ? { status: params.get('status')! } : {}),
     ...(params.get('page') ? { page: params.get('page')! } : {}),
+    ...(params.get('scrollY') ? { scrollY: params.get('scrollY')! } : {}),
   };
 }
 
@@ -60,7 +62,9 @@ export function buildAdminLocation(section: AdminSection, values: Omit<AdminLoca
   if (values.pointId) params.set('pointId', values.pointId);
   if (values.detailTab) params.set('tab', values.detailTab);
   if (values.query) params.set('query', values.query);
+  if (values.status) params.set('status', values.status);
   if (values.page) params.set('page', values.page);
+  if (values.scrollY) params.set('scrollY', values.scrollY);
   return `?${params.toString()}`;
 }
 
