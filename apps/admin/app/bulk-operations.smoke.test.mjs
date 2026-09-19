@@ -3,6 +3,37 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const path = new URL('./bulk-operations.tsx', import.meta.url);
+
+function loadStateHelper(name) {
+  const source = readFileSync(path, 'utf8');
+  const marker = `export ${name}`;
+  const start = source.indexOf(marker);
+  assert.notEqual(start, -1, `${name} must be available for behavioral testing`);
+  const end = source.indexOf('\n\n', start);
+  assert.notEqual(end, -1, `${name} must end before the component`);
+  return Function(`${source.slice(start, end).replace('export ', '')}; return ${name.split(' ').at(-1)};`)();
+}
+
+test('filter changes discard a confirmed selection instead of retaining hidden targets', () => {
+  const invalidateForFilterChange = loadStateHelper('function invalidateForFilterChange');
+  const state = invalidateForFilterChange();
+  assert.deepEqual(state.selected, []);
+  assert.equal(state.preview, false);
+  assert.equal(state.confirmed, false);
+});
+
+test('a refresh failure after a successful mutation cannot leave it retryable', async () => {
+  const completeBulkMutation = loadStateHelper('async function completeBulkMutation');
+  const events = [];
+  await completeBulkMutation(
+    async () => events.push('mutate'),
+    () => events.push('reset'),
+    async () => { throw new Error('refresh failed'); },
+    () => events.push('warn'),
+  );
+  assert.deepEqual(events, ['mutate', 'reset', 'warn']);
+});
+
 test('bulk operations require preview and explicit confirmation', () => {
   assert.equal(existsSync(path), true);
   const source = readFileSync(path, 'utf8');
@@ -13,7 +44,7 @@ test('bulk operations require preview and explicit confirmation', () => {
   assert.match(source, /const \[statusFilter, setStatusFilter\]/, 'targets must be filterable by the supported status filter');
   assert.match(source, /const visible = useMemo/, 'the table must render the filtered target set');
   assert.match(source, /visible\.map\(\(point\)/, 'only discoverable targets may be selected');
-  assert.match(source, /await loadPoints\(\)/, 'successful updates must reload current point data');
+  assert.match(source, /completeBulkMutation/, 'successful updates must reload current point data');
   assert.doesNotMatch(source, /canonicalLatitude|canonicalLongitude|googlePlaceId|locationSource|locationConfidence/);
 });
 
