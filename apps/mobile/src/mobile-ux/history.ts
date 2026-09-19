@@ -115,6 +115,24 @@ export function historyRangeFor(period: HistoryPeriod, selectedDate?: string, no
   return { from: key(monday), to: key(addDays(monday, 6)) };
 }
 
+export function historyDateKeys(from: string, to: string) {
+  const start = dateFromKey(from);
+  const end = dateFromKey(to);
+  if (start.getTime() > end.getTime()) throw new Error('Geçerli bir tarih aralığı seç.');
+  const dates: string[] = [];
+  for (let date = start; date.getTime() <= end.getTime(); date = addDays(date, 1)) dates.push(key(date));
+  return dates;
+}
+
+export function canTechnicianRevertHistoryItem(performedAt: string, now = new Date()) {
+  const performed = new Date(performedAt);
+  if (Number.isNaN(performed.getTime())) return false;
+  const today = dateFromKey(currentBusinessDate(now));
+  const yesterday = addDays(today, -1);
+  const performedKey = currentBusinessDate(performed);
+  return performedKey === key(today) || performedKey === key(yesterday);
+}
+
 export function availableHistoryFilters(items: TechnicianHistoryItem[]): HistoryFilterOption[] {
   const options: HistoryFilterOption[] = [{ value: 'ALL', label: 'Tümü', count: items.length }];
   for (const option of TYPE_FILTERS) {

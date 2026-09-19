@@ -109,3 +109,12 @@ test('history filters expose only operation kinds and help that exist in the rea
   assert.equal(availableHistoryFilters(items).some(option => option.value === 'NON_MAINTENANCE_VISIT'), false);
   assert.equal(availableHistoryFilters(items.slice(0, 1)).some(option => option.value === 'HELP'), false);
 });
+
+test('allows technician reverts only on the current Istanbul business day or the day before', () => {
+  const { canTechnicianRevertHistoryItem } = loadHistory();
+  const now = new Date('2026-09-19T09:00:00.000Z');
+
+  assert.equal(canTechnicianRevertHistoryItem('2026-09-19T06:00:00.000Z', now), true);
+  assert.equal(canTechnicianRevertHistoryItem('2026-09-18T20:59:59.000Z', now), true);
+  assert.equal(canTechnicianRevertHistoryItem('2026-09-17T20:59:59.000Z', now), false);
+});

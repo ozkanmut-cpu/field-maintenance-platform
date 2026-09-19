@@ -510,6 +510,9 @@ export class MaintenanceService {
     if (actor.role !== UserRole.ADMIN && visit.technicianId !== actor.id) {
       throw new ForbiddenException('Teknisyen yalnızca kendi bakım kaydını geri alabilir');
     }
+    if (actor.role === UserRole.TECHNICIAN) {
+      this.assertTechnicianCanRevertRecentVisit(visit.performedAt);
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let reverted = visit;
@@ -1464,6 +1467,15 @@ export class MaintenanceService {
     previousMonday.setUTCDate(today.getUTCDate() + 1 - weekday - 7);
     if (this.dateOnly(performedAt) < previousMonday || this.dateOnly(performedAt) > today) {
       throw new BadRequestException('Bakım tarihi geçen haftanın pazartesinden bugün dahil tarihine kadar seçilebilir');
+    }
+  }
+
+  private assertTechnicianCanRevertRecentVisit(performedAt: Date) {
+    const today = this.dateKey(new Date());
+    const yesterday = this.shiftDateKey(today, -1);
+    const performedKey = this.dateKey(performedAt);
+    if (performedKey !== today && performedKey !== yesterday) {
+      throw new BadRequestException('Teknisyen yalnızca bugün veya dün kaydedilen bakımı geri alabilir');
     }
   }
 }

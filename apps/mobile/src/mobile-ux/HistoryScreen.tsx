@@ -8,6 +8,7 @@ import {
   HistoryFilter,
   HistoryPeriod,
   isBusinessDateKey,
+  canTechnicianRevertHistoryItem,
 } from './history';
 
 type HistoryScreenProps = {
@@ -66,6 +67,7 @@ function PeriodButton({ label, selected, onPress }: { label: string; selected: b
 function HistoryRow({ item, reverting, onRevert }: { item: TechnicianHistoryItem; reverting: boolean; onRevert: (item: TechnicianHistoryItem) => void }) {
   const presentation = itemPresentation(item);
   const name = item.point?.name ?? item.prospect?.name ?? 'İşlem';
+  const canRevert = item.type === 'MAINTENANCE' && canTechnicianRevertHistoryItem(item.at);
   return <View style={styles.row}>
     <View style={[styles.icon, { backgroundColor: presentation.color }]}><Feather name={presentation.icon} size={17} color="#fff" /></View>
     <View style={styles.rowCopy}>
@@ -73,7 +75,7 @@ function HistoryRow({ item, reverting, onRevert }: { item: TechnicianHistoryItem
       <Text style={styles.itemName}>{name}</Text>
       <Text style={[styles.itemType, { color: presentation.color }]}>{presentation.label}</Text>
       {item.assistedForTechnician ? <View style={styles.helpBadge}><Feather name="users" size={13} color="#8B6508" /><Text style={styles.helpText}>{item.assistedForTechnician.name} için yardım</Text></View> : null}
-      {item.type === 'MAINTENANCE' ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${name} bakımını geri al`} disabled={reverting} onPress={() => onRevert(item)} style={[styles.revertButton, reverting && styles.disabled]}><Feather name="rotate-ccw" size={15} color="#B7372F" /><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity> : null}
+      {canRevert ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${name} bakımını geri al`} disabled={reverting} onPress={() => onRevert(item)} style={[styles.revertButton, reverting && styles.disabled]}><Feather name="rotate-ccw" size={15} color="#B7372F" /><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity> : null}
     </View>
   </View>;
 }

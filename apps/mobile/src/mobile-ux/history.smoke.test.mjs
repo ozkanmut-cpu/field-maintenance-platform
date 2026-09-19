@@ -67,6 +67,14 @@ test('history keeps destructive revert confirmation and refreshes the selected r
   assert.match(app, /accessibilityLabel="Geçmişi yenile"/);
 });
 
+test('history exposes revert only for maintenance entries from today or yesterday', () => {
+  const screen = source(screenFile);
+  const helper = source(helperFile);
+
+  assert.match(screen, /canTechnicianRevertHistoryItem\(item\.at\)/);
+  assert.match(helper, /export function canTechnicianRevertHistoryItem/);
+});
+
 test('editing a custom date does not change the active range until it is applied', () => {
   const screen = source(screenFile);
   const app = source(appFile);

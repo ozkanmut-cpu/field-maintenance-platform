@@ -25,7 +25,7 @@ import { CustomersScreen } from './mobile-ux/CustomersScreen';
 import { HistoryScreen } from './mobile-ux/HistoryScreen';
 import { EquipmentCounts } from './mobile-ux/equipment';
 import { completionPerformedAt, completionDateBounds } from './mobile-ux/completion-date';
-import { currentBusinessDate, historyRangeFor, HistoryPeriod, HistoryRequestCoordinator } from './mobile-ux/history';
+import { currentBusinessDate, historyDateKeys, historyRangeFor, HistoryPeriod, HistoryRequestCoordinator } from './mobile-ux/history';
 import { locationPresentationState } from './mobile-ux/task-presentation';
 import { Toast } from './mobile-ux/Feedback';
 import { SubmissionIntentStore } from './mobile-ux/submission-intent';
@@ -230,7 +230,7 @@ export default function CorporateApp() {
     setHistoryLoading(true); setHistoryError(null);
     try {
       const range = historyRangeFor(period, selectedDate);
-      const history = await technicianHistory(range);
+      const history = await loadHistoryRange(range);
       const applied = historyRequests.current!.commit(request);
       if (!applied) return;
       setHistoryItems(history.items.slice().reverse());
@@ -242,6 +242,18 @@ export default function CorporateApp() {
     } finally {
       if (historyRequests.current!.isCurrent(request)) setHistoryLoading(false);
     }
+  }
+  async function loadHistoryRange(range: { from: string; to: string }) {
+    try {
+      const ranged = await technicianHistory(range);
+      if (ranged.from === range.from && ranged.to === range.to) return ranged;
+    } catch {
+      // Some older deployed APIs only accept the original single-day query.
+    }
+    const dayResults = await Promise.all(historyDateKeys(range.from, range.to).map(date => technicianHistory({ date })));
+    const items = dayResults.flatMap(result => result.items);
+    const unique = Array.from(new Map(items.map(item => [`${item.type}:${item.id}`, item])).values());
+    return { items: unique };
   }
   function retryHistory() {
     const selection = historyRequests.current!.retry ?? historyRequests.current!.applied;
