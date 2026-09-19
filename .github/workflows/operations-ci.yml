@@ -13,6 +13,8 @@ on:
       - 'apps/admin/app/anomaly-review.smoke.test.mjs'
       - 'apps/admin/app/maintenance-calendar.tsx'
       - 'apps/admin/app/maintenance-calendar.smoke.test.mjs'
+      - 'apps/admin/app/location-matching.tsx'
+      - 'apps/admin/app/location-matching.smoke.test.mjs'
       - 'docs/V1_TODO.md'
       - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
@@ -68,6 +70,7 @@ jobs:
           apps/admin/app/operations.approvals.smoke.test.mjs
           apps/admin/app/anomaly-review.smoke.test.mjs
           apps/admin/app/maintenance-calendar.smoke.test.mjs
+          apps/admin/app/location-matching.smoke.test.mjs
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
