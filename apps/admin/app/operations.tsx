@@ -518,8 +518,8 @@ return (
 </div>
 <section className="dashboardGrid" aria-label="Yapılamadı onay özeti">
 <div className="dashboardCard"><span>Bekleyen kayıtlar</span><strong>{attemptQueue.length}</strong><small>Yönetici kararı gerekiyor</small></div>
-<div className="dashboardCard"><span>Son 20 onay</span><strong>{reviewedAttemptCounts.approved}</strong><small>İlgili görev kapatıldı</small></div>
-<div className="dashboardCard"><span>Son 20 ret</span><strong>{reviewedAttemptCounts.rejected}</strong><small>İlgili görev açık kaldı</small></div>
+<div className="dashboardCard"><span>Son 20 onay</span><strong>{loading ? '—' : reviewedAttemptCounts.approved}</strong><small>İlgili görev kapatıldı</small></div>
+<div className="dashboardCard"><span>Son 20 ret</span><strong>{loading ? '—' : reviewedAttemptCounts.rejected}</strong><small>İlgili görev açık kaldı</small></div>
 </section>
 <div className="tableWrap">
 <table>
