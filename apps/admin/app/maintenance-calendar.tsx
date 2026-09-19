@@ -418,3 +418,33 @@ export default function MaintenanceCalendar() {
                           className={
                             item.status === "COMPLETED" ? "pill active" : "pill"
                           }
+                        >
+                          {item.status === "OPEN"
+                            ? "AÇIK"
+                            : item.status === "COMPLETED"
+                              ? "TAMAMLANDI"
+                              : "KAÇIRILDI"}
+                        </span>
+                      </td>
+                      <td>
+                        {item.visits.length
+                          ? item.visits
+                              .map((v) =>
+                                new Date(v.performedAt).toLocaleDateString(
+                                  "tr-TR",
+                                ),
+                              )
+                              .join(", ")
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          </> : null}
+        </section>
+      ) : null}
+    </>
+  );
+}
