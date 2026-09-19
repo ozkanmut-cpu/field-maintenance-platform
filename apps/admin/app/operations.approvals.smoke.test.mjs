@@ -10,4 +10,6 @@ test('attempt approvals keep the real decision workflow in an operational review
   assert.match(source, /Onaylanan görev kapanır; reddedilen görev açık kalır\./);
   assert.match(source, /Bekleyen kayıtlar/);
   assert.match(source, /Son Yapılamadı Kararları/);
+  assert.match(source, /loading \? '—' : reviewedAttemptCounts\.approved/,
+    'review history counts must stay unknown while the real queue is loading');
 });
