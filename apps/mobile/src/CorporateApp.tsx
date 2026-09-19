@@ -24,6 +24,7 @@ import { CustomerDetailScreen } from './mobile-ux/CustomerDetailScreen';
 import { CustomersScreen } from './mobile-ux/CustomersScreen';
 import { HistoryScreen } from './mobile-ux/HistoryScreen';
 import { EquipmentCounts } from './mobile-ux/equipment';
+import { completionPerformedAt, completionDateBounds } from './mobile-ux/completion-date';
 import { currentBusinessDate, historyRangeFor, HistoryPeriod, HistoryRequestCoordinator } from './mobile-ux/history';
 import { locationPresentationState } from './mobile-ux/task-presentation';
 import { Toast } from './mobile-ux/Feedback';
@@ -34,7 +35,9 @@ type Screen = 'TASKS' | 'TASK_DETAIL' | 'ATTEMPT' | 'NEARBY' | 'CUSTOMERS' | 'CU
 type AttemptSubmitPayload = Parameters<typeof recordMaintenanceAttempt>[0];
 type AttemptSubmitIntent = Pick<AttemptSubmitPayload, 'pointId' | 'assistedForTechnicianId' | 'reason' | 'note'>;
 type CompletionSubmitPayload = Parameters<typeof completeMaintenance>[0];
-type CompletionSubmitIntent = Pick<CompletionSubmitPayload, 'pointId' | 'assistedForTechnicianId' | 'coolerCount' | 'towerCount' | 'tapCount' | 'smarttapCount'>;
+type CompletionSubmitIntent = Pick<CompletionSubmitPayload, 'pointId' | 'assistedForTechnicianId' | 'coolerCount' | 'towerCount' | 'tapCount' | 'smarttapCount'> & {
+  performedOn: string;
+};
 
 const APP_ICON = require('../assets/fici-bakim-icon.png');
 const FEATHER_ALIASES: Record<string, React.ComponentProps<typeof ExpoFeather>['name']> = {
@@ -371,10 +374,11 @@ export default function CorporateApp() {
     finally { completionInFlight.current = false; setBusy(false); }
   }
 
-  async function completeTask(task: DueTask, equipmentValues: EquipmentCounts, assistedForTechnicianId?: string) {
+  async function completeTask(task: DueTask, equipmentValues: EquipmentCounts, performedOn: string, assistedForTechnicianId?: string) {
     if (completionInFlight.current) return;
     completionInFlight.current = true;
-    const intent: CompletionSubmitIntent = { pointId: task.pointId, ...assistanceRequestFields(assistedForTechnicianId), ...equipmentValues };
+    const enteredLate = performedOn !== completionDateBounds().max;
+    const intent: CompletionSubmitIntent = { pointId: task.pointId, ...assistanceRequestFields(assistedForTechnicianId), ...equipmentValues, performedOn };
     let locationReviewRequired = false;
     setBusy(true);
     try {
@@ -382,8 +386,14 @@ export default function CorporateApp() {
       if (retryPayload) return await saveCompletedTask(task, assistedForTechnicianId, retryPayload);
       const loc = await currentLocation();
       const distance = task.latitude != null && task.longitude != null ? distanceMeters(loc.coords.latitude, loc.coords.longitude, task.latitude, task.longitude) : null;
-      locationReviewRequired = locationPresentationState({ canonicalLatitude: task.latitude, canonicalLongitude: task.longitude, distanceMeters: distance, accuracyMeters: loc.coords.accuracy }) !== 'READY';
-      const basePayload = { ...intent, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), equipmentConfirmed: true as const, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+      locationReviewRequired = !enteredLate && locationPresentationState({ canonicalLatitude: task.latitude, canonicalLongitude: task.longitude, distanceMeters: distance, accuracyMeters: loc.coords.accuracy }) !== 'READY';
+      const { performedOn: _performedOn, ...requestIntent } = intent;
+      const basePayload = { ...requestIntent, performedAt: completionPerformedAt(performedOn), lateEntryReason: enteredLate ? 'Teknisyen mobil geçmiş tarih seçimi' : undefined, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), equipmentConfirmed: true as const, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+      if (enteredLate) {
+        const payload = { ...basePayload, locationPresenceConfirmed: false };
+        completionSubmission.current.remember(intent, payload);
+        return await saveCompletedTask(task, assistedForTechnicianId, payload);
+      }
       if (!locationReviewRequired) {
         const payload = { ...basePayload, locationPresenceConfirmed: true };
         completionSubmission.current.remember(intent, payload);
@@ -459,7 +469,7 @@ export default function CorporateApp() {
     </ScrollView> :
     screen === 'TASK_DETAIL' && pendingTask ? <TaskDetailScreen task={pendingTask} onBack={() => { setPendingTask(null); setPendingAssist(undefined); setScreen('TASKS'); }} onDirections={task => void openDirections(task)} onBeginCompletion={() => prepareComplete(pendingTask, pendingAssist)} onBeginAttempt={() => prepareAttempt(pendingTask, pendingAssist)} /> :
     screen === 'ATTEMPT' && pendingTask ? <AttemptScreen task={pendingTask} submitting={busy} error={attemptError} onBack={() => setScreen('TASK_DETAIL')} onIntentChange={() => attemptSubmission.current.clear()} onSubmit={(reason, note) => void saveAttempt(pendingTask, reason, note, pendingAssist)} /> :
-    screen === 'EQUIPMENT_CONFIRM' && pendingTask ? <CompleteMaintenanceScreen task={pendingTask} submitting={busy} onBack={() => setScreen('TASK_DETAIL')} onIntentChange={() => completionSubmission.current.clearIfIdle(completionInFlight.current)} onSubmit={equipmentValues => void completeTask(pendingTask, equipmentValues, pendingAssist)} /> :
+    screen === 'EQUIPMENT_CONFIRM' && pendingTask ? <CompleteMaintenanceScreen task={pendingTask} submitting={busy} onBack={() => setScreen('TASK_DETAIL')} onIntentChange={() => completionSubmission.current.clearIfIdle(completionInFlight.current)} onSubmit={(equipmentValues, performedOn) => void completeTask(pendingTask, equipmentValues, performedOn, pendingAssist)} /> :
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" refreshControl={screen === 'CUSTOMERS' ? <RefreshControl accessibilityLabel="Müşterileri yenile" refreshing={customersLoading} onRefresh={() => void loadCustomers()} /> : screen === 'HISTORY' ? <RefreshControl accessibilityLabel="Geçmişi yenile" refreshing={historyLoading} onRefresh={() => void loadHistory(historyPeriod, historyDate)} /> : undefined}>
       {screen === 'NEARBY' && (nearbyError ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={nearbyError} /> : <NearbyScreen items={nearbyItems} origin={deviceLocation} loading={nearbyLoading} refresh={() => void loadNearby()} directions={openNearbyDirections} />)}
       {screen === 'CUSTOMERS' && <CustomersScreen customers={customers} loading={customersLoading} error={customersError} search={customerSearch} onSearchChange={setCustomerSearch} onOpenCustomer={openCustomer} onRefresh={() => void loadCustomers()} />}

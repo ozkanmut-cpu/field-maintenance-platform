@@ -32,13 +32,25 @@ test('completion keeps routine location-review copy out of the entry screen', ()
   assert.doesNotMatch(screen, /noktada olup olmadığın sorulacak/);
 });
 
-test('completion sends low-accuracy, missing-accuracy, and non-finite accuracy evidence through the existing presence decision', () => {
+test('past completion skips every client location evaluation while current completion keeps the existing policy', () => {
   const app = source(appFile);
 
+  assert.match(app, /if \(enteredLate\) \{[\s\S]*locationPresenceConfirmed: false[\s\S]*saveCompletedTask/);
   assert.match(app, /locationPresentationState\(\{[\s\S]*accuracyMeters: loc\.coords\.accuracy[\s\S]*\}\) !== 'READY'/);
   assert.match(app, /if \(!locationReviewRequired\) \{[\s\S]*locationPresenceConfirmed: true[\s\S]*saveCompletedTask/);
   assert.match(app, /Alert\.alert\('Noktada mısınız\?'/);
   assert.doesNotMatch(app, /if \(distance !== null && distance <= 250\)/);
+});
+
+test('completion exposes an optional date that defaults to today and is bounded to last Monday', () => {
+  const screen = source(screenFile);
+  const app = source(appFile);
+
+  assert.match(screen, /Bakım tarihi/);
+  assert.match(screen, /isAllowedCompletionDate/);
+  assert.match(screen, /onSubmit: \(equipment: EquipmentCounts, performedOn: string\)/);
+  assert.match(app, /performedAt: completionPerformedAt\(performedOn\)/);
+  assert.match(app, /lateEntryReason: enteredLate \? 'Teknisyen mobil geçmiş tarih seçimi' : undefined/);
 });
 
 test('completion locks all equipment inputs, retries the exact payload, and guards snapshot invalidation', () => {

@@ -272,6 +272,7 @@ export class MaintenanceService {
     if (performedAt.getTime() > now.getTime() + 5 * 60_000) {
       throw new BadRequestException('Bakım tarihi gelecekte olamaz');
     }
+    this.assertCompletionDateWithinLastWeek(performedAt, now);
 
     const effectiveAssignment = await this.assignments.effectiveForPoint(point.id, performedAt);
     if (!effectiveAssignment.technicianId) {
@@ -329,8 +330,13 @@ export class MaintenanceService {
       throw new BadRequestException('Soğutucu, kule, musluk ve SmartTap adetlerinin tamamı girilmelidir');
     }
     const equipmentChanged = point.coolerCount !== equipment.coolerCount || point.towerCount !== equipment.towerCount || point.tapCount !== equipment.tapCount || point.smarttapCount !== equipment.smarttapCount;
-    const locationPresenceConfirmed = dto.locationPresenceConfirmed ?? true;
-    const locationDecision = evaluateMaintenanceLocation({
+    const locationPresenceConfirmed = enteredLate ? false : dto.locationPresenceConfirmed ?? true;
+    const locationDecision = enteredLate ? {
+      distanceMeters: null,
+      locationLearningEligible: false,
+      locationReviewRequired: false,
+      reviewReason: null,
+    } : evaluateMaintenanceLocation({
       enteredLate,
       suspiciousBatch: false,
       locationPresenceConfirmed,
@@ -363,7 +369,7 @@ export class MaintenanceService {
             locationLearningEligible: locationDecision.locationLearningEligible,
             locationReviewRequired: locationDecision.locationReviewRequired,
             suspiciousBatch: false,
-            reviewRecommended: enteredLate || locationDecision.locationReviewRequired,
+            reviewRecommended: locationDecision.locationReviewRequired,
             reviewReason: [enteredLate ? 'GERİYE DÖNÜK GİRİŞ' : null, locationDecision.reviewReason].filter(Boolean).join(' | ') || null,
             coolerCount: equipment.coolerCount!,
             towerCount: equipment.towerCount!,
@@ -1449,5 +1455,15 @@ export class MaintenanceService {
 
   private dateKey(date: Date) {
     return businessDateKey(date);
+  }
+
+  private assertCompletionDateWithinLastWeek(performedAt: Date, now: Date) {
+    const today = this.dateOnly(now);
+    const weekday = today.getUTCDay() || 7;
+    const previousMonday = new Date(today);
+    previousMonday.setUTCDate(today.getUTCDate() + 1 - weekday - 7);
+    if (this.dateOnly(performedAt) < previousMonday || this.dateOnly(performedAt) > today) {
+      throw new BadRequestException('Bakım tarihi geçen haftanın pazartesinden bugün dahil tarihine kadar seçilebilir');
+    }
   }
 }
