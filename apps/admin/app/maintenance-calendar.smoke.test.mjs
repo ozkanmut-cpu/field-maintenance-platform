@@ -1,27 +1,27 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('./maintenance-calendar.tsx', import.meta.url), 'utf8');
+const smokeTestSource = readFileSync(new URL(import.meta.url), 'utf8');
 
 function calendarModule() {
-  const ts = require('typescript');
-  const js = ts.transpileModule(source, {
-    compilerOptions: {
-      jsx: ts.JsxEmit.ReactJSX,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
-  const mod = { exports: {} };
-  const localRequire = (id) => id === './admin-icons'
-    ? { AdminIcon: () => null }
-    : require(id);
-  new Function('require', 'module', 'exports', js)(localRequire, mod, mod.exports);
-  return mod.exports;
+  const start = source.indexOf('export function startMaintenanceQueueRequest');
+  const end = source.indexOf('\nexport default function MaintenanceCalendar');
+  assert.notEqual(start, -1, 'queue loader must be exported for deterministic testing');
+  assert.notEqual(end, -1, 'queue loader must precede the calendar component');
+  const js = source.slice(start, end)
+    .replace('asOf: string,', 'asOf,')
+    .replace('handlers: QueueHandlers,', 'handlers,')
+    .replace('fetcher: typeof fetch = fetch,', 'fetcher = fetch,')
+    .replace('(dueBody as { items: DueItem[] })', 'dueBody')
+    .replace('(usersBody as Technician[])', 'usersBody');
+  return import(`data:text/javascript,${encodeURIComponent(js)}`);
 }
+
+test('maintenance calendar deferred-fetch harness avoids runtime TypeScript evaluation', () => {
+  assert.doesNotMatch(smokeTestSource, new RegExp('new' + '\\s+Function'));
+});
 
 test('maintenance calendar keeps real due and obligation history contracts in an operational queue', () => {
   assert.match(source, /\/api\/backend\/maintenance\/due/);
@@ -57,7 +57,7 @@ test('maintenance calendar keeps history loading and empty states separate witho
 });
 
 test('superseded maintenance queue requests cannot replace newer results, errors, or loading state', async () => {
-  const { startMaintenanceQueueRequest } = calendarModule();
+  const { startMaintenanceQueueRequest } = await calendarModule();
   for (const staleOutcome of ['success', 'error']) {
     const loading = [];
     const items = [];
