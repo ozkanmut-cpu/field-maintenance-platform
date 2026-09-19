@@ -11,7 +11,12 @@ function loadStateHelper(name) {
   assert.notEqual(start, -1, `${name} must be available for behavioral testing`);
   const end = source.indexOf('\n\n', start);
   assert.notEqual(end, -1, `${name} must end before the component`);
-  return Function(`${source.slice(start, end).replace('export ', '')}; return ${name.split(' ').at(-1)};`)();
+  const helper = source.slice(start, end)
+    .replace('export ', '')
+    .replace(/: \(\) => Promise<void>/g, '')
+    .replace(/: \(\) => void/g, '')
+    .replace(/\): Promise<boolean>/, ')');
+  return Function(`${helper}; return ${name.split(' ').at(-1)};`)();
 }
 
 test('filter changes discard a confirmed selection instead of retaining hidden targets', () => {
@@ -32,6 +37,18 @@ test('a refresh failure after a successful mutation cannot leave it retryable', 
     () => events.push('warn'),
   );
   assert.deepEqual(events, ['mutate', 'reset', 'warn']);
+});
+
+test('bulk mutation helper has strict TypeScript callback and return types', () => {
+  const source = readFileSync(path, 'utf8');
+  assert.match(source, /async function completeBulkMutation\([\s\S]*mutate: \(\) => Promise<void>[\s\S]*reset: \(\) => void[\s\S]*reload: \(\) => Promise<void>[\s\S]*warn: \(\) => void[\s\S]*\): Promise<boolean>/);
+});
+
+test('both target discovery controls use the selection invalidation path', () => {
+  const source = readFileSync(path, 'utf8');
+  assert.match(source, /function changeFilter[\s\S]*invalidateForFilterChange\(\)/);
+  assert.match(source, /onChange=\{\(event\) => changeFilter\(\(\) => setQuery/);
+  assert.match(source, /onChange=\{\(event\) => changeFilter\(\(\) => setStatusFilter/);
 });
 
 test('bulk operations require preview and explicit confirmation', () => {
