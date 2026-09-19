@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import {
   AttemptReviewStatus,
@@ -35,6 +36,12 @@ import { MaintenanceEngineService } from './maintenance-engine.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
 import { evaluateMaintenanceLocation } from './maintenance-location-policy';
+
+type TechnicianHistoryQuery = {
+  date?: string;
+  from?: string;
+  to?: string;
+};
 
 @Injectable()
 export class MaintenanceService {
@@ -138,11 +145,12 @@ export class MaintenanceService {
     };
   }
 
-  async technicianHistory(technicianId: string, dateInput?: string) {
+  async technicianHistory(
+    technicianId: string,
+    query: TechnicianHistoryQuery = {},
+  ) {
     await this.requireTechnician(technicianId);
-    const date = dateInput ? new Date(dateInput) : new Date();
-    this.assertValidDate(date, 'date');
-    const { start, end } = businessDayRange(date);
+    const { from, to, start, end } = this.historyDateRange(query);
 
     const [visits, attempts, nonMaintenanceVisits, prospectVisits] = await Promise.all([
       this.prisma.maintenanceVisit.findMany({
@@ -171,6 +179,8 @@ export class MaintenanceService {
         select: {
           id: true,
           attemptedAt: true,
+          assistedForTechnicianId: true,
+          assistedForTechnician: { select: { id: true, name: true, username: true } },
           reason: true,
           note: true,
           point: { select: { id: true, code: true, name: true } },
@@ -213,7 +223,9 @@ export class MaintenanceService {
     ].sort((a, b) => a.at.getTime() - b.at.getTime());
 
     return {
-      date: this.dateKey(date),
+      date: from,
+      from,
+      to,
       maintenanceCount: visits.length,
       attemptCount: attempts.length,
       nonMaintenanceVisitCount: nonMaintenanceVisits.length,
@@ -224,10 +236,19 @@ export class MaintenanceService {
   }
 
   async complete(dto: CompleteMaintenanceDto) {
+    const requestFingerprint = this.completeRequestFingerprint(dto);
     const existingByKey = await this.prisma.maintenanceVisit.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
     });
-    if (existingByKey) return existingByKey;
+    if (existingByKey) {
+      const requestMatches = existingByKey.requestFingerprint === null
+        ? this.legacyCompletionMatches(existingByKey, dto)
+        : existingByKey.requestFingerprint === requestFingerprint;
+      if (!requestMatches) {
+        throw new ConflictException('Bu anahtar farklı bir bakım isteği için kullanılmış');
+      }
+      return existingByKey;
+    }
 
     const point = await this.prisma.point.findFirst({
       where: { id: dto.pointId, deletedAt: null },
@@ -351,6 +372,7 @@ export class MaintenanceService {
             equipmentConfirmed: true,
             status: VisitStatus.VALID,
             idempotencyKey: dto.idempotencyKey,
+            requestFingerprint,
           },
         });
 
@@ -517,10 +539,19 @@ export class MaintenanceService {
   }
 
   async recordAttempt(dto: MaintenanceAttemptDto) {
+    const requestFingerprint = this.attemptRequestFingerprint(dto);
     const existing = await this.prisma.maintenanceAttempt.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
     });
-    if (existing) return existing;
+    if (existing) {
+      const requestMatches = existing.requestFingerprint === null
+        ? this.legacyAttemptMatches(existing, dto)
+        : existing.requestFingerprint === requestFingerprint;
+      if (!requestMatches) {
+        throw new ConflictException('Bu anahtar farklı bir bakım denemesi için kullanılmış');
+      }
+      return existing;
+    }
 
     const [point] = await Promise.all([
       this.prisma.point.findFirst({ where: { id: dto.pointId, deletedAt: null } }),
@@ -561,6 +592,7 @@ export class MaintenanceService {
             dto.accuracyMeters !== undefined ? new Prisma.Decimal(dto.accuracyMeters) : null,
           locationCapturedAt,
           idempotencyKey: dto.idempotencyKey,
+          requestFingerprint,
         },
       });
     } catch (error) {
@@ -1207,6 +1239,170 @@ export class MaintenanceService {
 
   private rate(count: number, total: number) {
     return total ? Math.round((count / total) * 1000) / 10 : 0;
+  }
+
+  private completeRequestFingerprint(dto: CompleteMaintenanceDto) {
+    return this.requestFingerprint({
+      pointId: dto.pointId,
+      technicianId: dto.technicianId ?? null,
+      assistedForTechnicianId: dto.assistedForTechnicianId ?? null,
+      performedAt: dto.performedAt ?? null,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      accuracyMeters: dto.accuracyMeters ?? null,
+      locationPresenceConfirmed: dto.locationPresenceConfirmed ?? null,
+      locationCapturedAt: dto.locationCapturedAt,
+      deviceRecordedAt: dto.deviceRecordedAt ?? null,
+      lateEntryReason: dto.lateEntryReason ?? null,
+      coolerCount: dto.coolerCount ?? null,
+      towerCount: dto.towerCount ?? null,
+      tapCount: dto.tapCount ?? null,
+      smarttapCount: dto.smarttapCount ?? null,
+      equipmentConfirmed: dto.equipmentConfirmed,
+    });
+  }
+
+  private attemptRequestFingerprint(dto: MaintenanceAttemptDto) {
+    return this.requestFingerprint({
+      pointId: dto.pointId,
+      technicianId: dto.technicianId ?? null,
+      assistedForTechnicianId: dto.assistedForTechnicianId ?? null,
+      reason: dto.reason,
+      note: dto.note ?? null,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      accuracyMeters: dto.accuracyMeters ?? null,
+      locationCapturedAt: dto.locationCapturedAt,
+    });
+  }
+
+  private requestFingerprint(payload: Record<string, unknown>) {
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
+  private legacyCompletionMatches(
+    existing: {
+      pointId: string;
+      technicianId: string;
+      assistedForTechnicianId: string | null;
+      performedAt: Date;
+      latitude: Prisma.Decimal;
+      longitude: Prisma.Decimal;
+      accuracyMeters: Prisma.Decimal | null;
+      locationPresenceConfirmed: boolean;
+      locationCapturedAt: Date;
+      deviceRecordedAt: Date | null;
+      lateEntryReason: string | null;
+      coolerCount: number | null;
+      towerCount: number | null;
+      tapCount: number | null;
+      smarttapCount: number | null;
+      equipmentConfirmed: boolean;
+    },
+    dto: CompleteMaintenanceDto,
+  ) {
+    return existing.pointId === dto.pointId
+      && existing.technicianId === dto.technicianId
+      && existing.assistedForTechnicianId === (dto.assistedForTechnicianId ?? null)
+      && (dto.performedAt === undefined || existing.performedAt.getTime() === new Date(dto.performedAt).getTime())
+      && Number(existing.latitude) === dto.latitude
+      && Number(existing.longitude) === dto.longitude
+      && this.optionalDecimalMatches(existing.accuracyMeters, dto.accuracyMeters)
+      && existing.locationPresenceConfirmed === (dto.locationPresenceConfirmed ?? true)
+      && existing.locationCapturedAt.getTime() === new Date(dto.locationCapturedAt).getTime()
+      && this.optionalDateMatches(existing.deviceRecordedAt, dto.deviceRecordedAt)
+      && existing.lateEntryReason === (dto.lateEntryReason ?? null)
+      && this.optionalStoredNumberMatches(existing.coolerCount, dto.coolerCount)
+      && this.optionalStoredNumberMatches(existing.towerCount, dto.towerCount)
+      && this.optionalStoredNumberMatches(existing.tapCount, dto.tapCount)
+      && this.optionalStoredNumberMatches(existing.smarttapCount, dto.smarttapCount)
+      && existing.equipmentConfirmed === dto.equipmentConfirmed;
+  }
+
+  private legacyAttemptMatches(
+    existing: {
+      pointId: string;
+      technicianId: string;
+      assistedForTechnicianId: string | null;
+      reason: string;
+      note: string | null;
+      latitude: Prisma.Decimal;
+      longitude: Prisma.Decimal;
+      accuracyMeters: Prisma.Decimal | null;
+      locationCapturedAt: Date;
+    },
+    dto: MaintenanceAttemptDto,
+  ) {
+    return existing.pointId === dto.pointId
+      && existing.technicianId === dto.technicianId
+      && existing.assistedForTechnicianId === (dto.assistedForTechnicianId ?? null)
+      && existing.reason === dto.reason
+      && existing.note === (dto.note ?? null)
+      && Number(existing.latitude) === dto.latitude
+      && Number(existing.longitude) === dto.longitude
+      && this.optionalDecimalMatches(existing.accuracyMeters, dto.accuracyMeters)
+      && existing.locationCapturedAt.getTime() === new Date(dto.locationCapturedAt).getTime();
+  }
+
+  private optionalDecimalMatches(stored: Prisma.Decimal | null, requested?: number) {
+    return requested === undefined ? stored === null : stored !== null && Number(stored) === requested;
+  }
+
+  private optionalStoredNumberMatches(stored: number | null, requested?: number) {
+    return requested === undefined || stored === requested;
+  }
+
+  private optionalDateMatches(stored: Date | null, requested?: string) {
+    return requested === undefined ? stored === null : stored !== null && stored.getTime() === new Date(requested).getTime();
+  }
+
+  private historyDateRange(query: TechnicianHistoryQuery) {
+    const hasDate = query.date !== undefined;
+    const hasFrom = query.from !== undefined;
+    const hasTo = query.to !== undefined;
+    if (hasDate && (hasFrom || hasTo)) {
+      throw new BadRequestException('date ile from/to birlikte kullanılamaz');
+    }
+    if (hasFrom !== hasTo) {
+      throw new BadRequestException('from ve to birlikte verilmelidir');
+    }
+
+    if (!hasFrom) {
+      const date = hasDate ? new Date(query.date!) : new Date();
+      this.assertValidDate(date, 'date');
+      this.assertSupportedHistoryYear(this.dateKey(date), 'date');
+      const day = businessDayRange(date);
+      return { from: day.key, to: day.key, start: day.start, end: day.end };
+    }
+
+    const from = query.from!;
+    const to = query.to!;
+    const fromDate = this.analyticsDate(from, 'from');
+    const toDate = this.analyticsDate(to, 'to');
+    this.assertSupportedHistoryYear(from, 'from');
+    this.assertSupportedHistoryYear(to, 'to');
+    if (fromDate.getTime() > toDate.getTime()) {
+      throw new BadRequestException('from tarihi to tarihinden sonra olamaz');
+    }
+    const inclusiveDays = Math.floor((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1;
+    if (inclusiveDays > 31) {
+      throw new BadRequestException('Teknisyen geçmişi en fazla 31 günlük aralık için alınabilir');
+    }
+
+    return {
+      from,
+      to,
+      start: businessDayRange(fromDate).start,
+      end: businessDayRange(toDate).end,
+    };
+  }
+
+  private assertSupportedHistoryYear(key: string, field: string) {
+    const match = /^(\d{4})-/.exec(key);
+    const year = match ? Number(match[1]) : Number.NaN;
+    if (!Number.isInteger(year) || year < 1000 || year > 9998) {
+      throw new BadRequestException(`${field} 1000 ile 9998 yılları arasında olmalıdır`);
+    }
   }
 
   private analyticsDate(key: string, field: string) {

@@ -231,6 +231,22 @@ export type TechnicianHistoryItem = {
   purpose?: string;
 };
 
+export type TechnicianHistoryQuery =
+  | { date?: string; from?: never; to?: never }
+  | { date?: never; from: string; to: string };
+
+export type TechnicianHistoryResult = {
+  date: string;
+  from: string;
+  to: string;
+  maintenanceCount: number;
+  attemptCount: number;
+  nonMaintenanceVisitCount: number;
+  prospectVisitCount: number;
+  totalOperations: number;
+  items: TechnicianHistoryItem[];
+};
+
 export function revertMaintenance(visitId: string, reason: string) {
   return jsonRequest<Record<string, unknown>>('/maintenance/revert', {
     method: 'POST',
@@ -238,7 +254,10 @@ export function revertMaintenance(visitId: string, reason: string) {
   });
 }
 
-export function technicianHistory(date?: string) {
-  const query = date ? `?date=${encodeURIComponent(date)}` : '';
-  return jsonRequest<{ date: string; totalOperations: number; items: TechnicianHistoryItem[] }>(`/maintenance/technician-history${query}`);
+export function technicianHistory(query: TechnicianHistoryQuery = {}) {
+  const search = Object.entries(query)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return jsonRequest<TechnicianHistoryResult>(`/maintenance/technician-history${search ? `?${search}` : ''}`);
 }
