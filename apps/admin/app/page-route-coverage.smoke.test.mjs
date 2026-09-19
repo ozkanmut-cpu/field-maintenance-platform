@@ -9,5 +9,7 @@ assert.match(page, /section === 'technician-daily-summary'\s*\?\s*<TechnicianDai
   'Technician summary navigation must render its real panel');
 assert.match(page, /section === 'users' \|\| section === 'help-targets'/,
   'Help targets navigation must render the existing help authorisation workflow');
+assert.doesNotMatch(page, /KULLANICI ÖZETİ/,
+  'Dashboard must lead with real operational data instead of a user-count summary band');
 
 console.log('page route coverage smoke test passed');
