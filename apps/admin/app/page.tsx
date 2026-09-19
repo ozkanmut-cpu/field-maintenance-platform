@@ -51,7 +51,8 @@ export default function Home() {
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
   const [location, setLocation] = useState<AdminLocation>(() => typeof window === 'undefined' ? { section: 'dashboard' } : parseAdminLocation(window.location.search));
-  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const createUserOpen = location.createUser === true;
+  const section = location.section;
 
   useEffect(() => {
     void restore();
@@ -61,12 +62,18 @@ export default function Home() {
     window.addEventListener('popstate', restoreLocation);
     return () => window.removeEventListener('popstate', restoreLocation);
   }, []);
+  useEffect(() => {
+    if (!me || section !== 'help-targets' || !location.userId) {
+      if (!location.userId) setHelpEditorId('');
+      return;
+    }
+    void openHelpSettings(location.userId, false);
+  }, [location.userId, me, section]);
   function navigate(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}) {
     const next = { section, ...values } as AdminLocation;
     window.history.pushState({}, '', buildAdminLocation(section, values));
     setLocation(next);
   }
-  const section = location.section;
   const setSection = navigate;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -150,12 +157,13 @@ export default function Home() {
       setBusy(false);
     }
   }
-  async function openHelpSettings(helperId: string) {
+  async function openHelpSettings(helperId: string, updateLocation = true) {
     setBusy(true); setError('');
     try {
       const data = await api<{ targets: User[] }>(`/api/backend/users/${helperId}/help-targets`);
       setHelpEditorId(helperId);
       setHelpTargetIds(data.targets.map((item) => item.id));
+      if (updateLocation) navigate('help-targets', { userId: helperId });
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -216,7 +224,7 @@ export default function Home() {
       {section === 'users' || section === 'help-targets' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
-          <div className="rowActions"><button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button><button onClick={() => setCreateUserOpen(true)}>Yeni Kullanıcı</button></div>
+          <div className="rowActions"><button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button><button onClick={() => navigate('users', { createUser: true })}>Yeni Kullanıcı</button></div>
         </div>
         <div className="tableWrap">
           <table>
@@ -241,7 +249,7 @@ export default function Home() {
         </div>
       </section> : null}
       {section === 'users' || section === 'help-targets' ? helpEditorId ? <section className="panel">
-        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => setHelpEditorId('')}>Kapat</button></div>
+        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => navigate('help-targets')}>Kapat</button></div>
         <div className="helpGrid">
           {users.filter((u) => u.role === 'TECHNICIAN' && u.active && u.id !== helpEditorId).map((target) => (
             <label className="helpOption" key={target.id}>
@@ -254,7 +262,7 @@ export default function Home() {
       </section> : section === 'help-targets' ? <section className="panel"><div className="emptyState compact"><strong>Teknisyen seçin</strong><span>Yardım yetkilerini düzenlemek için kullanıcı satırındaki Yardım aksiyonunu kullanın.</span></div></section> : null : null}
 
       {(section === 'users' || section === 'help-targets') && createUserOpen ? <section className="panel" id="new-user">
-        <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
+        <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div><button className="ghost" type="button" onClick={() => navigate('users')}>Kapat</button></div>
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />
           <input value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase() })} placeholder="Kullanıcı adı" required />
