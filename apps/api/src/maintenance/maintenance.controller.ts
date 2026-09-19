@@ -57,29 +57,11 @@ export class MaintenanceController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('technicianId') technicianId?: string,
     @Query('date') date?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     const targetId = user.role === UserRole.ADMIN && technicianId ? technicianId : user.id;
-    const [maintenanceHistory, otherVisits] = await Promise.all([
-      this.maintenance.technicianHistory(targetId, date),
-      this.nonMaintenanceVisits.technicianHistory(targetId, date),
-    ]);
-
-    const otherItems = otherVisits.items.map((item) => ({
-      type: 'NON_MAINTENANCE_VISIT' as const,
-      at: item.visitedAt,
-      ...item,
-    }));
-
-    const items = [...maintenanceHistory.items, ...otherItems].sort(
-      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
-    );
-
-    return {
-      ...maintenanceHistory,
-      nonMaintenanceVisitCount: otherVisits.count,
-      totalOperations: items.length,
-      items,
-    };
+    return this.maintenance.technicianHistory(targetId, { date, from, to });
   }
 
   @Get('non-maintenance-visits')

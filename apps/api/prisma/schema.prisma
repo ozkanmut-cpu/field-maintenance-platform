@@ -357,6 +357,7 @@ model MaintenanceVisit {
   smarttapCount            Int?                          @map("smarttap_count")
   equipmentConfirmed       Boolean                       @default(false) @map("equipment_confirmed")
   idempotencyKey           String                        @unique @map("idempotency_key")
+  requestFingerprint       String?                       @map("request_fingerprint")
   createdAt                DateTime                      @default(now()) @map("created_at")
   paperworkHistory         PaperworkStatusHistory[]
   reviewResolutions        MaintenanceReviewResolution[]
@@ -384,6 +385,7 @@ model MaintenanceAttempt {
   locationCapturedAt      DateTime            @map("location_captured_at")
   attemptedAt             DateTime            @default(now()) @map("attempted_at")
   idempotencyKey          String              @unique @map("idempotency_key")
+  requestFingerprint      String?             @map("request_fingerprint")
   createdAt               DateTime            @default(now()) @map("created_at")
   reviewStatus            AttemptReviewStatus @default(PENDING) @map("review_status")
   reviewedAt              DateTime?           @map("reviewed_at")

@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { MaintenanceObligationStatus, UserRole, VisitStatus } from '@prisma/client';
 import { MaintenanceService } from './maintenance.service';
 
@@ -16,12 +16,30 @@ function serviceWith(prisma: any) {
   );
 }
 
+test('a technician cannot revert a maintenance older than yesterday', async () => {
+  const visit = {
+    id: 'visit-1', obligationId: 'obligation-1', technicianId: 'technician-1', status: VisitStatus.VALID,
+    performedAt: new Date('2026-09-17T08:00:00.000Z'),
+  };
+  const prisma: any = {
+    maintenanceVisit: { findUnique: async () => visit },
+    user: { findFirst: async () => ({ id: 'technician-1', role: UserRole.TECHNICIAN }) },
+    $transaction: async () => assert.fail('old technician reverts must not begin a transaction'),
+  };
+
+  await assert.rejects(
+    serviceWith(prisma).revert({ visitId: visit.id, userId: 'technician-1', reason: 'Eski kayıt' }),
+    BadRequestException,
+  );
+});
+
 test('revert repairs obligations when the visit is already reversed', async () => {
   const visit = {
     id: 'visit-1',
     obligationId: 'obligation-1',
     technicianId: 'technician-1',
     status: VisitStatus.REVERSED,
+    performedAt: new Date(),
   };
   const obligationUpdates: any[] = [];
   const prisma: any = {
@@ -67,6 +85,7 @@ test('an unrelated technician cannot repair an already reversed visit', async ()
     obligationId: 'obligation-1',
     technicianId: 'technician-1',
     status: VisitStatus.REVERSED,
+    performedAt: new Date(),
   };
   const prisma: any = {
     maintenanceVisit: { findUnique: async () => visit },
@@ -92,6 +111,7 @@ test('a concurrent revert loser does not overwrite the winning reversal metadata
     obligationId: 'obligation-1',
     technicianId: 'technician-1',
     status: VisitStatus.VALID,
+    performedAt: new Date(),
   };
   const winningVisit = {
     ...staleVisit,
