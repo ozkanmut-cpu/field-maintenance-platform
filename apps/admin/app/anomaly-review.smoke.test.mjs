@@ -20,3 +20,11 @@ test('anomaly review keeps the real review and location approval API contracts',
   assert.match(source, /\/api\/backend\/maintenance\/review-resolve/);
   assert.match(source, /\/api\/backend\/maintenance\/location-review\/approve-visit/);
 });
+
+test('anomaly review retains an explicit empty filtered queue state and ignores stale history responses', () => {
+  assert.match(source, /İnceleme kuyruğunda eşleşen kayıt yok\./);
+  assert.match(source, /AbortController/);
+  assert.match(source, /signal:\s*controller\.signal/);
+  assert.match(source, /return\s*\(\)\s*=>\s*controller\.abort\(\)/);
+  assert.match(source, /if\s*\(!selected\)\s*\{\s*setHistory\(null\);\s*setHistoryLoading\(false\);/);
+});
