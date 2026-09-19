@@ -18,6 +18,10 @@ on:
       - 'apps/admin/app/sap-sync-status.smoke.test.mjs'
       - 'apps/admin/app/point-detail-page.tsx'
       - 'apps/admin/app/point-detail-page.smoke.test.mjs'
+      - 'apps/admin/app/point-list.tsx'
+      - 'apps/admin/app/point-list.smoke.test.mjs'
+      - 'apps/admin/app/point-list-navigation.smoke.test.mjs'
+      - 'apps/admin/app/admin-navigation.ts'
       - 'apps/admin/app/page.tsx'
       - 'apps/admin/app/page-route-coverage.smoke.test.mjs'
       - 'docs/V1_TODO.md'
@@ -39,6 +43,10 @@ on:
       - 'apps/admin/app/sap-sync-status.smoke.test.mjs'
       - 'apps/admin/app/point-detail-page.tsx'
       - 'apps/admin/app/point-detail-page.smoke.test.mjs'
+      - 'apps/admin/app/point-list.tsx'
+      - 'apps/admin/app/point-list.smoke.test.mjs'
+      - 'apps/admin/app/point-list-navigation.smoke.test.mjs'
+      - 'apps/admin/app/admin-navigation.ts'
       - 'apps/admin/app/page.tsx'
       - 'apps/admin/app/page-route-coverage.smoke.test.mjs'
       - 'docs/V1_TODO.md'
@@ -65,7 +73,7 @@ jobs:
       - name: API build
         run: npm --prefix apps/api run build
       - name: Reporting admin smoke
-        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs apps/admin/app/daily-admin-summary.smoke.test.mjs apps/admin/app/period-admin-summary.smoke.test.mjs apps/admin/app/technician-daily-summary.smoke.test.mjs apps/admin/app/sap-sync-status.smoke.test.mjs apps/admin/app/kpi-reporting.smoke.test.mjs apps/admin/app/point-detail-page.smoke.test.mjs apps/admin/app/page-route-coverage.smoke.test.mjs apps/admin/app/operations.approvals.smoke.test.mjs
+        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs apps/admin/app/daily-admin-summary.smoke.test.mjs apps/admin/app/period-admin-summary.smoke.test.mjs apps/admin/app/technician-daily-summary.smoke.test.mjs apps/admin/app/sap-sync-status.smoke.test.mjs apps/admin/app/kpi-reporting.smoke.test.mjs apps/admin/app/point-detail-page.smoke.test.mjs apps/admin/app/point-list.smoke.test.mjs apps/admin/app/point-list-navigation.smoke.test.mjs apps/admin/app/page-route-coverage.smoke.test.mjs apps/admin/app/operations.approvals.smoke.test.mjs
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
