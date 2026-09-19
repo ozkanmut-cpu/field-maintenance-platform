@@ -13,6 +13,14 @@ test('point detail stays read only until explicit edit mode', () => {
   assert.match(source, /method: 'PATCH'/);
   assert.match(source, /maintenance\/point-timeline\?pointId=/,
     'Timeline tab must use the real point timeline endpoint');
+  assert.match(source, /Bakım ziyaretleri/,
+    'Timeline tab must group the real event stream into meaningful operational event types');
+  assert.match(source, /Yapılamadı kaydı/,
+    'Timeline tab must distinguish an attempt from a completed maintenance visit');
+  assert.match(source, /Atama değişikliği/,
+    'Timeline tab must expose assignment changes without creating assignment mutations');
+  assert.match(source, /Zaman/,
+    'Timeline tab must show each event time in a dedicated column');
   assert.match(source, /maintenance\/obligations\/point\/\$\{pointId\}\/history/,
     'Maintenance tab must use real obligation history');
   assert.match(source, /Açık yükümlülük/,
