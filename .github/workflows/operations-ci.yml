@@ -8,6 +8,7 @@ on:
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
       - 'apps/admin/app/operations.search.smoke.test.mjs'
+      - 'apps/admin/app/operations.approvals.smoke.test.mjs'
       - 'docs/V1_TODO.md'
       - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
@@ -18,6 +19,7 @@ on:
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
       - 'apps/admin/app/operations.search.smoke.test.mjs'
+      - 'apps/admin/app/operations.approvals.smoke.test.mjs'
       - 'docs/V1_TODO.md'
       - '.github/workflows/postgis-ci.yml'
       - '.github/workflows/operations-ci.yml'
@@ -55,6 +57,7 @@ jobs:
           node --test
           apps/admin/app/operations.bulk.smoke.test.mjs
           apps/admin/app/operations.search.smoke.test.mjs
+          apps/admin/app/operations.approvals.smoke.test.mjs
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
