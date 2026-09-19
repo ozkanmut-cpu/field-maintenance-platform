@@ -16,3 +16,10 @@ test('new user is an action within users instead of a sidebar section', () => {
   assert.match(source, /Yeni Kullanıcı/);
   assert.match(source, /createUserOpen/);
 });
+
+test('user and help-target detail actions have deep-linkable URL state', () => {
+  assert.match(source, /location\.userId/);
+  assert.match(source, /location\.createUser/);
+  assert.match(source, /navigate\('help-targets', \{ userId: helperId \}\)/);
+  assert.match(source, /navigate\('users', \{ createUser: true \}\)/);
+});
