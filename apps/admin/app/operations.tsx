@@ -117,6 +117,10 @@ const technicians = useMemo(
 () => users.filter((user) => user.role === 'TECHNICIAN' && user.active),
 [users],
 );
+const reviewedAttemptCounts = useMemo(() => ({
+approved: attemptHistory.filter((item) => item.reviewStatus === 'APPROVED').length,
+rejected: attemptHistory.filter((item) => item.reviewStatus === 'REJECTED').length,
+}), [attemptHistory]);
 useEffect(() => {
 setTechnicianDailySummaryTechnicianId((current) => current || technicians[0]?.id || '');
 }, [technicians]);
@@ -509,12 +513,17 @@ return (
 {activeSection === 'approvals' ? <>
 <section className="panel priorityPanel" id="approvals">
 <div className="panelHeader">
-<div><h2>Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
+<div><h2>Bekleyen Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
 <span className="pill">{attemptQueue.length} bekliyor</span>
 </div>
+<section className="dashboardGrid" aria-label="Yapılamadı onay özeti">
+<div className="dashboardCard"><span>Bekleyen kayıtlar</span><strong>{attemptQueue.length}</strong><small>Yönetici kararı gerekiyor</small></div>
+<div className="dashboardCard"><span>Son 20 onay</span><strong>{reviewedAttemptCounts.approved}</strong><small>İlgili görev kapatıldı</small></div>
+<div className="dashboardCard"><span>Son 20 ret</span><strong>{reviewedAttemptCounts.rejected}</strong><small>İlgili görev açık kaldı</small></div>
+</section>
 <div className="tableWrap">
 <table>
-<thead><tr><th>Nokta</th><th>Teknisyen</th><th>Neden</th><th>Tarih</th><th></th></tr></thead>
+<thead><tr><th>Nokta</th><th>Teknisyen</th><th>Neden / not</th><th>Tarih</th><th>İşlem</th></tr></thead>
 <tbody>
 {loading ? <tr><td colSpan={5}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Onaylar yükleniyor</strong><span>Bekleyen kayıtlar getiriliyor.</span></div></td></tr> : attemptQueue.length === 0 ? <tr><td colSpan={5}><div className="emptyState compact success"><AdminIcon name="check" /><strong>Bekleyen onay yok</strong><span>İncelenmesi gereken yapılamadı kaydı bulunmuyor.</span></div></td></tr> : attemptQueue.map((item) => (
 <tr key={item.id}>
