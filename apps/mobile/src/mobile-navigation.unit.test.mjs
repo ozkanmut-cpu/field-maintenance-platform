@@ -36,6 +36,15 @@ test('back from the Help flow returns to Jobs rather than treating Help as a tab
   assert.deepEqual(popScreen(history, 'HELP'), { screen: 'TASKS', history: [] });
 });
 
+test('back from missing paperwork returns to Jobs without adding a primary tab', () => {
+  const { pushScreen, popScreen, primaryTabs } = loadNavigation();
+  const source = fs.readFileSync(filename, 'utf8');
+  assert.match(source, /\| 'MISSING_ITEMS'/);
+  const history = pushScreen([], 'TASKS', 'MISSING_ITEMS');
+  assert.deepEqual(popScreen(history, 'MISSING_ITEMS'), { screen: 'TASKS', history: [] });
+  assert.equal(primaryTabs.some((tab) => tab.screen === 'MISSING_ITEMS'), false);
+});
+
 test('back does not replace Android system behavior from the Jobs root', () => {
   const { popScreen } = loadNavigation();
   assert.equal(popScreen([], 'TASKS'), null);
