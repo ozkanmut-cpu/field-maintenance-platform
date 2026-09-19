@@ -1,6 +1,6 @@
 export type MobileScreen =
   | 'TASKS' | 'NEARBY' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM'
-  | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
+  | 'HELP' | 'MISSING_ITEMS' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
 
 export const primaryTabs: ReadonlyArray<{ screen: MobileScreen; label: string; icon: string }> = [
   { screen: 'TASKS', label: 'İşler', icon: 'home' },

@@ -182,7 +182,23 @@ export type DueTask = {
   address?: string | null; aliases?: string[]; latitude?: number | null; longitude?: number | null;
   coolerCount?: number | null; towerCount?: number | null; tapCount?: number | null; smarttapCount?: number | null;
 };
-export type TechnicianDashboard = { technician: HelpTarget; overdue: number; current: number; due: DueTask[] };
+export type MissingPaperworkItem = {
+  id: string;
+  performedAt: string;
+  serviceSlipStatus: 'PENDING' | 'PRESENT' | 'MISSING';
+  confirmationStatus: 'PENDING' | 'PRESENT' | 'MISSING';
+  point: { id: string; code: string; name: string };
+};
+export type MissingPaperworkSummary = { serviceSlip: number; confirmation: number; both: number };
+export type TechnicianDashboard = {
+  technician: HelpTarget;
+  overdue: number;
+  current: number;
+  due: DueTask[];
+  missingPaperwork: number;
+  paperwork: MissingPaperworkSummary;
+  missingItems: MissingPaperworkItem[];
+};
 
 export function helpTargets() {
   return jsonRequest<HelpTarget[]>('/maintenance/help-targets');
