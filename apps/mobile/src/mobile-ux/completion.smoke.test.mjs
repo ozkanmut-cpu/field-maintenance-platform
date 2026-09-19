@@ -49,6 +49,7 @@ test('completion exposes an optional date that defaults to today and is bounded 
   assert.match(screen, /function CompletionDateCalendar/);
   assert.match(screen, /accessibilityLabel="Bakım tarihi seç"/);
   assert.match(screen, /<CompletionDateCalendar[\s\S]*min=\{minPerformedOnKey\}[\s\S]*max=\{maxPerformedOnKey\}/);
+  assert.match(screen, /<SafeAreaView edges=\{\['bottom'\]\} style=\{styles\.calendarSafe\}>/);
   assert.match(screen, /Bakım tarihi/);
   assert.match(screen, /isAllowedCompletionDate/);
   assert.match(screen, /onSubmit: \(equipment: EquipmentCounts, performedOn: string\)/);

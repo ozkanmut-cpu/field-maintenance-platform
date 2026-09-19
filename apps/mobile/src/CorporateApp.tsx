@@ -4,7 +4,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Feather as ExpoFeather } from '@expo/vector-icons';
-import { ActivityIndicator, Alert, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
@@ -30,6 +30,7 @@ import { locationPresentationState } from './mobile-ux/task-presentation';
 import { Toast } from './mobile-ux/Feedback';
 import { SubmissionIntentStore } from './mobile-ux/submission-intent';
 import { assistanceRequestFields, assistedTechnicianId, DashboardRequestCoordinator, emptyAssistanceState } from './mobile-ux/assistance';
+import { previousTechnicianScreen } from './mobile-ux/hardware-back';
 
 type Screen = 'TASKS' | 'TASK_DETAIL' | 'ATTEMPT' | 'NEARBY' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
 type AttemptSubmitPayload = Parameters<typeof recordMaintenanceAttempt>[0];
@@ -121,6 +122,18 @@ export default function CorporateApp() {
 
   useEffect(() => { void restore(); }, []);
   useEffect(() => { if (user) void loadTasks(); }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      const previous = previousTechnicianScreen(screen);
+      if (previous === null) return true;
+      if (screen === 'TASK_DETAIL') { setPendingTask(null); setPendingAssist(undefined); }
+      if (screen === 'SUCCESS') { setSuccessAssist(''); setSuccessVisitId(null); setSuccessUndoExpiresAt(null); }
+      setScreen(previous);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [screen, user]);
 
   async function restore() {
     try {
@@ -237,6 +250,8 @@ export default function CorporateApp() {
   function openHistory() { setScreen('HISTORY'); void loadHistory(historyPeriod, historyDate); }
   function selectHistoryPeriod(period: HistoryPeriod) {
     if (period === 'DATE') { setHistoryDatePickerVisible(true); return; }
+    setHistoryDatePickerVisible(false);
+    setHistoryPeriod(period);
     void loadHistory(period, historyDate);
   }
   function confirmRevert(item: TechnicianHistoryItem) {

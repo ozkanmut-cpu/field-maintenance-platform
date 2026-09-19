@@ -83,6 +83,12 @@ test('editing a custom date does not change the active range until it is applied
   assert.match(app, /await loadHistory\(historyPeriod, historyDate\)/);
 });
 
+test('switching back to a weekly history period closes the stale date chooser immediately', () => {
+  const app = source(appFile);
+
+  assert.match(app, /function selectHistoryPeriod\(period: HistoryPeriod\) \{[\s\S]*setHistoryDatePickerVisible\(false\);[\s\S]*setHistoryPeriod\(period\);[\s\S]*void loadHistory\(period, historyDate\);/);
+});
+
 test('only the latest overlapping history request can commit response, error, or loading state', () => {
   const app = source(appFile);
 
