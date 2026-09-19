@@ -70,6 +70,13 @@ test('filters tasks with the established address and alias search behavior', () 
   assert.equal(filterTasks(tasks, 'bornova').length, 0);
 });
 
+test('search can disclose why a result matched without showing it for a name match', () => {
+  const source = fs.readFileSync(new URL('../search.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /export function searchMatchLabel/);
+  assert.match(source, /return field\.label === 'ad' \? null : field\.label/);
+});
+
 test('returns weekly dashboard counts without deriving a new maintenance policy', () => {
   const { weeklyTaskCounts } = loadPresentation();
   assert.deepEqual(

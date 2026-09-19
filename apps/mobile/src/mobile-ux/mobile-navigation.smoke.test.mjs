@@ -15,11 +15,24 @@ test('primary navigation contains exactly the three technician destinations', ()
   }
 });
 
-test('the header exposes token deletion as an explicit sign-out action', () => {
+test('the header keeps sign-out in a compact account action', () => {
   const source = fs.readFileSync(shellFile, 'utf8');
 
-  assert.match(source, /accessibilityLabel="Oturumu kapat"/);
-  assert.match(source, />ÇIKIŞ</);
-  assert.doesNotMatch(source, />PROFİL</);
-  assert.doesNotMatch(source, /onProfilePress/);
+  assert.match(source, /accessibilityLabel="Hesap seçeneklerini aç"/);
+  assert.match(source, /onProfilePress/);
+  assert.doesNotMatch(source, />ÇIKIŞ</);
+});
+
+test('account surface owns identity, version, and sign-out', () => {
+  const source = fs.readFileSync(new URL('../CorporateApp.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /Alert\.alert\('Hesap', `\$\{user\?\.name \?\? ''\}\\nfıçıbakım v1\.1`/);
+  assert.match(source, /text: 'Çıkış yap'/);
+});
+
+test('child flows can hide the three-destination navigation', () => {
+  const source = fs.readFileSync(shellFile, 'utf8');
+
+  assert.match(source, /showNavigation/);
+  assert.match(source, /showNavigation && <View accessibilityRole="tablist"/);
 });

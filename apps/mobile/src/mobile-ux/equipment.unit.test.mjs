@@ -41,6 +41,16 @@ test('accepts zero as a valid equipment count', () => {
   });
 });
 
+test('starts a partially missing equipment profile from zero for a first maintenance', () => {
+  const { equipmentInputFrom, hasRecordedEquipment } = loadEquipment();
+
+  assert.equal(hasRecordedEquipment({ coolerCount: 0, towerCount: 1, tapCount: 2, smarttapCount: 3 }), true);
+  assert.equal(hasRecordedEquipment({ coolerCount: 0, towerCount: null, tapCount: 2, smarttapCount: 3 }), false);
+  assert.deepEqual(equipmentInputFrom({ coolerCount: 2, towerCount: null, tapCount: 4, smarttapCount: 1 }, 0), {
+    coolerCount: '0', towerCount: '0', tapCount: '0', smarttapCount: '0',
+  });
+});
+
 test('reports equipment changes only for fields whose numeric value changed', () => {
   const { equipmentDiff } = loadEquipment();
 

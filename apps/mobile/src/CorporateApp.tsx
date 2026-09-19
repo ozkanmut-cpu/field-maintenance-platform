@@ -75,6 +75,8 @@ export default function CorporateApp() {
   const [historyDatePickerVisible, setHistoryDatePickerVisible] = useState(false);
   const [successPoint, setSuccessPoint] = useState('');
   const [successAssist, setSuccessAssist] = useState('');
+  const [successVisitId, setSuccessVisitId] = useState<string | null>(null);
+  const [successUndoExpiresAt, setSuccessUndoExpiresAt] = useState<number | null>(null);
   const [efesim, setEfesim] = useState<EfesimExtractResult | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [sapNo, setSapNo] = useState('');
@@ -140,6 +142,12 @@ export default function CorporateApp() {
   }
 
   async function signOut() { await clearSessionToken(); dashboardRequests.current!.exitAssistance(); setUser(null); setDashboard(null); setHelpDashboard(null); setPassword(''); setScreen('TASKS'); }
+  function openAccount() {
+    Alert.alert('Hesap', `${user?.name ?? ''}\nfıçıbakım v1.1`, [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Çıkış yap', style: 'destructive', onPress: () => void signOut() },
+    ]);
+  }
   async function loadTasks(technicianId?: string) {
     const request = dashboardRequests.current!.beginRefresh(technicianId);
     if (!request) return false;
@@ -297,6 +305,11 @@ export default function CorporateApp() {
     try { await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`); }
     catch { Alert.alert('Harita açılamadı', 'Google Maps veya tarayıcı açılamadı.'); }
   }
+  async function openCustomerDirections(customer: MyCustomer) {
+    const destination = customer.address ?? [customer.name, customer.region?.name].filter(Boolean).join(' ');
+    try { await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`); }
+    catch { Alert.alert('Harita açılamadı', 'Google Maps veya tarayıcı açılamadı.'); }
+  }
   async function openNearbyDirections(point: NearbyPoint) {
     try { await Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${point.latitude},${point.longitude}`)}`); }
     catch { Alert.alert('Harita açılamadı', 'Google Maps veya tarayıcı açılamadı.'); }
@@ -333,9 +346,21 @@ export default function CorporateApp() {
   }
 
   async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, payload: Readonly<CompletionSubmitPayload>) {
-    await completeMaintenance(payload);
+    const result = await completeMaintenance(payload);
     completionSubmission.current.clear();
-    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setScreen('SUCCESS'); void loadTasks(assistedForTechnicianId);
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setSuccessVisitId(result.id); setSuccessUndoExpiresAt(Date.now() + 30_000); setScreen('SUCCESS'); void loadTasks(assistedForTechnicianId);
+  }
+
+  async function undoSuccessfulCompletion() {
+    if (!successVisitId || !successUndoExpiresAt || Date.now() > successUndoExpiresAt) return;
+    setBusy(true);
+    try {
+      await revertMaintenance(successVisitId, 'Teknisyen yeni kaydı geri aldı');
+      setSuccessVisitId(null); setSuccessUndoExpiresAt(null); setScreen('TASKS');
+      setToastMessage('Bakım kaydı geri alındı ve görev yeniden açıldı.');
+      void loadTasks();
+    } catch (e) { Alert.alert('Bakım geri alınamadı', message(e)); }
+    finally { setBusy(false); }
   }
 
   async function submitCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, intent: CompletionSubmitIntent, payload: CompletionSubmitPayload) {
@@ -427,19 +452,20 @@ export default function CorporateApp() {
   }
   const activeDashboard = helpDashboard ?? dashboard;
   const refresh = refreshTasks;
-  return <SafeAreaView edges={['top','bottom']} style={styles.safe}><StatusBar style="light" /><MobileShell title={title} userName={user.name} brandImage={APP_ICON} activeDestination={activeDestination} onNavigate={navigate} onSignOut={() => void signOut()}>
+  const childScreen = ['TASK_DETAIL', 'ATTEMPT', 'EQUIPMENT_CONFIRM', 'CUSTOMER', 'SUCCESS', 'EFESIM_RESULT', 'PROSPECT', 'VISIT_SAVED'].includes(screen);
+  return <SafeAreaView edges={['top','bottom']} style={styles.safe}><StatusBar style="light" /><MobileShell title={title} userName={user.name} brandImage={APP_ICON} activeDestination={activeDestination} onNavigate={navigate} onProfilePress={openAccount} showNavigation={!childScreen}>
     {screen === 'TASKS' ? <ScrollView style={styles.scroll} contentContainerStyle={styles.tasksContainer} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl accessibilityLabel="İşleri yenile" refreshing={tasksLoading} onRefresh={refresh} />}>
       <TasksScreen dashboard={activeDashboard} loading={tasksLoading} error={tasksError} search={taskSearch} filter={taskFilter} deviceLocation={deviceLocation} assistanceTargets={helpPeople} assistedForTechnicianId={assistedTechnicianId(helpDashboard)} assistanceSelectorVisible={assistanceSelectorVisible} assistanceLoading={assistanceLoading} assistanceError={assistanceError} onSearchChange={setTaskSearch} onFilterChange={setTaskFilter} onRefresh={refresh} onOpenTask={task => openTaskDetail(task, assistedTechnicianId(helpDashboard))} onOpenAssistance={() => void openHelpSelector()} onSelectAssistance={target => void selectHelper(target)} onChangeAssistance={changeAssistance} onExitAssistance={exitAssistance} onRetryAssistance={() => void openHelpSelector()} />
     </ScrollView> :
-    screen === 'TASK_DETAIL' && pendingTask ? <TaskDetailScreen task={pendingTask} deviceLocation={deviceLocation} onBack={() => { setPendingTask(null); setPendingAssist(undefined); setScreen('TASKS'); }} onDirections={task => void openDirections(task)} onBeginCompletion={() => prepareComplete(pendingTask, pendingAssist)} onBeginAttempt={() => prepareAttempt(pendingTask, pendingAssist)} /> :
+    screen === 'TASK_DETAIL' && pendingTask ? <TaskDetailScreen task={pendingTask} onBack={() => { setPendingTask(null); setPendingAssist(undefined); setScreen('TASKS'); }} onDirections={task => void openDirections(task)} onBeginCompletion={() => prepareComplete(pendingTask, pendingAssist)} onBeginAttempt={() => prepareAttempt(pendingTask, pendingAssist)} /> :
     screen === 'ATTEMPT' && pendingTask ? <AttemptScreen task={pendingTask} submitting={busy} error={attemptError} onBack={() => setScreen('TASK_DETAIL')} onIntentChange={() => attemptSubmission.current.clear()} onSubmit={(reason, note) => void saveAttempt(pendingTask, reason, note, pendingAssist)} /> :
-    screen === 'EQUIPMENT_CONFIRM' && pendingTask ? <CompleteMaintenanceScreen task={pendingTask} deviceLocation={deviceLocation} submitting={busy} onBack={() => setScreen('TASK_DETAIL')} onIntentChange={() => completionSubmission.current.clearIfIdle(completionInFlight.current)} onSubmit={equipmentValues => void completeTask(pendingTask, equipmentValues, pendingAssist)} /> :
+    screen === 'EQUIPMENT_CONFIRM' && pendingTask ? <CompleteMaintenanceScreen task={pendingTask} submitting={busy} onBack={() => setScreen('TASK_DETAIL')} onIntentChange={() => completionSubmission.current.clearIfIdle(completionInFlight.current)} onSubmit={equipmentValues => void completeTask(pendingTask, equipmentValues, pendingAssist)} /> :
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" refreshControl={screen === 'CUSTOMERS' ? <RefreshControl accessibilityLabel="Müşterileri yenile" refreshing={customersLoading} onRefresh={() => void loadCustomers()} /> : screen === 'HISTORY' ? <RefreshControl accessibilityLabel="Geçmişi yenile" refreshing={historyLoading} onRefresh={() => void loadHistory(historyPeriod, historyDate)} /> : undefined}>
       {screen === 'NEARBY' && (nearbyError ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={nearbyError} /> : <NearbyScreen items={nearbyItems} origin={deviceLocation} loading={nearbyLoading} refresh={() => void loadNearby()} directions={openNearbyDirections} />)}
       {screen === 'CUSTOMERS' && <CustomersScreen customers={customers} loading={customersLoading} error={customersError} search={customerSearch} onSearchChange={setCustomerSearch} onOpenCustomer={openCustomer} onRefresh={() => void loadCustomers()} />}
-      {screen === 'CUSTOMER' && selectedCustomer && <CustomerDetailScreen customer={selectedCustomer} saving={customerSaving} saveError={customerSaveError} onBack={() => setScreen('CUSTOMERS')} onSave={equipmentValues => void saveCustomerEquipment(equipmentValues)} />}
+      {screen === 'CUSTOMER' && selectedCustomer && <CustomerDetailScreen customer={selectedCustomer} saving={customerSaving} saveError={customerSaveError} onBack={() => setScreen('CUSTOMERS')} onDirections={customer => void openCustomerDirections(customer)} onSave={equipmentValues => void saveCustomerEquipment(equipmentValues)} />}
       {screen === 'HISTORY' && <HistoryScreen items={historyItems} loading={historyLoading} error={historyError} period={historyPeriod} datePickerVisible={historyDatePickerVisible} selectedDate={historyDateDraft} reverting={busy} onPeriodChange={selectHistoryPeriod} onDateChange={setHistoryDateDraft} onApplyDate={() => void loadHistory('DATE', historyDateDraft)} onRetry={retryHistory} onRevert={confirmRevert} />}
-      {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); setScreen('TASKS'); }} />}
+      {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} undoExpiresAt={successUndoExpiresAt} undoing={busy} onUndo={successVisitId ? () => void undoSuccessfulCompletion() : undefined} done={() => { setSuccessAssist(''); setSuccessVisitId(null); setSuccessUndoExpiresAt(null); setScreen('TASKS'); }} />}
       {screen === 'NEW' && <NewPointView begin={() => void beginEfesim()} busy={busy} />}
       {screen === 'EFESIM_RESULT' && efesim && <EfesimView result={efesim} sapNo={sapNo} setSapNo={setSapNo} customerName={customerName} setCustomerName={setCustomerName} strong={strongGoogleMatch} google={google} useGoogle={useGoogle} setUseGoogle={setUseGoogle} addressText={addressText} save={() => void saveProspect()} busy={busy} />}
       {screen === 'PROSPECT' && prospect && <ProspectView prospect={prospect} purpose={visitPurpose} setPurpose={setVisitPurpose} save={() => void saveVisit()} busy={busy} />}
@@ -456,7 +482,6 @@ function Login(p: { username:string; password:string; setUsername:(v:string)=>vo
   return <SafeAreaView style={styles.loginSafe}><StatusBar style="light" />
     <View style={styles.loginHero}>
       <View style={styles.loginBrandRow}><Image source={APP_ICON} style={styles.loginLogo}/><View><Text style={styles.loginBrand}>fıçıbakım</Text><Text style={styles.loginBrandSub}>SAHA BAKIM</Text></View></View>
-      <View style={styles.loginIntro}><Text style={styles.loginTitle}>fıçıbakım’a hoş geldin</Text><Text style={styles.loginSub}>Daha iyi servis, daha iyi bira. Bakım görevlerini ve saha işlemlerini tek yerden yönet.</Text></View>
     </View>
     <View style={styles.loginForm}>
       <Text style={styles.formLabel}>KULLANICI ADI</Text><TextInput style={styles.loginInput} value={p.username} onChangeText={p.setUsername} autoCapitalize="none" autoComplete="username" placeholder="Kullanıcı adın" placeholderTextColor="#8A99A6" />
@@ -471,8 +496,16 @@ function NewPointView({begin,busy}:{begin:()=>void;busy:boolean}) { return <View
 function EfesimView(p:any) { return <><View style={styles.card}><Text style={styles.sectionLabel}>EFESİM</Text><TextInput style={styles.input} value={p.sapNo} onChangeText={p.setSapNo} keyboardType="number-pad" placeholder="SAP No"/><TextInput style={styles.input} value={p.customerName} onChangeText={p.setCustomerName} placeholder="Müşteri adı"/></View>{p.strong?<View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS EŞLEŞMESİ</Text><Text style={styles.taskName}>{p.google?.name}</Text><Text style={styles.help}>{p.google?.address||'Adres bilgisi yok'}</Text><View style={styles.choiceRow}><Choice title="BU İŞLETME" selected={p.useGoogle} onPress={()=>p.setUseGoogle(true)}/><Choice title="EŞLEŞMEDİ" selected={!p.useGoogle} onPress={()=>p.setUseGoogle(false)}/></View></View>:<View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS</Text><Text style={styles.help}>Güvenilir eşleşme bulunamadı. İsim ile devam edebilirsin.</Text></View>}<View style={styles.card}><Text style={styles.sectionLabel}>ADRES</Text><Text style={styles.help}>{p.addressText}</Text><Text style={styles.locked}>Adres düzenlenemez.</Text><PrimaryButton title="ADAY MÜŞTERİYİ OLUŞTUR" icon="user-plus" onPress={p.save} disabled={p.busy}/></View></>; }
 function ProspectView(p:{prospect:ProspectRecord;purpose:ProspectVisitPurpose;setPurpose:(v:ProspectVisitPurpose)=>void;save:()=>void;busy:boolean}) { return <View style={styles.card}><View style={styles.cardIcon}><Feather name="check" size={20} color={GREEN}/></View><Text style={styles.okText}>Aday müşteri hazır</Text><Text style={styles.taskName}>{p.prospect.name}</Text>{p.prospect.sapNo?<Text style={styles.help}>SAP No: {p.prospect.sapNo}</Text>:null}<Text style={styles.sectionLabel}>ZİYARET AMACI</Text><View style={styles.choiceRow}><Choice title="KEŞİF" selected={p.purpose==='SURVEY'} onPress={()=>p.setPurpose('SURVEY')}/><Choice title="KURMA" selected={p.purpose==='INSTALLATION'} onPress={()=>p.setPurpose('INSTALLATION')}/></View><PrimaryButton title={p.purpose==='SURVEY'?'KEŞİF ZİYARETİNİ KAYDET':'KURMA ZİYARETİNİ KAYDET'} icon="check-circle" onPress={p.save} disabled={p.busy}/></View>; }
 
-function SuccessView({point,assisted,title='Bakım kaydedildi',done}:{point:string;assisted:string;title?:string;done:()=>void}) {
-  return <View style={styles.successCard}><View style={styles.successCircle}><Feather name="check" size={38} color="#fff"/></View><Text style={styles.successEyebrow}>İŞLEM TAMAMLANDI</Text><Text style={styles.successTitle}>{title}</Text><Text style={styles.successPoint}>{point}</Text>{assisted?<Text style={styles.help}>{assisted} için yardım olarak kaydedildi.</Text>:null}<View style={styles.successMetaRow}><Feather name="map-pin" size={15} color="#6E7D89"/><Text style={styles.successMeta}>İşlem zamanı ve saha konumu kaydedildi.</Text></View><PrimaryButton title="TAMAM" icon="arrow-right" onPress={done}/></View>;
+function SuccessView({point,assisted,title='Bakım kaydedildi',done,onUndo,undoing,undoExpiresAt}:{point:string;assisted:string;title?:string;done:()=>void;onUndo?:()=>void;undoing?:boolean;undoExpiresAt?:number|null}) {
+  const maintenanceSaved = title === 'Bakım kaydedildi';
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!undoExpiresAt) return;
+    const timeout = setTimeout(() => setNow(Date.now()), Math.max(0, undoExpiresAt - Date.now()));
+    return () => clearTimeout(timeout);
+  }, [undoExpiresAt]);
+  const undoAvailable = Boolean(onUndo && undoExpiresAt && now < undoExpiresAt);
+  return <View style={styles.successCard}><View style={styles.successCircle}><Feather name="check" size={38} color="#fff"/></View><Text style={styles.successTitle}>{title}</Text><Text style={styles.successPoint}>{point}</Text>{assisted?<Text style={styles.help}>{assisted} için yardım olarak kaydedildi.</Text>:null}<PrimaryButton title={maintenanceSaved ? 'SONRAKİ İŞE GEÇ' : 'İŞLERE DÖN'} icon="arrow-right" onPress={done}/>{undoAvailable ? <SecondaryButton title={undoing ? 'GERİ ALINIYOR...' : 'GERİ AL'} onPress={onUndo!} disabled={undoing}/> : null}{maintenanceSaved ? <SecondaryButton title="İŞLERE DÖN" onPress={done}/> : null}</View>;
 }
 
 function Empty({icon='inbox',title='Açık görev yok',text}:{icon?:React.ComponentProps<typeof Feather>['name'];title?:string;text?:string}) { return <View style={styles.empty}><View style={styles.emptyIcon}><Feather name={icon} size={25} color="#718493"/></View><Text style={styles.emptyTitle}>{title}</Text>{text?<Text style={styles.emptyText}>{text}</Text>:null}</View>; }
@@ -488,7 +521,7 @@ const BLUE='#075A96', DARK_BLUE='#064C80', BRIGHT_BLUE='#0877D1', LIGHT='#F3F6F9
 const styles=StyleSheet.create({
   safe:{flex:1,backgroundColor:DARK_BLUE}, shell:{flex:1,backgroundColor:LIGHT}, scroll:{flex:1}, container:{padding:18,paddingBottom:32,gap:14}, tasksContainer:{paddingBottom:32}, center:{flex:1,alignItems:'center',justifyContent:'center',gap:12,backgroundColor:LIGHT},
   header:{backgroundColor:DARK_BLUE,paddingHorizontal:20,paddingTop:17,paddingBottom:19,flexDirection:'row',justifyContent:'space-between',alignItems:'center',borderBottomWidth:1,borderBottomColor:'rgba(255,255,255,.08)'}, headerIdentity:{flexDirection:'row',alignItems:'center',gap:11,flex:1,minWidth:0,marginRight:10}, brandImage:{width:42,height:42,borderRadius:12,backgroundColor:'#fff'}, headerCopy:{flex:1,minWidth:0}, eyebrow:{color:'#D7E8F5',fontSize:12,fontWeight:'900',letterSpacing:.4}, headerTitle:{color:'#fff',fontSize:27,fontWeight:'900',letterSpacing:-.45,marginTop:1,flexShrink:1}, headerUser:{color:'#C9DDEC',fontSize:12,marginTop:1}, logoutBtn:{borderWidth:1,borderColor:'rgba(255,255,255,.22)',backgroundColor:'rgba(255,255,255,.06)',paddingHorizontal:11,paddingVertical:9,borderRadius:10,flexDirection:'row',alignItems:'center',gap:6}, logoutText:{color:'#fff',fontSize:10,fontWeight:'900'},
-  loginSafe:{flex:1,backgroundColor:LIGHT}, loginHero:{backgroundColor:DARK_BLUE,paddingHorizontal:26,paddingTop:46,paddingBottom:34,gap:34}, loginBrandRow:{flexDirection:'row',alignItems:'center',gap:13}, loginLogo:{width:62,height:62,borderRadius:18,backgroundColor:'#fff'}, loginBrand:{color:'#fff',fontSize:25,fontWeight:'900',letterSpacing:-.4}, loginBrandSub:{color:'#9FC2DA',fontSize:10,fontWeight:'800',letterSpacing:1.05,marginTop:3}, loginIntro:{gap:8}, loginTitle:{color:'#fff',fontSize:30,fontWeight:'900',letterSpacing:-.55}, loginSub:{color:'#C8DDED',fontSize:14,lineHeight:21,maxWidth:330}, loginForm:{backgroundColor:'#fff',margin:18,borderWidth:1,borderColor:LINE,borderRadius:17,padding:20,gap:10,shadowColor:'#173349',shadowOpacity:.05,shadowRadius:14,elevation:2}, formLabel:{fontSize:10,fontWeight:'900',letterSpacing:.9,color:'#718493',marginTop:3}, loginInput:{backgroundColor:'#F8FAFC',borderWidth:1,borderColor:'#D4DEE6',borderRadius:11,padding:13,fontSize:16,color:TEXT},
+  loginSafe:{flex:1,backgroundColor:LIGHT}, loginHero:{backgroundColor:DARK_BLUE,paddingHorizontal:24,paddingTop:24,paddingBottom:20}, loginBrandRow:{flexDirection:'row',alignItems:'center',gap:11}, loginLogo:{width:44,height:44,borderRadius:13,backgroundColor:'#fff'}, loginBrand:{color:'#fff',fontSize:22,fontWeight:'900',letterSpacing:-.4}, loginBrandSub:{color:'#9FC2DA',fontSize:10,fontWeight:'800',letterSpacing:1.05,marginTop:2}, loginForm:{backgroundColor:'#fff',marginHorizontal:18,marginTop:18,borderWidth:1,borderColor:LINE,borderRadius:17,padding:20,gap:10,shadowColor:'#173349',shadowOpacity:.05,shadowRadius:14,elevation:2}, formLabel:{fontSize:10,fontWeight:'900',letterSpacing:.9,color:'#718493',marginTop:3}, loginInput:{backgroundColor:'#F8FAFC',borderWidth:1,borderColor:'#D4DEE6',borderRadius:11,padding:13,fontSize:16,color:TEXT},
   summaryRow:{flexDirection:'row',gap:12}, summaryBox:{flex:1,backgroundColor:'#fff',borderRadius:15,padding:16,borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.025,shadowRadius:8,elevation:1}, summaryIcon:{width:34,height:34,borderRadius:10,alignItems:'center',justifyContent:'center',marginBottom:11}, summaryRed:{color:RED,fontSize:30,fontWeight:'900',letterSpacing:-.5}, summaryOrange:{color:ORANGE,fontSize:30,fontWeight:'900',letterSpacing:-.5}, summaryLabel:{color:MUTED,fontSize:12,fontWeight:'800',marginTop:1},
   sectionHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12,marginTop:3}, sectionHeadText:{flex:1,gap:3}, sectionTitle:{fontSize:19,fontWeight:'900',color:TEXT,letterSpacing:-.2}, sectionSubtitle:{fontSize:12,lineHeight:17,color:'#758594'}, sectionAction:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:10,paddingVertical:8,borderRadius:9,backgroundColor:'#EAF4FC'}, refresh:{fontSize:10,fontWeight:'900',color:BLUE,letterSpacing:.4},
   searchBox:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D8E2E9',borderRadius:12,minHeight:46,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:9}, searchInput:{flex:1,fontSize:15,color:TEXT,paddingVertical:10},

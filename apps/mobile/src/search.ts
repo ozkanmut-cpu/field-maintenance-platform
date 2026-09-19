@@ -7,3 +7,11 @@ export function matchesSearch(query: string, values: Array<string | null | undef
   if (!normalized) return true;
   return normalizeSearch(values.filter((value): value is string => Boolean(value)).join(' ')).includes(normalized);
 }
+
+export function searchMatchLabel(query: string, fields: Array<{ label: string; value: string | null | undefined }>) {
+  const normalized = normalizeSearch(query);
+  if (!normalized) return null;
+  const field = fields.find(item => normalizeSearch(item.value ?? '').includes(normalized));
+  if (!field) return null;
+  return field.label === 'ad' ? null : field.label;
+}

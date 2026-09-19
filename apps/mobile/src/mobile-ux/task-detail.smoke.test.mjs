@@ -10,7 +10,7 @@ function source(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-test('task detail renders status, due range, address directions, equipment, and backend-aligned location presentation', () => {
+test('task detail renders status, due range, address directions and equipment without routine technical location copy', () => {
   const detail = source(detailFile);
 
   assert.match(detail, /task\.priority === 'OVERDUE'/);
@@ -18,9 +18,10 @@ test('task detail renders status, due range, address directions, equipment, and 
   assert.match(detail, /task\.dueEnd/);
   assert.match(detail, /onDirections\(task\)/);
   assert.match(detail, /isEquipmentComplete\(task\)/);
-  assert.match(detail, /locationPresentationState/);
   assert.match(detail, /Ekipman bilgisi eksik/);
-  assert.match(detail, /Konum bakım sırasında doğrulanacak/);
+  assert.doesNotMatch(detail, /locationPresentationState/);
+  assert.doesNotMatch(detail, /Konum bakım sırasında doğrulanacak/);
+  assert.doesNotMatch(detail, /Konum bakım için uygun görünüyor/);
 });
 
 test('task detail has persistent directions and maintenance actions and replaces the placeholder route', () => {

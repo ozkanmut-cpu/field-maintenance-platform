@@ -11,13 +11,13 @@ type CustomerDetailScreenProps = {
   saveError: string | null;
   onSave: (values: EquipmentCounts) => void;
   onBack: () => void;
+  onDirections: (customer: MyCustomer) => void;
 };
 
-export function CustomerDetailScreen({ customer, saving, saveError, onSave, onBack }: CustomerDetailScreenProps) {
+export function CustomerDetailScreen({ customer, saving, saveError, onSave, onBack, onDirections }: CustomerDetailScreenProps) {
   const [equipment, setEquipment] = useState<EquipmentInput>(() => equipmentInputFrom(customer));
   useEffect(() => { setEquipment(equipmentInputFrom(customer)); }, [customer]);
   const parsed = useMemo(() => parseEquipment(equipment), [equipment]);
-  const hasCanonicalLocation = customer.canonicalLatitude != null && customer.canonicalLongitude != null;
 
   function save() {
     if ('error' in parsed) return;
@@ -38,15 +38,10 @@ export function CustomerDetailScreen({ customer, saving, saveError, onSave, onBa
       <Text style={styles.name}>{customer.name}</Text>
       <Text style={styles.meta}>{customer.code}{customer.region?.name ? ` · ${customer.region.name}` : ''}</Text>
       <ReadOnlyField label="Adres" value={customer.address ?? 'Adres bilgisi yok'} />
+      {customer.address ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${customer.name} için yol tarifi al`} style={styles.directionsButton} onPress={() => onDirections(customer)}>
+        <Feather name="navigation" size={17} color="#075A96" /><Text style={styles.directionsText}>YOL TARİFİ</Text>
+      </TouchableOpacity> : null}
       <ReadOnlyField label="Bölge" value={customer.region?.name ?? 'Bölge bilgisi yok'} />
-    </View>
-
-    <View style={styles.card}>
-      <View style={styles.cardHeading}><Feather name="crosshair" size={18} color="#075A96" /><Text style={styles.cardTitle}>Kayıtlı konum</Text></View>
-      {hasCanonicalLocation ? <>
-        <Text style={styles.location}>{customer.canonicalLatitude!.toFixed(5)}, {customer.canonicalLongitude!.toFixed(5)}</Text>
-        <Text style={styles.locationMeta}>{customer.locationSource ?? 'Kaynak bilgisi yok'} · güven {customer.locationConfidence ?? 0}%</Text>
-      </> : <Text style={styles.locationMeta}>Konum bilgisi henüz yok.</Text>}
     </View>
 
     <View style={styles.card}>
@@ -81,10 +76,8 @@ const styles = StyleSheet.create({
   readOnlyField: { borderTopWidth: 1, borderColor: '#EDF1F4', paddingTop: 9, gap: 2 },
   readOnlyLabel: { color: '#70818E', fontSize: 11, fontWeight: '800' },
   readOnlyValue: { color: '#334E60', fontSize: 14, fontWeight: '700' },
-  cardHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { color: '#173349', fontSize: 16, fontWeight: '900' },
-  location: { color: '#173349', fontSize: 15, fontWeight: '900' },
-  locationMeta: { color: '#607583', fontSize: 13, lineHeight: 18 },
+  directionsButton: { minHeight: 48, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7 }, directionsText: { color: '#075A96', fontSize: 12, fontWeight: '900' },
   help: { color: '#607583', fontSize: 13, lineHeight: 18 },
   equipmentRow: { minHeight: 56, borderTopWidth: 1, borderColor: '#EDF1F4', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   equipmentLabel: { color: '#334E60', fontSize: 14, fontWeight: '800' },

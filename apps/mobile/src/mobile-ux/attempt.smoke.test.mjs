@@ -21,15 +21,15 @@ test('attempt form offers every backend-supported reason and an optional note be
   assert.match(screen, /Yetkili kişi yok/);
   assert.match(screen, /Erişim sağlanamadı/);
   assert.match(screen, /Diğer/);
-  assert.match(screen, /Not \(isteğe bağlı\)/);
+  assert.match(screen, /Not <Text style=\{styles\.optional\}>\(isteğe bağlı\)<\/Text>/);
   assert.match(screen, /<TextInput/);
 });
 
-test('attempt form clearly discloses GPS capture and that the task remains open for admin review', () => {
+test('attempt form uses concise copy and clearly states that the task remains open for admin review', () => {
   const screen = source(screenFile);
 
-  assert.match(screen, /Konum bilgisi gönderilecek/);
-  assert.match(screen, /mevcut konumu, konumun alındığı zamanı ve doğruluk bilgisini/);
+  assert.doesNotMatch(screen, /Konum bilgisi gönderilecek/);
+  assert.doesNotMatch(screen, /doğruluk bilgisini/);
   assert.match(screen, /Görev, yönetici karar verene kadar açık kalır/);
 });
 

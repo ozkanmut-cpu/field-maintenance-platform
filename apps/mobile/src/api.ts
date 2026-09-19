@@ -193,6 +193,8 @@ export function technicianDashboard(technicianId?: string) {
   return jsonRequest<TechnicianDashboard>(`/maintenance/technician-dashboard${query}`);
 }
 
+export type MaintenanceCompletion = { id: string };
+
 export function completeMaintenance(input: {
   pointId: string;
   assistedForTechnicianId?: string;
@@ -205,7 +207,7 @@ export function completeMaintenance(input: {
   coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
   idempotencyKey: string;
 }) {
-  return jsonRequest<Record<string, unknown>>('/maintenance/complete', {
+  return jsonRequest<MaintenanceCompletion>('/maintenance/complete', {
     method: 'POST',
     body: JSON.stringify(input),
   });

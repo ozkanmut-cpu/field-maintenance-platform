@@ -16,8 +16,13 @@ export const equipmentFields: Array<{ key: keyof EquipmentCounts; label: string 
   { key: 'smarttapCount', label: 'SmartTap' },
 ];
 
-export function equipmentInputFrom(profile: EquipmentProfile): EquipmentInput {
-  return Object.fromEntries(equipmentFields.map(({ key }) => [key, profile[key] == null ? '' : String(profile[key])])) as EquipmentInput;
+export function hasRecordedEquipment(profile: EquipmentProfile) {
+  return equipmentFields.every(({ key }) => profile[key] != null);
+}
+
+export function equipmentInputFrom(profile: EquipmentProfile, fallback?: number): EquipmentInput {
+  const useFallback = fallback !== undefined && !hasRecordedEquipment(profile);
+  return Object.fromEntries(equipmentFields.map(({ key }) => [key, useFallback ? String(fallback) : profile[key] == null ? '' : String(profile[key])])) as EquipmentInput;
 }
 
 export function parseEquipment(input: EquipmentInput): { values: EquipmentCounts } | { error: string } {

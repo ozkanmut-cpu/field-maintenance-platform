@@ -2,44 +2,25 @@ import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { DueTask } from '../api';
-import { locationPresentationState } from './task-presentation';
-import { EquipmentCounts, EquipmentInput, equipmentDiff, equipmentFields, equipmentInputChangesIntent, equipmentInputFrom, parseEquipment } from './equipment';
-
-type DeviceLocation = { latitude: number; longitude: number; accuracyMeters?: number | null } | null;
+import { EquipmentCounts, EquipmentInput, equipmentDiff, equipmentFields, equipmentInputChangesIntent, equipmentInputFrom, hasRecordedEquipment, parseEquipment } from './equipment';
 
 type CompleteMaintenanceScreenProps = {
   task: DueTask;
-  deviceLocation: DeviceLocation;
   submitting: boolean;
   onBack: () => void;
   onIntentChange: () => void;
   onSubmit: (equipment: EquipmentCounts) => void;
 };
 
-function distanceMeters(origin: NonNullable<DeviceLocation>, task: DueTask) {
-  if (task.latitude == null || task.longitude == null) return null;
-  const earthRadius = 6371000;
-  const originLatitude = origin.latitude * Math.PI / 180;
-  const taskLatitude = task.latitude * Math.PI / 180;
-  const latitudeDifference = (task.latitude - origin.latitude) * Math.PI / 180;
-  const longitudeDifference = (task.longitude - origin.longitude) * Math.PI / 180;
-  const value = Math.sin(latitudeDifference / 2) ** 2 + Math.cos(originLatitude) * Math.cos(taskLatitude) * Math.sin(longitudeDifference / 2) ** 2;
-  return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
-}
-
-export function CompleteMaintenanceScreen({ task, deviceLocation, submitting, onBack, onIntentChange, onSubmit }: CompleteMaintenanceScreenProps) {
-  const [editing, setEditing] = useState(false);
-  const [equipment, setEquipment] = useState<EquipmentInput>(() => equipmentInputFrom(task));
+export function CompleteMaintenanceScreen({ task, submitting, onBack, onIntentChange, onSubmit }: CompleteMaintenanceScreenProps) {
+  const recordedEquipment = hasRecordedEquipment(task);
+  const initialEquipment = () => equipmentInputFrom(task, 0);
+  const [editing, setEditing] = useState(() => !hasRecordedEquipment(task));
+  const [equipment, setEquipment] = useState<EquipmentInput>(initialEquipment);
   const [error, setError] = useState<string | null>(null);
   const writeLocked = useRef(false);
   const parsed = useMemo(() => parseEquipment(equipment), [equipment]);
   const diff = 'values' in parsed ? equipmentDiff(task, parsed.values) : [];
-  const locationState = locationPresentationState({
-    canonicalLatitude: task.latitude,
-    canonicalLongitude: task.longitude,
-    distanceMeters: deviceLocation ? distanceMeters(deviceLocation, task) : null,
-    accuracyMeters: deviceLocation?.accuracyMeters,
-  });
 
   useEffect(() => {
     if (!submitting) writeLocked.current = false;
@@ -57,9 +38,9 @@ export function CompleteMaintenanceScreen({ task, deviceLocation, submitting, on
 
   function resetEditing() {
     if (writeLocked.current || submitting) return;
-    const initialEquipment = equipmentInputFrom(task);
-    if (equipmentInputChangesIntent(equipment, initialEquipment)) onIntentChange();
-    setEquipment(initialEquipment);
+    const initial = initialEquipment();
+    if (equipmentInputChangesIntent(equipment, initial)) onIntentChange();
+    setEquipment(initial);
     setError(null);
     setEditing(false);
   }
@@ -84,22 +65,13 @@ export function CompleteMaintenanceScreen({ task, deviceLocation, submitting, on
       </TouchableOpacity>
 
       <View style={styles.heroCard}>
-        <Text style={styles.eyebrow}>BAKIM ONAYI</Text>
+        <Text style={styles.eyebrow}>BAKIM</Text>
         <Text style={styles.title}>{task.pointName}</Text>
         <Text style={styles.meta}>{task.pointCode} · {task.regionName}</Text>
-        <Text style={styles.body}>Kayıtlı ekipman bilgilerini kontrol et. Fark varsa adetleri düzenle.</Text>
       </View>
 
-      {locationState !== 'READY' && <View style={styles.reviewCard} accessibilityRole="alert">
-        <Feather name="map-pin" size={18} color="#A96308" />
-        <View style={styles.reviewCopy}>
-          <Text style={styles.reviewTitle}>Konum incelemesi gerekebilir</Text>
-          <Text style={styles.reviewText}>Konum kaydı inceleme gerektirebilir. Kaydederken noktada olup olmadığın sorulacak.</Text>
-        </View>
-      </View>}
-
       <View style={styles.card}>
-        <View style={styles.cardHeading}><Text style={styles.cardTitle}>Ekipman</Text>{!editing && <Text style={styles.confirmed}>KONTROL ET</Text>}</View>
+        <View style={styles.cardHeading}><Text style={styles.cardTitle}>Ekipman</Text></View>
         {!editing ? <EquipmentConfirmation equipment={equipment} /> : <EquipmentEditor equipment={equipment} submitting={submitting} onChange={changeCount} onStep={stepCount} />}
       </View>
 
@@ -112,11 +84,11 @@ export function CompleteMaintenanceScreen({ task, deviceLocation, submitting, on
 
     <View style={styles.stickyActions}>
       <TouchableOpacity testID="complete-maintenance-save" accessibilityRole="button" accessibilityLabel="Bakımı kaydet" accessibilityState={{ disabled: submitting, busy: submitting }} style={[styles.primaryAction, submitting && styles.disabled]} onPress={submit} disabled={submitting}>
-        <Feather name="check-circle" size={18} color="#fff" /><Text style={styles.primaryActionText}>{submitting ? 'KAYDEDİLİYOR...' : editing ? 'BAKIMI KAYDET' : 'BİLGİLER DOĞRU · BAKIMI KAYDET'}</Text>
+        <Feather name="check-circle" size={18} color="#fff" /><Text style={styles.primaryActionText}>{submitting ? 'KAYDEDİLİYOR...' : 'BAKIMI KAYDET'}</Text>
       </TouchableOpacity>
-      {editing ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ekipman düzenlemesini iptal et" style={styles.secondaryAction} onPress={resetEditing} disabled={submitting}>
+      {editing && recordedEquipment ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ekipman düzenlemesini iptal et" style={styles.secondaryAction} onPress={resetEditing} disabled={submitting}>
         <Text style={styles.secondaryActionText}>DÜZENLEMEYİ İPTAL ET</Text>
-      </TouchableOpacity> : <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ekipman adetlerini düzenle" style={styles.secondaryAction} onPress={() => setEditing(true)} disabled={submitting}>
+      </TouchableOpacity> : !editing && <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ekipman adetlerini düzenle" style={styles.secondaryAction} onPress={() => setEditing(true)} disabled={submitting}>
         <Text style={styles.secondaryActionText}>DÜZENLE</Text>
       </TouchableOpacity>}
     </View>

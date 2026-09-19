@@ -32,6 +32,8 @@ test('Jobs provides a help selector and keeps the selected technician visible', 
   assert.match(screen, /YARDIM MODU/);
   assert.match(screen, /DEĞİŞTİR/);
   assert.match(screen, /Yardım edilecek teknisyen/);
+  assert.match(screen, /KENDİ İŞLERİM/);
+  assert.doesNotMatch(screen, />YARDIM ET</);
   assert.match(app, /helpTargets\(\)/);
   assert.match(app, /technicianDashboard\(target\.id\)/);
   assert.match(app, /assistedForTechnicianId/);

@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MyCustomer } from '../api';
-import { matchesSearch } from '../search';
+import { matchesSearch, searchMatchLabel } from '../search';
 
 type CustomersScreenProps = {
   customers: MyCustomer[];
@@ -35,7 +35,7 @@ export function CustomersScreen({ customers, loading, error, search, onSearchCha
     {!loading && !error && customers.length > 0 && visibleCustomers.length === 0 ? <Empty icon="search" title="Sonuç bulunamadı" text="Arama ifadesini değiştirip tekrar dene." /> : null}
     {visibleCustomers.length > 0 ? <View style={styles.listCard}>{visibleCustomers.map(customer => <TouchableOpacity key={customer.id} accessibilityRole="button" accessibilityLabel={`${customer.name} müşteri detayını aç`} style={styles.customerRow} onPress={() => onOpenCustomer(customer)}>
       <View style={[styles.statusIcon, customer.equipmentComplete ? styles.completeIcon : styles.incompleteIcon]}><Feather name={customer.equipmentComplete ? 'check' : 'tool'} size={18} color={customer.equipmentComplete ? '#1B8051' : '#A96308'} /></View>
-      <View style={styles.customerCopy}><Text style={styles.customerName}>{customer.name}</Text><Text style={styles.customerMeta}>{customer.code}{customer.region?.name ? ` · ${customer.region.name}` : ''}</Text><Text style={customer.equipmentComplete ? styles.completeText : styles.incompleteText}>{customer.equipmentComplete ? 'Ekipman bilgisi tamam' : 'Ekipman bilgisi eksik'}</Text></View>
+      <View style={styles.customerCopy}><Text style={styles.customerName}>{customer.name}</Text><Text style={styles.customerMeta}>{customer.code}{customer.region?.name ? ` · ${customer.region.name}` : ''}</Text>{searchMatchLabel(search, [{ label: 'ad', value: customer.name }, { label: 'kod', value: customer.code }, { label: 'bölge', value: customer.region?.name }, { label: 'adres', value: customer.address }, ...customer.aliases?.map(value => ({ label: 'eski ad', value })) ?? []]) ? <Text style={styles.matchText}>Eşleşme: {searchMatchLabel(search, [{ label: 'ad', value: customer.name }, { label: 'kod', value: customer.code }, { label: 'bölge', value: customer.region?.name }, { label: 'adres', value: customer.address }, ...customer.aliases?.map(value => ({ label: 'eski ad', value })) ?? []])}</Text> : null}<Text style={customer.equipmentComplete ? styles.completeText : styles.incompleteText}>{customer.equipmentComplete ? 'Ekipman bilgisi tamam' : 'Ekipman bilgisi eksik'}</Text></View>
       <Feather name="chevron-right" size={20} color="#8A99A6" />
     </TouchableOpacity>)}</View> : null}
   </View>;
@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
   customerCopy: { flex: 1, gap: 2 },
   customerName: { color: '#173349', fontSize: 15, fontWeight: '900' },
   customerMeta: { color: '#718391', fontSize: 12, fontWeight: '700' },
+  matchText: { color: '#607583', fontSize: 11, fontWeight: '800' },
   completeText: { color: '#1B8051', fontSize: 12, fontWeight: '900' },
   incompleteText: { color: '#A96308', fontSize: 12, fontWeight: '900' },
 });

@@ -16,11 +16,12 @@ type MobileShellProps = {
   brandImage: ImageSourcePropType;
   activeDestination: PrimaryDestination;
   onNavigate: (destination: PrimaryDestination) => void;
-  onSignOut: () => void;
+  onProfilePress: () => void;
+  showNavigation?: boolean;
   children: ReactNode;
 };
 
-export function MobileShell({ title, userName, brandImage, activeDestination, onNavigate, onSignOut, children }: MobileShellProps) {
+export function MobileShell({ title, userName, brandImage, activeDestination, onNavigate, onProfilePress, showNavigation = true, children }: MobileShellProps) {
   return <View style={styles.shell}>
     <View style={styles.header}>
       <View style={styles.identity}>
@@ -31,13 +32,12 @@ export function MobileShell({ title, userName, brandImage, activeDestination, on
           <Text style={styles.userName}>{userName}</Text>
         </View>
       </View>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Oturumu kapat" style={styles.signOutButton} onPress={onSignOut}>
-        <Feather name="log-out" size={19} color="#fff" />
-        <Text style={styles.signOutText}>ÇIKIŞ</Text>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Hesap seçeneklerini aç" style={styles.profileButton} onPress={onProfilePress}>
+        <Feather name="user" size={20} color="#fff" />
       </TouchableOpacity>
     </View>
     <View style={styles.content}>{children}</View>
-    <View accessibilityRole="tablist" style={styles.navigation}>
+    {showNavigation && <View accessibilityRole="tablist" style={styles.navigation}>
       {primaryDestinations.map((item) => {
         const active = item.destination === activeDestination;
         return <TouchableOpacity key={item.destination} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: active }} style={styles.navItem} onPress={() => onNavigate(item.destination)}>
@@ -45,7 +45,7 @@ export function MobileShell({ title, userName, brandImage, activeDestination, on
           <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text>
         </TouchableOpacity>;
       })}
-    </View>
+    </View>}
   </View>;
 }
 
@@ -61,8 +61,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#D7E8F5', fontSize: 12, fontWeight: '900', letterSpacing: .4 },
   title: { color: '#fff', fontSize: 27, fontWeight: '900', letterSpacing: -.45, marginTop: 1, flexShrink: 1 },
   userName: { color: '#C9DDEC', fontSize: 12, marginTop: 1 },
-  signOutButton: { minHeight: 48, borderWidth: 1, borderColor: 'rgba(255,255,255,.22)', backgroundColor: 'rgba(255,255,255,.06)', paddingHorizontal: 11, paddingVertical: 9, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  signOutText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  profileButton: { width: 48, height: 48, borderWidth: 1, borderColor: 'rgba(255,255,255,.22)', backgroundColor: 'rgba(255,255,255,.06)', borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   content: { flex: 1 },
   navigation: { minHeight: 72, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#DDE5EB', flexDirection: 'row', paddingVertical: 5, shadowColor: '#173349', shadowOpacity: .06, shadowRadius: 10, elevation: 10 },
   navItem: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 3 },

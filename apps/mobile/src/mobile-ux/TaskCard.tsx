@@ -3,10 +3,12 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { DueTask } from '../api';
 import { isEquipmentComplete } from './task-presentation';
+import { searchMatchLabel } from '../search';
 
 type TaskCardProps = {
   task: DueTask;
   deviceLocation?: { latitude: number; longitude: number } | null;
+  search?: string;
   onPress: (task: DueTask) => void;
 };
 
@@ -25,10 +27,11 @@ function formatDistance(distance: number) {
   return distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(distance < 10000 ? 1 : 0)} km`;
 }
 
-export function TaskCard({ task, deviceLocation, onPress }: TaskCardProps) {
+export function TaskCard({ task, deviceLocation, search = '', onPress }: TaskCardProps) {
   const overdue = task.priority === 'OVERDUE';
   const distance = deviceLocation ? distanceMeters(deviceLocation, task) : null;
   const equipmentComplete = isEquipmentComplete(task);
+  const matchLabel = searchMatchLabel(search, [{ label: 'ad', value: task.pointName }, { label: 'kod', value: task.pointCode }, { label: 'bölge', value: task.regionName }, { label: 'adres', value: task.address }, ...task.aliases?.map(value => ({ label: 'eski ad', value })) ?? []]);
 
   return <TouchableOpacity
     accessibilityRole="button"
@@ -45,6 +48,7 @@ export function TaskCard({ task, deviceLocation, onPress }: TaskCardProps) {
     </View>
     <Text style={styles.name}>{task.pointName}</Text>
     <Text style={styles.meta}>{task.pointCode} · {task.regionName}{distance != null ? ` · ${formatDistance(distance)}` : ''}</Text>
+    {matchLabel ? <Text style={styles.matchText}>Eşleşme: {matchLabel}</Text> : null}
     {!equipmentComplete && <View style={styles.warning}><Feather name="tool" size={14} color="#A96308" /><Text style={styles.warningText}>Ekipman bilgisi eksik</Text></View>}
   </TouchableOpacity>;
 }
@@ -57,5 +61,6 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 4 }, overdueDot: { backgroundColor: '#B7372F' }, currentDot: { backgroundColor: '#A96308' },
   statusText: { fontSize: 10, fontWeight: '900', letterSpacing: .35 }, overdueText: { color: '#B7372F' }, currentText: { color: '#A96308' },
   name: { color: '#173349', fontSize: 16, fontWeight: '900' }, meta: { color: '#70818E', fontSize: 12, fontWeight: '700' },
+  matchText: { color: '#607583', fontSize: 11, fontWeight: '800' },
   warning: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }, warningText: { color: '#A96308', fontSize: 11, fontWeight: '900' },
 });

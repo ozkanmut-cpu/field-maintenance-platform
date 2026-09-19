@@ -10,10 +10,12 @@ function source(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-test('completion confirms equipment before editing and only presents a diff for actual changes', () => {
+test('completion starts a missing equipment profile from zero and only presents a diff for actual changes', () => {
   const screen = source(screenFile);
 
-  assert.match(screen, /Kayıtlı ekipman bilgilerini kontrol et/);
+  assert.match(screen, /hasRecordedEquipment/);
+  assert.match(screen, /equipmentInputFrom\(task, 0\)/);
+  assert.match(screen, /useState\(\(\) => !hasRecordedEquipment\(task\)\)/);
   assert.match(screen, /DÜZENLE/);
   assert.match(screen, /editing && diff\.length > 0/);
   assert.match(screen, /equipmentDiff/);
@@ -22,12 +24,12 @@ test('completion confirms equipment before editing and only presents a diff for 
   assert.match(screen, /keyboardType="number-pad"/);
 });
 
-test('completion has a backend-aligned review preflight only when review is applicable', () => {
+test('completion keeps routine location-review copy out of the entry screen', () => {
   const screen = source(screenFile);
 
-  assert.match(screen, /locationPresentationState/);
-  assert.match(screen, /locationState !== 'READY'/);
-  assert.match(screen, /Konum kaydı inceleme gerektirebilir/);
+  assert.doesNotMatch(screen, /locationPresentationState/);
+  assert.doesNotMatch(screen, /Konum kaydı inceleme gerektirebilir/);
+  assert.doesNotMatch(screen, /noktada olup olmadığın sorulacak/);
 });
 
 test('completion sends low-accuracy, missing-accuracy, and non-finite accuracy evidence through the existing presence decision', () => {
@@ -60,6 +62,9 @@ test('completion locks all equipment inputs, retries the exact payload, and guar
   assert.match(screen, /accessibilityState=\{\{ disabled: submitting \}\}/);
   assert.match(screen, /disabled=\{submitting\}/);
   assert.match(screen, /writeLocked\.current = true/);
+  assert.match(screen, /'BAKIMI KAYDET'/);
+  assert.doesNotMatch(screen, /BİLGİLER DOĞRU/);
+  assert.doesNotMatch(screen, /KONTROL ET/);
   assert.match(screen, /if \(writeLocked\.current \|\| submitting\) return/);
   assert.doesNotMatch(screen, /onPress=\{\(\) => \{ onIntentChange\(\); setEditing\(true\); \}\}/);
   assert.match(app, /onIntentChange=\{\(\) => completionSubmission\.current\.clearIfIdle\(completionInFlight\.current\)\}/);

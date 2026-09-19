@@ -33,12 +33,18 @@ test('customer list has loading, retry, refresh, and accessible customer actions
   assert.match(app, /accessibilityLabel="Müşterileri yenile"/);
 });
 
-test('customer detail keeps customer metadata read-only and limits editing to four equipment counts', () => {
+test('customer detail keeps customer metadata read-only, exposes address directions, and hides technical location data', () => {
   const detail = source(detailFile);
 
-  for (const field of ['customer.name', 'customer.code', 'customer.region?.name', 'customer.address', 'customer.canonicalLatitude', 'customer.canonicalLongitude', 'customer.locationSource', 'customer.locationConfidence']) {
+  for (const field of ['customer.name', 'customer.code', 'customer.region?.name', 'customer.address']) {
     assert.ok(detail.includes(field), `detail must present ${field}`);
   }
+  assert.match(detail, /YOL TARİFİ/);
+  assert.match(detail, /onDirections\(customer\)/);
+  assert.doesNotMatch(detail, /canonicalLatitude/);
+  assert.doesNotMatch(detail, /canonicalLongitude/);
+  assert.doesNotMatch(detail, /locationSource/);
+  assert.doesNotMatch(detail, /locationConfidence/);
   assert.match(detail, /equipmentFields\.map/);
   assert.match(detail, /parseEquipment\(equipment\)/);
   assert.match(detail, /onSave\(parsed\.values\)/);

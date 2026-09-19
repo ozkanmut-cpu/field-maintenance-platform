@@ -2,45 +2,19 @@ import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { DueTask } from '../api';
-import { isEquipmentComplete, locationPresentationState } from './task-presentation';
+import { isEquipmentComplete } from './task-presentation';
 import { formatTaskDueDate } from './task-detail-presentation';
-
-type Coordinates = { latitude: number; longitude: number; accuracyMeters?: number | null };
 
 type TaskDetailScreenProps = {
   task: DueTask;
-  deviceLocation: Coordinates | null;
   onBack: () => void;
   onDirections: (task: DueTask) => void;
   onBeginCompletion: () => void;
   onBeginAttempt: () => void;
 };
 
-function distanceMeters(origin: Coordinates, task: DueTask) {
-  if (task.latitude == null || task.longitude == null) return null;
-  const radius = 6371000;
-  const originLatitude = origin.latitude * Math.PI / 180;
-  const taskLatitude = task.latitude * Math.PI / 180;
-  const latitudeDifference = (task.latitude - origin.latitude) * Math.PI / 180;
-  const longitudeDifference = (task.longitude - origin.longitude) * Math.PI / 180;
-  const value = Math.sin(latitudeDifference / 2) ** 2 + Math.cos(originLatitude) * Math.cos(taskLatitude) * Math.sin(longitudeDifference / 2) ** 2;
-  return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
-}
-
-export function TaskDetailScreen({ task, deviceLocation, onBack, onDirections, onBeginCompletion, onBeginAttempt }: TaskDetailScreenProps) {
+export function TaskDetailScreen({ task, onBack, onDirections, onBeginCompletion, onBeginAttempt }: TaskDetailScreenProps) {
   const equipmentComplete = isEquipmentComplete(task);
-  const distance = deviceLocation ? distanceMeters(deviceLocation, task) : null;
-  const locationState = locationPresentationState({
-    canonicalLatitude: task.latitude,
-    canonicalLongitude: task.longitude,
-    distanceMeters: distance,
-    accuracyMeters: deviceLocation?.accuracyMeters,
-  });
-  const locationText = locationState === 'CANONICAL_LOCATION_MISSING'
-    ? 'Noktanın kayıtlı konumu yok. Bakım sırasında konum kaydı alınır.'
-    : locationState === 'READY'
-      ? 'Konum bakım için uygun görünüyor.'
-      : 'Konum bakım sırasında doğrulanacak; gerektiğinde inceleme istenir.';
 
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -64,10 +38,6 @@ export function TaskDetailScreen({ task, deviceLocation, onBack, onDirections, o
 
       <DetailCard icon="tool" title="Ekipman">
         <Text style={[styles.body, !equipmentComplete && styles.warningText]}>{equipmentComplete ? 'Ekipman bilgisi tamam.' : 'Ekipman bilgisi eksik'}</Text>
-      </DetailCard>
-
-      <DetailCard icon="crosshair" title="Konum">
-        <Text style={styles.body}>{locationText}</Text>
       </DetailCard>
     </ScrollView>
 
