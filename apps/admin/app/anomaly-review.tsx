@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminIcon } from "./admin-icons";
 type Technician = {
   id: string;
@@ -55,6 +55,7 @@ export default function AnomalyReview() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [search, setSearch] = useState("");
+  const loadGeneration = useRef(0);
   const selectedItem = items.find((item) => item.id === selected),
     visible = useMemo(() => {
       const q = search.trim().toLocaleLowerCase("tr-TR");
@@ -85,12 +86,14 @@ export default function AnomalyReview() {
     return body as T;
   };
   async function load() {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     try {
       const [queue, users] = await Promise.all([
         api<Item[]>("/api/backend/maintenance/review-queue?limit=200"),
         api<Technician[]>("/api/backend/users"),
       ]);
+      if (generation !== loadGeneration.current) return;
       setItems(queue);
       setTechs(
         users.filter((user) => user.role === "TECHNICIAN" && user.active),
@@ -101,9 +104,10 @@ export default function AnomalyReview() {
           : (queue[0]?.id ?? null),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (generation === loadGeneration.current)
+        setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }
   useEffect(() => {
