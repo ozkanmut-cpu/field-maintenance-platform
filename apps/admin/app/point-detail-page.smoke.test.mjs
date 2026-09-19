@@ -8,6 +8,10 @@ test('point detail stays read only until explicit edit mode', () => {
   const source = readFileSync(path, 'utf8');
   assert.match(source, /useState\(false\)/);
   assert.match(source, /Düzenle/);
+  const timelineStart = source.indexOf("if (activeTab === 'timeline')");
+  const timelineEnd = source.indexOf('\n  return <section', timelineStart + 1);
+  assert.doesNotMatch(source.slice(timelineStart, timelineEnd), /rowActions/,
+    'Timeline is a read-only history view and must not offer a no-op edit control');
   assert.match(source, /Kaydet/);
   assert.match(source, /İptal/);
   assert.match(source, /method: 'PATCH'/);
