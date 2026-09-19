@@ -112,6 +112,7 @@ export default function AnomalyReview() {
   useEffect(() => {
     if (!selected) {
       setHistory(null);
+      setHistoryLoading(false);
       return;
     }
     const controller = new AbortController();
