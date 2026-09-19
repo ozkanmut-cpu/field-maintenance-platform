@@ -43,6 +43,16 @@ test('point detail stays read only until explicit edit mode', () => {
     'Assignments tab must expose whether the assignment remains active');
   assert.match(source, /audit\?entityId=/,
     'Audit tab must use the real audit endpoint filtered by point id');
+  assert.match(source, /İşlem zamanı/,
+    'Audit tab must present the real audit timestamp in a dedicated readable column');
+  assert.match(source, /İşlemi yapan/,
+    'Audit tab must expose the real audit actor rather than a raw object');
+  assert.match(source, /Değişen alanlar/,
+    'Audit tab must preserve before\/after values behind a focused disclosure');
+  assert.match(source, /oldValue/,
+    'Audit tab must retain the real previous value payload');
+  assert.match(source, /newValue/,
+    'Audit tab must retain the real new value payload');
   assert.match(source, /maintenance\/point\/\$\{pointId\}\/paperwork-history/,
     'Paperwork tab must use the real point-scoped paperwork history endpoint');
   assert.doesNotMatch(source, /Bu ayrıntılar mevcut Evrak Yönetimi ekranında korunur/,
