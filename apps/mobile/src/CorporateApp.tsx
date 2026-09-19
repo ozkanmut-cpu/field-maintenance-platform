@@ -2,9 +2,9 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Location from 'expo-location';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Feather as ExpoFeather } from '@expo/vector-icons';
-import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
@@ -16,8 +16,7 @@ import {
 import { matchesSearch } from './search';
 import { nearbyPoints, sortNearbyItems } from './nearby';
 import { NearbyScreen } from './NearbyScreen';
-
-type Screen = 'TASKS' | 'NEARBY' | 'CUSTOMERS' | 'CUSTOMER' | 'EQUIPMENT_CONFIRM' | 'HELP' | 'NEW' | 'HISTORY' | 'EFESIM_RESULT' | 'PROSPECT' | 'VISIT_SAVED' | 'SUCCESS';
+import { type MobileScreen, popScreen, primaryTabs, pushScreen } from './mobile-navigation';
 
 const APP_ICON = require('../assets/fici-bakim-icon.png');
 const FEATHER_ALIASES: Record<string, React.ComponentProps<typeof ExpoFeather>['name']> = {
@@ -40,7 +39,9 @@ export default function CorporateApp() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [screen, setScreen] = useState<Screen>('TASKS');
+  const [screen, setScreen] = useState<MobileScreen>('TASKS');
+  const screenRef = useRef<MobileScreen>('TASKS');
+  const screenHistoryRef = useRef<MobileScreen[]>([]);
   const [dashboard, setDashboard] = useState<TechnicianDashboard | null>(null);
   const [helpPeople, setHelpPeople] = useState<HelpTarget[]>([]);
   const [helpDashboard, setHelpDashboard] = useState<TechnicianDashboard | null>(null);
@@ -70,8 +71,33 @@ export default function CorporateApp() {
   const strongGoogleMatch = Boolean(google?.matched && google.placeId);
   const addressText = useMemo(() => strongGoogleMatch && useGoogle ? google?.address || 'Google adres bilgisi yok' : 'Adres yok — manuel adres girişi kapalı', [google, strongGoogleMatch, useGoogle]);
 
+  const resetNavigation = useCallback((next: MobileScreen = 'TASKS') => {
+    screenHistoryRef.current = [];
+    screenRef.current = next;
+    setScreen(next);
+  }, []);
+  const navigate = useCallback((next: MobileScreen, replace = false) => {
+    const current = screenRef.current;
+    if (current === next) return;
+    if (!replace) screenHistoryRef.current = pushScreen(screenHistoryRef.current, current, next);
+    screenRef.current = next;
+    setScreen(next);
+  }, []);
+  const goBack = useCallback(() => {
+    const previous = popScreen(screenHistoryRef.current, screenRef.current);
+    if (!previous) return false;
+    screenHistoryRef.current = previous.history;
+    screenRef.current = previous.screen;
+    setScreen(previous.screen);
+    return true;
+  }, []);
+
   useEffect(() => { void restore(); }, []);
   useEffect(() => { if (user) void loadTasks(); }, [user]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => goBack());
+    return () => subscription.remove();
+  }, [goBack]);
 
   async function restore() {
     try {
@@ -90,12 +116,12 @@ export default function CorporateApp() {
     try {
       const session = await login(username.trim().toLowerCase(), password);
       if (session.user.role !== 'TECHNICIAN') { await clearSessionToken(); throw new Error('Bu uygulama teknisyen hesabı gerektiriyor.'); }
-      setUser(session.user); setPassword(''); setScreen('TASKS');
+      setUser(session.user); setPassword(''); resetNavigation();
     } catch (e) { Alert.alert('Giriş yapılamadı', message(e)); }
     finally { setBusy(false); }
   }
 
-  async function signOut() { await clearSessionToken(); setUser(null); setDashboard(null); setPassword(''); setScreen('TASKS'); }
+  async function signOut() { await clearSessionToken(); setUser(null); setDashboard(null); setPassword(''); resetNavigation(); }
   async function loadTasks() {
     try {
       setDashboard(await technicianDashboard());
@@ -110,9 +136,9 @@ export default function CorporateApp() {
       setDeviceLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
     } catch { /* Konum alınamazsa mevcut görev sırası korunur. */ }
   }
-  async function openHelp() { setBusy(true); try { setHelpPeople(await helpTargets()); setHelpDashboard(null); setScreen('HELP'); } catch (e) { Alert.alert('Yardım listesi alınamadı', message(e)); } finally { setBusy(false); } }
+  async function openHelp() { setBusy(true); try { setHelpPeople(await helpTargets()); setHelpDashboard(null); navigate('HELP'); } catch (e) { Alert.alert('Yardım listesi alınamadı', message(e)); } finally { setBusy(false); } }
   async function selectHelper(target: HelpTarget) { setBusy(true); try { setHelpDashboard(await technicianDashboard(target.id)); } catch (e) { Alert.alert('Görevler alınamadı', message(e)); } finally { setBusy(false); } }
-  async function openHistory() { setBusy(true); try { const h = await technicianHistory(); setHistoryItems(h.items.slice().reverse()); setScreen('HISTORY'); } catch (e) { Alert.alert('Geçmiş alınamadı', message(e)); } finally { setBusy(false); } }
+  async function openHistory() { setBusy(true); try { const h = await technicianHistory(); setHistoryItems(h.items.slice().reverse()); navigate('HISTORY'); } catch (e) { Alert.alert('Geçmiş alınamadı', message(e)); } finally { setBusy(false); } }
   function confirmRevert(item: TechnicianHistoryItem) {
     if (item.type !== 'MAINTENANCE') return;
     const name = item.point?.name ?? 'bu bakım';
@@ -141,7 +167,7 @@ export default function CorporateApp() {
     if (Object.values(values).some(v=>!Number.isInteger(v)||v<0)) throw new Error('Tüm ekipman adetlerini 0 veya daha büyük tam sayı olarak gir.');
     return values;
   }
-  async function openCustomers() { setBusy(true); try { setCustomers(await myCustomers()); setScreen('CUSTOMERS'); } catch(e){ Alert.alert('Müşteriler alınamadı',message(e)); } finally{ setBusy(false); } }
+  async function openCustomers() { setBusy(true); try { setCustomers(await myCustomers()); navigate('CUSTOMERS'); } catch(e){ Alert.alert('Müşteriler alınamadı',message(e)); } finally{ setBusy(false); } }
   async function loadNearby() {
     setNearbyLoading(true); setNearbyError(null);
     try {
@@ -155,10 +181,10 @@ export default function CorporateApp() {
     } catch (e) { setNearbyError(message(e)); }
     finally { setNearbyLoading(false); }
   }
-  async function openNearby() { setScreen('NEARBY'); await loadNearby(); }
-  function openCustomer(customer:MyCustomer){ setSelectedCustomer(customer); equipmentFrom(customer); setScreen('CUSTOMER'); }
+  async function openNearby() { navigate('NEARBY'); await loadNearby(); }
+  function openCustomer(customer:MyCustomer){ setSelectedCustomer(customer); equipmentFrom(customer); navigate('CUSTOMER'); }
   async function saveCustomerEquipment(){ if(!selectedCustomer)return; setBusy(true); try { const values=parsedEquipment(); await updateCustomerEquipment(selectedCustomer.id,values); const refreshed=await myCustomers(); setCustomers(refreshed); const next=refreshed.find(x=>x.id===selectedCustomer.id)??null; setSelectedCustomer(next); if(next) equipmentFrom(next); Alert.alert('Kaydedildi','Müşteri ekipman bilgileri güncellendi.'); } catch(e){ Alert.alert('Kaydedilemedi',message(e)); } finally{setBusy(false);} }
-  function prepareComplete(task:DueTask, assistedForTechnicianId?:string){ setPendingTask(task); setPendingAssist(assistedForTechnicianId); equipmentFrom(task); setScreen('EQUIPMENT_CONFIRM'); }
+  function prepareComplete(task:DueTask, assistedForTechnicianId?:string){ setPendingTask(task); setPendingAssist(assistedForTechnicianId); equipmentFrom(task); navigate('EQUIPMENT_CONFIRM'); }
 
   async function currentLocation() {
     const permission = await Location.requestForegroundPermissionsAsync();
@@ -206,7 +232,7 @@ export default function CorporateApp() {
   async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, loc: Awaited<ReturnType<typeof currentLocation>>, locationPresenceConfirmed = true) {
     const equipmentValues = parsedEquipment();
     await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationPresenceConfirmed, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
-    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setScreen('SUCCESS'); setHelpDashboard(null); await loadTasks();
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
   }
 
   async function completeTask(task: DueTask, assistedForTechnicianId?: string) {
@@ -241,7 +267,7 @@ export default function CorporateApp() {
       if (!resized.base64) throw new Error('Ekran görüntüsü okunamadı.');
       const loc = await currentLocation(); const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude }; setFieldLocation(coords);
       const result = await extractEfesim({ technicianId: user!.id, imageBase64: resized.base64, ...coords });
-      setEfesim(result); setCustomerName(result.customerName ?? ''); setSapNo(result.sapNo ?? ''); setUseGoogle(result.nextStep === 'CONFIRM_GOOGLE_MATCH'); setScreen('EFESIM_RESULT');
+      setEfesim(result); setCustomerName(result.customerName ?? ''); setSapNo(result.sapNo ?? ''); setUseGoogle(result.nextStep === 'CONFIRM_GOOGLE_MATCH'); navigate('EFESIM_RESULT');
     } catch (e) { Alert.alert('EFESİM okunamadı', message(e)); }
     finally { setBusy(false); }
   }
@@ -253,7 +279,7 @@ export default function CorporateApp() {
     setBusy(true);
     try {
       const r = await confirmEfesim({ technicianId: user!.id, customerName: customerName.trim(), sapNo: sapNo.trim() || null, googlePlaceId: strongGoogleMatch && useGoogle ? google?.placeId ?? null : null, ...fieldLocation });
-      setProspect(r.prospect); setScreen('PROSPECT');
+      setProspect(r.prospect); navigate('PROSPECT');
     } catch (e) { Alert.alert('Kayıt oluşturulamadı', message(e)); }
     finally { setBusy(false); }
   }
@@ -264,7 +290,7 @@ export default function CorporateApp() {
     try {
       const loc = await currentLocation();
       await createProspectVisit({ prospectId: prospect.id, technicianId: user!.id, purpose: visitPurpose, latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationCapturedAt: new Date(loc.timestamp).toISOString(), idempotencyKey: `prospect-${user!.id}-${prospect.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
-      setScreen('VISIT_SAVED');
+      navigate('VISIT_SAVED');
     } catch (e) { Alert.alert('Ziyaret kaydedilemedi', message(e)); }
     finally { setBusy(false); }
   }
@@ -284,21 +310,21 @@ export default function CorporateApp() {
       </TouchableOpacity>
     </View>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} search={taskSearch} setSearch={setTaskSearch} deviceLocation={deviceLocation} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
+      {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} search={taskSearch} setSearch={setTaskSearch} deviceLocation={deviceLocation} onHelp={() => void openHelp()} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
       {screen === 'NEARBY' && (nearbyError ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={nearbyError} /> : <NearbyScreen items={nearbyItems} origin={deviceLocation} loading={nearbyLoading} refresh={() => void loadNearby()} directions={openNearbyDirections} />)}
       {screen === 'HELP' && <HelpView people={helpPeople} dashboard={helpDashboard} busy={busy} select={selectHelper} change={() => setHelpDashboard(null)} onDirections={openDirections} onAttempt={task => attemptReason(task, helpDashboard?.technician.id)} onComplete={task => prepareComplete(task, helpDashboard?.technician.id)} />}
       {screen === 'CUSTOMERS' && <CustomersView customers={customers} search={customerSearch} setSearch={setCustomerSearch} open={openCustomer} />}
-      {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={() => setScreen('CUSTOMERS')} busy={busy} />}
-      {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); setScreen(pendingAssist?'HELP':'TASKS'); }} busy={busy} />}
+      {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={goBack} busy={busy} />}
+      {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); goBack(); }} busy={busy} />}
       {screen === 'HISTORY' && <HistoryView items={historyItems} busy={busy} onRevert={confirmRevert} />}
-      {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); setScreen('TASKS'); }} />}
+      {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); resetNavigation(); }} />}
       {screen === 'NEW' && <NewPointView begin={() => void beginEfesim()} busy={busy} />}
       {screen === 'EFESIM_RESULT' && efesim && <EfesimView result={efesim} sapNo={sapNo} setSapNo={setSapNo} customerName={customerName} setCustomerName={setCustomerName} strong={strongGoogleMatch} google={google} useGoogle={useGoogle} setUseGoogle={setUseGoogle} addressText={addressText} save={() => void saveProspect()} busy={busy} />}
       {screen === 'PROSPECT' && prospect && <ProspectView prospect={prospect} purpose={visitPurpose} setPurpose={setVisitPurpose} save={() => void saveVisit()} busy={busy} />}
-      {screen === 'VISIT_SAVED' && prospect && <SuccessView point={prospect.name} assisted="" title={visitPurpose === 'SURVEY' ? 'Keşif kaydedildi' : 'Kurma kaydedildi'} done={() => setScreen('TASKS')} />}
+      {screen === 'VISIT_SAVED' && prospect && <SuccessView point={prospect.name} assisted="" title={visitPurpose === 'SURVEY' ? 'Keşif kaydedildi' : 'Kurma kaydedildi'} done={resetNavigation} />}
       {busy && <ActivityIndicator size="large" style={styles.loader} />}
     </ScrollView>
-    <View style={styles.nav}><Nav label="İşler" icon="home" active={screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM'} onPress={() => setScreen('TASKS')} /><Nav label="Yakınımdakiler" icon="map-pin" active={screen === 'NEARBY'} onPress={() => void openNearby()} /><Nav label="Müşterilerim" icon="building" active={screen === 'CUSTOMERS' || screen === 'CUSTOMER'} onPress={() => void openCustomers()} /><Nav label="Yardım Et" icon="support" active={screen === 'HELP'} onPress={() => void openHelp()} /><Nav label="Geçmiş" icon="clock" active={screen === 'HISTORY'} onPress={() => void openHistory()} /></View>
+    <View style={styles.nav} accessibilityRole="tablist">{primaryTabs.map((tab) => <Nav key={tab.screen} label={tab.label} icon={tab.icon} active={tab.screen === 'TASKS' ? screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM' || screen === 'HELP' : tab.screen === 'CUSTOMERS' ? screen === 'CUSTOMERS' || screen === 'CUSTOMER' : screen === 'HISTORY'} onPress={() => tab.screen === 'CUSTOMERS' ? void openCustomers() : tab.screen === 'HISTORY' ? void openHistory() : resetNavigation('TASKS')} />)}</View>
   </View></SafeAreaView>;
 }
 
@@ -320,7 +346,7 @@ function Login(p: { username:string; password:string; setUsername:(v:string)=>vo
   </SafeAreaView>;
 }
 
-function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=>void;search:string;setSearch:(v:string)=>void;deviceLocation:{latitude:number;longitude:number}|null;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
+function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=>void;search:string;setSearch:(v:string)=>void;deviceLocation:{latitude:number;longitude:number}|null;onHelp:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   const tasks = useMemo(() => {
     const filtered = (p.dashboard?.due ?? []).filter(t => matchesSearch(p.search, [t.pointName, t.pointCode, t.regionName, t.address ?? '', ...(t.aliases ?? [])]));
     return filtered.slice().sort((a,b) => {
@@ -332,7 +358,7 @@ function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=
       return da-db;
     });
   }, [p.dashboard,p.search,p.deviceLocation]);
-  return <><Summary dashboard={p.dashboard} /><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
+  return <><Summary dashboard={p.dashboard} /><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><View style={styles.sectionActions}><TouchableOpacity onPress={p.onHelp} accessibilityRole="button" accessibilityLabel="Yardım Et"><Text style={styles.refresh}>YARDIM ET</Text></TouchableOpacity><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
 }
 function HelpView(p:{people:HelpTarget[];dashboard:TechnicianDashboard|null;busy:boolean;select:(t:HelpTarget)=>void;change:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   if (!p.dashboard) return <View style={styles.card}>
@@ -395,7 +421,7 @@ function SectionHeader({title,subtitle,action,actionIcon,onAction}:{title:string
 function PrimaryButton({title,icon,onPress,disabled}:{title:string;icon?:React.ComponentProps<typeof Feather>['name'];onPress:()=>void;disabled?:boolean}) { return <TouchableOpacity accessibilityRole="button" style={[styles.primary,disabled&&styles.disabled]} onPress={onPress} disabled={disabled}>{icon?<Feather name={icon} size={17} color="#fff"/>:null}<Text style={styles.primaryText}>{title}</Text></TouchableOpacity>; }
 function SecondaryButton({title,icon,onPress,disabled,danger}:{title:string;icon?:React.ComponentProps<typeof Feather>['name'];onPress:()=>void;disabled?:boolean;danger?:boolean}) { return <TouchableOpacity accessibilityRole="button" style={[styles.secondary,danger&&styles.secondaryDanger,disabled&&styles.disabled]} onPress={onPress} disabled={disabled}>{icon?<Feather name={icon} size={16} color={danger?'#B7372F':BLUE}/>:null}<Text style={[styles.secondaryText,danger&&styles.secondaryDangerText]}>{title}</Text></TouchableOpacity>; }
 function Choice({title,selected,onPress}:{title:string;selected:boolean;onPress:()=>void}) { return <TouchableOpacity style={[styles.choice,selected&&styles.choiceSelected]} onPress={onPress}><Text style={[styles.choiceText,selected&&styles.choiceTextSelected]}>{title}</Text></TouchableOpacity>; }
-function Nav({label,icon,active,onPress}:{label:string;icon:React.ComponentProps<typeof Feather>['name'];active:boolean;onPress:()=>void}) { return <TouchableOpacity accessibilityRole="button" style={styles.navItem} onPress={onPress}><View style={[styles.navIconWrap,active&&styles.navIconActive]}><Feather name={icon} size={20} color={active?BLUE:'#80909D'}/></View><Text style={[styles.navLabel,active&&styles.navActive]}>{label}</Text></TouchableOpacity>; }
+function Nav({label,icon,active,onPress}:{label:string;icon:React.ComponentProps<typeof Feather>['name'];active:boolean;onPress:()=>void}) { return <TouchableOpacity accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: active }} style={styles.navItem} onPress={onPress}><View style={[styles.navIconWrap,active&&styles.navIconActive]}><Feather name={icon} size={20} color={active?BLUE:'#80909D'}/></View><Text style={[styles.navLabel,active&&styles.navActive]}>{label}</Text></TouchableOpacity>; }
 function initials(name:string){return name.split(' ').filter(Boolean).map(x=>x[0]).join('').slice(0,2).toUpperCase();}
 function message(e:unknown){return e instanceof Error?e.message:String(e);}
 
@@ -405,7 +431,7 @@ const styles=StyleSheet.create({
   header:{backgroundColor:DARK_BLUE,paddingHorizontal:20,paddingTop:17,paddingBottom:19,flexDirection:'row',justifyContent:'space-between',alignItems:'center',borderBottomWidth:1,borderBottomColor:'rgba(255,255,255,.08)'}, headerIdentity:{flexDirection:'row',alignItems:'center',gap:11,flex:1,minWidth:0,marginRight:10}, brandImage:{width:42,height:42,borderRadius:12,backgroundColor:'#fff'}, headerCopy:{flex:1,minWidth:0}, eyebrow:{color:'#D7E8F5',fontSize:12,fontWeight:'900',letterSpacing:.4}, headerTitle:{color:'#fff',fontSize:27,fontWeight:'900',letterSpacing:-.45,marginTop:1,flexShrink:1}, headerUser:{color:'#C9DDEC',fontSize:12,marginTop:1}, logoutBtn:{borderWidth:1,borderColor:'rgba(255,255,255,.22)',backgroundColor:'rgba(255,255,255,.06)',paddingHorizontal:11,paddingVertical:9,borderRadius:10,flexDirection:'row',alignItems:'center',gap:6}, logoutText:{color:'#fff',fontSize:10,fontWeight:'900'},
   loginSafe:{flex:1,backgroundColor:LIGHT}, loginHero:{backgroundColor:DARK_BLUE,paddingHorizontal:26,paddingTop:46,paddingBottom:34,gap:34}, loginBrandRow:{flexDirection:'row',alignItems:'center',gap:13}, loginLogo:{width:62,height:62,borderRadius:18,backgroundColor:'#fff'}, loginBrand:{color:'#fff',fontSize:25,fontWeight:'900',letterSpacing:-.4}, loginBrandSub:{color:'#9FC2DA',fontSize:10,fontWeight:'800',letterSpacing:1.05,marginTop:3}, loginIntro:{gap:8}, loginTitle:{color:'#fff',fontSize:30,fontWeight:'900',letterSpacing:-.55}, loginSub:{color:'#C8DDED',fontSize:14,lineHeight:21,maxWidth:330}, loginForm:{backgroundColor:'#fff',margin:18,borderWidth:1,borderColor:LINE,borderRadius:17,padding:20,gap:10,shadowColor:'#173349',shadowOpacity:.05,shadowRadius:14,elevation:2}, formLabel:{fontSize:10,fontWeight:'900',letterSpacing:.9,color:'#718493',marginTop:3}, loginInput:{backgroundColor:'#F8FAFC',borderWidth:1,borderColor:'#D4DEE6',borderRadius:11,padding:13,fontSize:16,color:TEXT},
   summaryRow:{flexDirection:'row',gap:12}, summaryBox:{flex:1,backgroundColor:'#fff',borderRadius:15,padding:16,borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.025,shadowRadius:8,elevation:1}, summaryIcon:{width:34,height:34,borderRadius:10,alignItems:'center',justifyContent:'center',marginBottom:11}, summaryRed:{color:RED,fontSize:30,fontWeight:'900',letterSpacing:-.5}, summaryOrange:{color:ORANGE,fontSize:30,fontWeight:'900',letterSpacing:-.5}, summaryLabel:{color:MUTED,fontSize:12,fontWeight:'800',marginTop:1},
-  sectionHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12,marginTop:3}, sectionHeadText:{flex:1,gap:3}, sectionTitle:{fontSize:19,fontWeight:'900',color:TEXT,letterSpacing:-.2}, sectionSubtitle:{fontSize:12,lineHeight:17,color:'#758594'}, sectionAction:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:10,paddingVertical:8,borderRadius:9,backgroundColor:'#EAF4FC'}, refresh:{fontSize:10,fontWeight:'900',color:BLUE,letterSpacing:.4},
+  sectionHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12,marginTop:3}, sectionHeadText:{flex:1,gap:3}, sectionTitle:{fontSize:19,fontWeight:'900',color:TEXT,letterSpacing:-.2}, sectionSubtitle:{fontSize:12,lineHeight:17,color:'#758594'}, sectionActions:{flexDirection:'row',alignItems:'center',gap:14}, sectionAction:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:10,paddingVertical:8,borderRadius:9,backgroundColor:'#EAF4FC'}, refresh:{fontSize:10,fontWeight:'900',color:BLUE,letterSpacing:.4},
   searchBox:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D8E2E9',borderRadius:12,minHeight:46,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:9}, searchInput:{flex:1,fontSize:15,color:TEXT,paddingVertical:10},
   card:{backgroundColor:'#fff',borderRadius:15,padding:17,gap:12,borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.025,shadowRadius:10,elevation:1}, cardIcon:{width:38,height:38,borderRadius:11,backgroundColor:'#EAF4FC',alignItems:'center',justifyContent:'center'}, cardTitle:{fontSize:20,fontWeight:'900',color:TEXT,letterSpacing:-.25}, help:{fontSize:14,lineHeight:21,color:'#637485'},
   task:{backgroundColor:'#fff',borderRadius:16,padding:17,gap:11,borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.035,shadowRadius:11,elevation:1}, taskTop:{flexDirection:'row',alignItems:'center'}, statusPill:{flexDirection:'row',alignItems:'center',gap:7,paddingHorizontal:9,paddingVertical:5,borderRadius:999}, statusLate:{backgroundColor:'#FDEDEC'}, statusCurrent:{backgroundColor:'#FFF4E4'}, statusDot:{width:7,height:7,borderRadius:4}, redDot:{backgroundColor:RED}, orangeDot:{backgroundColor:ORANGE}, lateText:{color:'#B6312A',fontSize:10,fontWeight:'900',letterSpacing:.55}, currentText:{color:'#A96308',fontSize:10,fontWeight:'900',letterSpacing:.55}, taskName:{fontSize:20,fontWeight:'900',color:TEXT,letterSpacing:-.25}, metaRow:{flexDirection:'row',alignItems:'center',gap:5,flexWrap:'wrap'}, metaDivider:{width:1,height:13,backgroundColor:'#D7E0E7',marginHorizontal:3}, taskMeta:{fontSize:12,color:'#667989'}, taskActions:{gap:9}, routeButton:{borderWidth:1,borderColor:'#BCD0DF',backgroundColor:'#F8FBFD',borderRadius:10,padding:12,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8}, routeText:{color:BLUE,fontSize:12,fontWeight:'900'}, primary:{backgroundColor:BRIGHT_BLUE,borderRadius:11,paddingVertical:14,paddingHorizontal:14,alignItems:'center',justifyContent:'center',minHeight:48,flexDirection:'row',gap:8,shadowColor:'#075A96',shadowOpacity:.13,shadowRadius:7,elevation:2}, primaryText:{color:'#fff',fontSize:13,fontWeight:'900',letterSpacing:.15}, failButton:{borderWidth:1,borderColor:'#E2B7B4',backgroundColor:'#FFFDFD',borderRadius:10,paddingVertical:12,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8}, failText:{color:'#B7372F',fontSize:13,fontWeight:'800'}, secondary:{borderWidth:1,borderColor:'#C8D8E4',backgroundColor:'#fff',borderRadius:10,paddingVertical:12,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8,minHeight:46}, secondaryText:{color:BLUE,fontSize:13,fontWeight:'900'}, secondaryDanger:{borderColor:'#E2B7B4'}, secondaryDangerText:{color:'#B7372F'}, disabled:{opacity:.45},
