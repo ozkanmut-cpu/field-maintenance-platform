@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import type { AdminLocation, AdminSection } from './admin-navigation';
 type Point = {
 id: string;
 code: string;
@@ -14,7 +15,7 @@ canonicalLongitude?: string | number | null;
 locationSource?: 'UNKNOWN' | 'GOOGLE_MATCH' | 'FIELD_CONFIRMED' | 'MANUAL';
 locationConfidence?: number;
 };
-export default function LocationMatching() {
+export default function LocationMatching({ onNavigate }: { onNavigate: (section: AdminSection, values?: Omit<AdminLocation, 'section'>) => void }) {
 const [points, setPoints] = useState<Point[]>([]);
 const [busy, setBusy] = useState(false);
 const [loading, setLoading] = useState(true);
@@ -61,7 +62,7 @@ return <section className="panel" id="location-matching">
 <td><strong>{point.googleBusinessName || 'Eşleşme yok'}</strong><div className="muted">{point.address || point.googlePlaceId || 'Adres bulunamadı'}</div></td>
 <td><span className={point.locationConfidence && point.locationConfidence >= 75 ? 'pill active' : 'pill'}>{point.locationConfidence ?? 0}%</span></td>
 <td>{point.locationSource && point.locationSource !== 'UNKNOWN' ? point.locationSource : '—'}{point.canonicalLatitude && point.canonicalLongitude ? <div className="muted">{String(point.canonicalLatitude)}, {String(point.canonicalLongitude)}</div> : null}</td>
-<td><button className="small" onClick={() => void discover(`/api/backend/points/${point.id}/address-discovery`)} disabled={busy}>{point.googlePlaceId ? 'YENİDEN TARA' : 'EŞLEŞTİR'}</button></td>
+<td><div className="rowActions"><button className="small" onClick={() => onNavigate('point-detail', { pointId: point.id })}>DETAY</button><button className="small" onClick={() => void discover(`/api/backend/points/${point.id}/address-discovery`)} disabled={busy}>{point.googlePlaceId ? 'YENİDEN TARA' : 'EŞLEŞTİR'}</button></div></td>
 </tr>)}</tbody>
 </table></div>
 </section>;
