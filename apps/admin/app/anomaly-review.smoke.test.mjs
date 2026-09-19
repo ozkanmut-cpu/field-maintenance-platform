@@ -26,4 +26,5 @@ test('anomaly review retains an explicit empty filtered queue state and ignores 
   assert.match(source, /AbortController/);
   assert.match(source, /signal:\s*controller\.signal/);
   assert.match(source, /return\s*\(\)\s*=>\s*controller\.abort\(\)/);
+  assert.match(source, /if\s*\(!selected\)\s*\{\s*setHistory\(null\);\s*setHistoryLoading\(false\);/);
 });
