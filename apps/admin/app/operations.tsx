@@ -518,3 +518,54 @@ return (
 <button className="ghost small" disabled={busy || !selectedPointIds.length} onClick={clearPointSelection}>SEÇİMİ TEMİZLE</button>
 </div>
 <div className="filterBar">
+<strong>{selectedPointIds.length} seçili</strong>
+<select value={bulkAction} onChange={(e) => setBulkAction(e.target.value as BulkPointAction)}>
+<option value="SET_REGION">Bölge değiştir</option><option value="SET_STATUS">Durum değiştir</option><option value="SET_STANDARD_WEEK">Standart rut haftası</option><option value="SET_SMARTCLEAN">SmartClean yap</option>
+</select>
+{bulkAction === 'SET_REGION' ? <select value={bulkRegionId} onChange={(e) => setBulkRegionId(e.target.value)}><option value="">Hedef bölge seç</option>{regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}</select> : null}
+{bulkAction === 'SET_STATUS' ? <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as Point['status'])}><option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option><option value="CANCELLED">İptal</option></select> : null}
+{bulkAction === 'SET_STANDARD_WEEK' || bulkAction === 'SET_SMARTCLEAN' ? <select value={bulkWeek} onChange={(e) => setBulkWeek(e.target.value)}><option value="1">Hafta 1</option><option value="2">Hafta 2</option></select> : null}
+{bulkAction === 'SET_SMARTCLEAN' ? <input type="date" value={bulkSmartcleanReferenceAt} onChange={(e) => setBulkSmartcleanReferenceAt(e.target.value)} aria-label="SmartClean referans tarihi" /> : null}
+<button disabled={busy || !selectedPointIds.length} onClick={() => void bulkUpdatePoints()}>SEÇİLİLERE UYGULA</button>
+</div>
+<div className="tableWrap">
+<table>
+<thead><tr><th>Seç</th><th>Kod</th><th>Nokta</th><th>Bölge</th><th>Bakım</th><th>Durum</th></tr></thead>
+<tbody>
+{loading ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Noktalar yükleniyor</strong><span>Liste hazırlanıyor.</span></div></td></tr> : visiblePoints.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Sonuç bulunamadı</strong><span>Arama veya durum filtresini değiştir.</span></div></td></tr> : visiblePoints.map((point) => (
+<tr key={point.id}>
+<td><input type="checkbox" checked={selectedPointIds.includes(point.id)} onChange={() => togglePointSelection(point.id)} aria-label={`${point.name} seç`} /></td>
+<td>{point.code}</td>
+<td><strong>{point.name}</strong><div className="muted">{point.address || 'Adres yok'}</div></td>
+<td>{point.region?.name || 'Bölge bekliyor'}</td>
+<td>{point.maintenanceType === 'STANDARD' ? point.maintenanceWeek ? `Standart / Hafta ${point.maintenanceWeek}` : 'Standart / Ayar bekliyor' : 'SmartClean'}</td>
+<td><select value={point.status} onChange={(e) => void changePointStatus(point, e.target.value as Point['status'])} disabled={busy}>
+<option value="ACTIVE">Aktif</option><option value="PASSIVE">Pasif</option><option value="CANCELLED">İptal</option>
+</select></td>
+</tr>
+))}
+</tbody>
+</table>
+</div><form className="pointForm" onSubmit={createPoint}>
+<input value={pointForm.code} onChange={(e) => setPointForm({ ...pointForm, code: e.target.value })} placeholder="Nokta kodu" required />
+<input value={pointForm.name} onChange={(e) => setPointForm({ ...pointForm, name: e.target.value })} placeholder="Nokta adı" required />
+<select value={pointForm.regionId} onChange={(e) => setPointForm({ ...pointForm, regionId: e.target.value })} required>
+<option value="">Bölge seç</option>
+{regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+</select>
+<select value={pointForm.maintenanceType} onChange={(e) => setPointForm({ ...pointForm, maintenanceType: e.target.value })}>
+<option value="STANDARD">Standart</option><option value="SMARTCLEAN">SmartClean</option>
+</select>
+{pointForm.maintenanceType === 'STANDARD' ? (
+<select value={pointForm.maintenanceWeek} onChange={(e) => setPointForm({ ...pointForm, maintenanceWeek: e.target.value })}>
+<option value="1">Hafta 1</option><option value="2">Hafta 2</option>
+</select>
+) : (
+<input type="date" value={pointForm.smartcleanReferenceAt} onChange={(e) => setPointForm({ ...pointForm, smartcleanReferenceAt: e.target.value })} required />
+)}
+<button disabled={busy || regions.length === 0} type="submit">NOKTA EKLE</button>
+</form>
+</section> : null}
+</>
+);
+}
