@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Technician = { id: string; name: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Summary = {
@@ -13,6 +13,33 @@ type Summary = {
 function istanbulDateKey() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function eventType(type: Summary['events'][number]['type']) { return type === 'MAINTENANCE' ? 'Bakım' : type === 'ATTEMPT' ? 'Yapılamadı' : type === 'NON_MAINTENANCE_VISIT' ? 'Diğer ziyaret' : 'Prospect'; }
 
+type SummaryCallbacks = { summary: (value: Summary | null) => void; error: (value: string) => void; loading: (value: boolean) => void };
+type SummaryResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+type SummaryFetcher = (url: string, init?: RequestInit) => Promise<SummaryResponse>;
+
+export function createTechnicianDailySummaryLoader(callbacks: SummaryCallbacks, request: SummaryFetcher = (url, init) => fetch(url, init)) {
+  let cancelActive = () => {};
+  return {
+    load({ technicianId, date }: { technicianId: string; date: string }) {
+      cancelActive();
+      if (!technicianId || !date) { callbacks.summary(null); callbacks.loading(false); return; }
+      let active = true;
+      const controller = new AbortController();
+      cancelActive = () => { active = false; controller.abort(); };
+      callbacks.loading(true); callbacks.error(''); callbacks.summary(null);
+      void request(`/api/backend/maintenance/admin-technician-daily-summary?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`, { signal: controller.signal })
+        .then(async (response) => {
+          const body = await response.json().catch(() => null) as { message?: string | string[] } | null;
+          if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
+          if (active) callbacks.summary(body as Summary);
+        })
+        .catch((reason) => { if (active) callbacks.error(reason instanceof Error ? reason.message : String(reason)); })
+        .finally(() => { if (active) callbacks.loading(false); });
+    },
+    cancel() { cancelActive(); },
+  };
+}
+
 export default function TechnicianDailySummaryPanel({ users }: { users: Technician[] }) {
   const technicians = users.filter((user) => user.role === 'TECHNICIAN' && user.active);
   const [technicianId, setTechnicianId] = useState('');
@@ -20,19 +47,13 @@ export default function TechnicianDailySummaryPanel({ users }: { users: Technici
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const loaderRef = useRef<ReturnType<typeof createTechnicianDailySummaryLoader> | null>(null);
   useEffect(() => setTechnicianId((current) => current || technicians[0]?.id || ''), [technicians]);
-  async function load() {
-    if (!technicianId || !date) return;
-    setLoading(true); setError(''); setSummary(null);
-    try {
-      const response = await fetch(`/api/backend/maintenance/admin-technician-daily-summary?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`);
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
-      setSummary(body as Summary);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setLoading(false); }
+  function load() {
+    if (!loaderRef.current) loaderRef.current = createTechnicianDailySummaryLoader({ summary: setSummary, error: setError, loading: setLoading });
+    loaderRef.current.load({ technicianId, date });
   }
-  useEffect(() => { void load(); }, [technicianId, date]);
+  useEffect(() => { load(); return () => loaderRef.current?.cancel(); }, [technicianId, date]);
   return <section className="panel">
     <div className="panelHeader"><div><h2>Teknisyen Günlük Özeti</h2><p>Seçilen İstanbul iş günündeki gerçek saha hareketleri, yardım ilişkileri ve evrak durumu.</p></div><div className="rowActions"><select value={technicianId} onChange={(e) => setTechnicianId(e.target.value)} aria-label="Teknisyen seç"><option value="">Teknisyen seç</option>{technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select><input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Teknisyen özet tarihi" /><button className="ghost" onClick={() => void load()} disabled={loading || !technicianId}>{loading ? 'Yükleniyor' : 'Yenile'}</button></div></div>
     {error ? <div className="error">{error}</div> : null}
