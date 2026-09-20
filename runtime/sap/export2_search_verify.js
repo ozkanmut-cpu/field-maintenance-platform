@@ -86,15 +86,21 @@ function verifyExport2SearchDelta(export1State, export2State) {
   const after = canonicalSearchState(export2State);
   if (before.max !== '1000') throw new Error('SAFE_ABORT_EXPORT2_STATE:export1-max-not-1000');
   if (after.max !== '2000') throw new Error('SAFE_ABORT_EXPORT2_STATE:export2-max-not-2000');
-  if (before.slots.length !== after.slots.length) {
-    throw new Error('SAFE_ABORT_EXPORT2_STATE:slot-count-changed');
-  }
-
   let productCount = 0;
-  for (let index = 0; index < before.slots.length; index += 1) {
-    const previous = before.slots[index];
-    const current = after.slots[index];
-    if (previous.slot !== current.slot || previous.key !== current.key) {
+  const afterBySlot = new Map(after.slots.map((slot) => [slot.slot, slot]));
+  if (afterBySlot.size !== after.slots.length) {
+    throw new Error('SAFE_ABORT_EXPORT2_STATE:duplicate-slot');
+  }
+  for (const previous of before.slots) {
+    const current = afterBySlot.get(previous.slot);
+    if (!current) {
+      if (previous.key === 'PRODUCT_ID' && previous.value1 === '203') {
+        productCount += 1;
+        continue;
+      }
+      throw new Error(`SAFE_ABORT_EXPORT2_STATE:slot-missing:${previous.slot}`);
+    }
+    if (previous.key !== current.key) {
       throw new Error(`SAFE_ABORT_EXPORT2_STATE:slot-definition-changed:${previous.slot}`);
     }
     if (previous.key === 'PRODUCT_ID') {
@@ -110,6 +116,9 @@ function verifyExport2SearchDelta(export1State, export2State) {
     if (previous.value1 !== current.value1 || previous.value2 !== current.value2) {
       throw new Error(`SAFE_ABORT_EXPORT2_STATE:unexpected-criterion-change:${previous.key}`);
     }
+  }
+  if (after.slots.some((slot) => !before.slots.some((previous) => previous.slot === slot.slot))) {
+    throw new Error('SAFE_ABORT_EXPORT2_STATE:slot-added');
   }
   if (productCount !== 1) throw new Error(`SAFE_ABORT_EXPORT2_STATE:product-slot-not-unique:${productCount}`);
   return after;
