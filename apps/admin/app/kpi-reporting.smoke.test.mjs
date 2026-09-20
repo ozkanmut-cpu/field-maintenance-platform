@@ -30,6 +30,21 @@ test('KPI report renders metrics, help separation, paperwork, daily trend and te
   const html = renderToStaticMarkup(React.createElement(KpiReportView, { report }));
   for (const label of ['66,7', 'Yardım verdi', 'Yardım aldı', 'Servis fişi', 'Teyit', '2026-09-15', 'Ali', 'Atamasız']) assert.ok(html.includes(label), label);
 });
+
+test('KPI report keeps table headers and row labels semantic without duplicating shell captions', () => {
+  const { KpiReportView } = panel();
+  const html = renderToStaticMarkup(React.createElement(KpiReportView, { report }));
+  assert.match(html, /<th scope="col">Evrak<\/th>/);
+  assert.match(html, /<th scope="col">Günlük trend<\/th>/);
+  assert.match(html, /<th scope="col">Teknisyen<\/th>/);
+  assert.match(html, /<th scope="row"><strong>Servis fişi<\/strong><\/th>/);
+  assert.doesNotMatch(html, /<caption/);
+});
+
+test('KPI failure is announced as an alert', () => {
+  const source = fs.readFileSync(new URL('./kpi-reporting.tsx', import.meta.url), 'utf8');
+  assert.match(source, /className="error" role="alert"/);
+});
 test('KPI loader encodes filters and clears old report before response', async () => {
   const { startKpiRequest } = panel();
   const events = [];
