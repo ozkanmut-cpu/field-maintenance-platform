@@ -101,6 +101,20 @@ test('Export 2 retains every active Export 1 criterion except product and maximu
   });
 });
 
+test('Export 2 permits only the cleared product slot to disappear from the live search form', () => {
+  const after = export2State();
+  after.slots = after.slots.filter((slot) => slot.key !== 'PRODUCT_ID');
+
+  assert.deepEqual(verifyExport2SearchDelta(export1State(), after), {
+    max: '2000',
+    slots: [
+      { slot: 1, key: 'DATE_RANGE', value1: '<- 14 gün ->', value2: null },
+      { slot: 3, key: 'REGION', value1: 'İzmir', value2: '' },
+      { slot: 4, key: 'STATUS', value1: 'Aktif', value2: null },
+    ],
+  });
+});
+
 test('Export 2 fails closed when any non-product criterion changes', () => {
   const changed = export2State();
   changed.slots.find((slot) => slot.key === 'REGION').value1 = 'Aydın';
