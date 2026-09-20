@@ -159,6 +159,15 @@ test('rejects a partial maintenance record until the technician explicitly ackno
   );
 });
 
+test('rejects a partial maintenance record when the technician explicitly declines the shortfall acknowledgement', async () => {
+  const { service } = makeService(5);
+
+  await assert.rejects(
+    () => service.complete(completionInput({ maintainedCoolerCount: 4, partialMaintenanceConfirmed: false })),
+    /eksik bakım yapıldı/i,
+  );
+});
+
 test('uses an existing point cooler count as the immutable total while applying an explicit equipment correction', async () => {
   const { service, pointUpdates } = makeService(5);
 
