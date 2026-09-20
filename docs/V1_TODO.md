@@ -76,6 +76,42 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 - [x] SAP confirmation synchronization — production runtime runs every 10 minutes with normal `Operasyon → Hizmet teyitleri` search, 14-day window, product 203, max 1000, date-scoped DB deletion and guarded logout; repository integration is merged to `main` and production-verified
 - [x] SAP Web CRM browser automation proof-of-concept — superseded by the working production automation; Playwright + Firefox specifically is no longer required
 
+
+## Active TODO — Full admin visual redesign
+
+> Added: 2026-09-20. This is not a dashboard-only polish task. The current admin is functionally mature but still visually uses the prior compact corporate theme. The target is one consistent desktop-first operations UI across every admin section, while preserving the existing real API contracts, business rules and completed workflows.
+
+### Delivery rules
+
+- [ ] Keep the existing single-page auth boundary, typed URL navigation and real backend metrics; do not introduce fake KPI/trend data.
+- [ ] Preserve the desktop-first, visible-text navigation rule: wide sidebar by default; tablet/phone drawer always shows group and submenu labels; icon-only is never the default experience.
+- [ ] Preserve all existing endpoint contracts, permissions, audit behavior, point-list read-only rule and bulk-operation safeguards.
+- [ ] Use one shared component/style system for loading, empty, error and success states; do not create one-off screen styling.
+- [ ] Maintain keyboard access, visible focus, semantic tables/captions, horizontal table scroll and responsive action/filter wrapping.
+
+### Shared foundation
+
+- [ ] Redesign app shell: desktop sidebar, grouped navigation, topbar, breadcrumb, account controls, page header and contextual primary actions.
+- [ ] Establish shared visual primitives: page headers, section panels, metric cards, status badges/chips, filter bars, search, table toolbar, dialogs, empty/loading/error/success states and confirmation surfaces.
+- [ ] Refresh typography, spacing, elevation, border/radius, state colors and interaction feedback consistently in globals.css without changing domain behavior.
+- [ ] Add visual/regression coverage for desktop, tablet drawer and phone layouts, including a clean-session desktop navigation test (no persisted collapsed sidebar state).
+
+### Screen migration clusters
+
+- [ ] Dashboard and reporting: Operations Dashboard, KPI/Raporlama, Technician Daily Summary and Sanal İstatistikçi receive the shared hierarchy, real metric cards, explainable states and drill-down affordances.
+- [ ] Operations: Bakım Takvimi, Görevlendirmeler, Bakım Dışı Ziyaretler and Evrak Yönetimi receive consistent page headers, filters, tables, selection/preview/confirmation states and narrow-screen behavior.
+- [ ] Approval & review: Yapılamadı, Konum & Anomali and fiş/teyit review states receive clear decision hierarchy; location confirmation remains explicitly independent from maintenance approval.
+- [ ] Point management: Noktalar, Nokta Detay, Ayar Bekleyenler, Bölgeler, SAP/Google, Mükerrer Noktalar, Timeline, Prospects and Toplu İşlemler receive consistent list → detail context, tabs, read-only/edit states and guarded bulk flow presentation.
+- [ ] Users and system: Kullanıcılar, Yardım Yetkileri, SAP Sync and Audit receive the same visual system, deep-link-friendly state and accessible detail/filter surfaces.
+
+### Verification and release
+
+- [ ] Work each independent visual cluster in parallel only where source files do not overlap; keep merge and production deployment serialized.
+- [ ] For every behavior-affecting change: RED test, minimal GREEN change, relevant smoke/E2E, admin type check and production build.
+- [ ] Require exact PR SHA CI success and exact merge-SHA CI success before release; queued/in-progress is not success.
+- [ ] Build the candidate admin artifact in an isolated staging directory from the exact merge SHA; deploy only the Next artifact atomically, preserve prior artifact, restart only field-maintenance-admin.service, then run root/dashboard/API production smoke.
+- [ ] Do not touch API, SAP runtime, DB migrations or mobile artifacts unless a specific visual change demonstrably requires it.
+
 ## Current near-term priorities
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
