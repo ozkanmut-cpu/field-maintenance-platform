@@ -21,7 +21,7 @@ import PointDetailPage from './point-detail-page';
 import BulkOperations from './bulk-operations';
 import KpiReportingPanel from './kpi-reporting';
 import TechnicianDailySummaryPanel from './technician-daily-summary';
-import { createRequestGate, isActiveTechnician } from './users-help-lifecycle.js';
+import { createHelpLocationLifecycle, createRequestGate, isActiveTechnician } from './users-help-lifecycle.js';
 
 type User = {
   id: string;
@@ -54,7 +54,7 @@ export default function Home() {
   const [usersLoaded, setUsersLoaded] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const usersRequestGate = useRef(createRequestGate());
-  const helpRequestGate = useRef(createRequestGate());
+  const helpLocationLifecycle = useRef(createHelpLocationLifecycle());
   const helpRequestAbort = useRef<AbortController | null>(null);
   const [location, setLocation] = useState<AdminLocation>(() => typeof window === 'undefined' ? { section: 'dashboard' } : parseAdminLocation(window.location.search));
   const createUserOpen = location.createUser === true;
@@ -67,16 +67,11 @@ export default function Home() {
     if (error) errorRef.current?.focus();
   }, [error]);
   useEffect(() => {
-    const restoreLocation = () => setLocation(parseAdminLocation(window.location.search));
+    const restoreLocation = () => transitionLocation(parseAdminLocation(window.location.search));
     window.addEventListener('popstate', restoreLocation);
     return () => window.removeEventListener('popstate', restoreLocation);
   }, []);
   useEffect(() => () => helpRequestAbort.current?.abort(), []);
-  useEffect(() => {
-    if (section === 'help-targets') return;
-    helpRequestAbort.current?.abort();
-    helpRequestGate.current.begin();
-  }, [section]);
   useEffect(() => {
     if (!me || section !== 'help-targets' || !location.userId) {
       if (!location.userId) setHelpEditorId('');
@@ -89,11 +84,17 @@ export default function Home() {
   function navigate(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}) {
     const next = { section, ...values } as AdminLocation;
     window.history.pushState({}, '', buildAdminLocation(section, values));
-    setLocation(next);
+    transitionLocation(next);
   }
   function replaceLocation(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}) {
     const next = { section, ...values } as AdminLocation;
     window.history.replaceState({}, '', buildAdminLocation(section, values));
+    transitionLocation(next);
+  }
+  function transitionLocation(next: AdminLocation) {
+    helpRequestAbort.current?.abort();
+    helpRequestAbort.current = null;
+    helpLocationLifecycle.current.transition();
     setLocation(next);
   }
   const setSection = navigate;
@@ -200,14 +201,17 @@ export default function Home() {
     }
   }
   async function openHelpSettings(helperId: string, updateLocation = true) {
+    if (updateLocation) {
+      navigate('help-targets', { userId: helperId });
+      return;
+    }
     helpRequestAbort.current?.abort();
-    const requestId = helpRequestGate.current.begin();
+    const request = helpLocationLifecycle.current.begin();
     if (!isActiveTechnician(users, helperId)) {
       setHelpEditorId('');
       setHelpTargetIds([]);
       setError('Yardım yetkileri yalnız aktif teknisyenler için düzenlenebilir.');
-      if (updateLocation) navigate('help-targets');
-      else replaceLocation('help-targets');
+      replaceLocation('help-targets');
       return;
     }
     const controller = new AbortController();
@@ -215,15 +219,14 @@ export default function Home() {
     setBusy(true); setError('');
     try {
       const data = await api<{ targets: User[] }>(`/api/backend/users/${helperId}/help-targets`, { signal: controller.signal });
-      if (!helpRequestGate.current.isCurrent(requestId)) return;
+      if (!helpLocationLifecycle.current.isCurrent(request)) return;
       setHelpEditorId(helperId);
       setHelpTargetIds(data.targets.map((item) => item.id));
-      if (updateLocation) navigate('help-targets', { userId: helperId });
     } catch (e) {
-      if (!helpRequestGate.current.isCurrent(requestId) || (e instanceof Error && e.name === 'AbortError')) return;
+      if (!helpLocationLifecycle.current.isCurrent(request) || (e instanceof Error && e.name === 'AbortError')) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      if (helpRequestGate.current.isCurrent(requestId)) setBusy(false);
+      if (helpLocationLifecycle.current.isCurrent(request)) setBusy(false);
     }
   }
 
