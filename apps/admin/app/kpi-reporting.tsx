@@ -78,7 +78,9 @@ export default function KpiReportingPanel({ technicians }: { technicians: Techni
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  useEffect(() => startKpiRequest(filters, { report: setReport, error: setError, loading: setLoading }), [filters]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => startKpiRequest(filters, { report: setReport, error: setError, loading: setLoading }), [filters, refreshKey]);
+  const refresh = () => setRefreshKey((current) => current + 1);
   const change = (key: keyof Filters, value: string) => setFilters(current => ({ ...current, [key]: value }));
   return <section className="panel">
     <div className="panelHeader"><div><h2>KPI / Raporlama</h2><p>Seçilen İstanbul tarih aralığında saha başarısı, yardım hareketleri ve dönem sonu iş yükü.</p></div>
@@ -90,7 +92,6 @@ export default function KpiReportingPanel({ technicians }: { technicians: Techni
         </select>
       </div>
     </div>
-    {error ? <div className="error" role="alert">{error}</div> : null}
-    {report ? <KpiReportView report={report} /> : <div className="emptyState compact"><strong>{loading ? 'KPI raporu hazırlanıyor' : 'KPI raporu bulunamadı'}</strong><span>{filters.from} – {filters.to}</span></div>}
+    {error ? <><div className="error" role="alert">{error}</div><button className="ghost" onClick={() => void refresh()}>Tekrar dene</button></> : report ? <KpiReportView report={report} /> : <div className="emptyState compact"><strong>{loading ? 'KPI raporu hazırlanıyor' : 'KPI raporu bulunamadı'}</strong><span>{filters.from} – {filters.to}</span></div>}
   </section>;
 }
