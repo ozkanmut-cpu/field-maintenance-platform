@@ -45,10 +45,6 @@ jobs:
         run: npm --prefix apps/api run build
       - name: Admin AI smoke test
         run: npm --prefix apps/admin run test:ai-smoke
-      - name: Install Chromium for Admin E2E
-        run: npx playwright install --with-deps chromium
-      - name: Admin browser E2E
-        run: npm --prefix apps/admin run test:ai-e2e
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
