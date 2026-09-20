@@ -31,6 +31,15 @@ test('missing-items screen does not introduce technician approval or mutation ac
   assert.doesNotMatch(view, /completeMaintenance|recordMaintenanceAttempt|jsonRequest|POST|PATCH|APPROVED/);
 });
 
+test('missing-items screen has an accessible return action and can safely retry dashboard loading', () => {
+  assert.match(app, /accessibilityLabel="İşler ekranına dön"/);
+  assert.match(app, /accessibilityLabel="Eksik evrak listesini yenile"/);
+  assert.match(app, /tasksError/);
+  assert.match(app, /tasksLoading/);
+  assert.match(app, /const requestId = \+\+tasksLoadSequence\.current/);
+  assert.match(app, /requestId !== tasksLoadSequence\.current/);
+});
+
 test('a record missing both documents contributes to both per-kind summary cards', () => {
   assert.match(app, /function missingPaperworkCounts\(items: MissingPaperworkItem\[\]\)/);
   assert.match(app, /if \(item\.confirmationStatus === 'MISSING'\) confirmation \+= 1/);
