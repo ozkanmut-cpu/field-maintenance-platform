@@ -20,6 +20,6 @@ test('purge removes dependent records before demo users and region', () => {
 
 test('demo commands use the API ts-node runner instead of Node direct TypeScript execution', () => {
   const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8')) as { scripts: Record<string, string> };
-  assert.match(pkg.scripts['demo:seed'], /^ts-node --compiler-options /);
-  assert.match(pkg.scripts['demo:purge'], /^ts-node --compiler-options /);
+  assert.match(pkg.scripts['demo:seed'], /^set -a; \. \.\.\/\.\.\/\.env; set \+a; ts-node --compiler-options /);
+  assert.match(pkg.scripts['demo:purge'], /^set -a; \. \.\.\/\.\.\/\.env; set \+a; ts-node --compiler-options /);
 });
