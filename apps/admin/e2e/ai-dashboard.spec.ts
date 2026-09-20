@@ -18,8 +18,8 @@ const dashboard = {
   backtest: { state: 'READY', evaluatedPredictions: 10, skippedPredictions: 0, truePositive: 3, falsePositive: 1, trueNegative: 5, falseNegative: 1, precision: 0.75, recall: 0.75, accuracy: 0.8, reasonCodes: [] },
   trends: { weekly: [{ weekKey: '2026-W37', maturityScore: 82, dataQualityScore: 91, locationCoverage: 0.95, equipmentCoverage: 0.9 }], regions: [], technicians: [], points: [] },
   calibration: { confidence: 'MEDIUM', reasonCodes: [], equipment: [], travel: [], drift: [] },
-  telemetry: { operations: [{ operation: 'admin-dashboard', count: 3, errorCount: 0, errorRate: 0, averageDurationMs: 25, p95DurationMs: 31, maxDurationMs: 31, lastDurationMs: 24 }] },
-  outputDistributionDrift: { observationCount: 4, state: 'STABLE', maxAbsoluteDelta: 0.04, risk: { LOW: 0.1 }, recommendation: {}, reasonCodes: ['AI_OUTPUT_DISTRIBUTION_STABLE'] },
+  telemetry: { operations: [{ operation: 'admin-dashboard', count: 3, errorCount: 0, errorRate: 0, averageDurationMs: 25, p95DurationMs: 31, maxDurationMs: 31, lastDurationMs: 24 }]},
+  outputDistributionDrift: { observationCount: 4, state: 'STABLE', maxAbsoluteDelta: 0.04, risk: { LOW:0.1 }, recommendation: {}, reasonCodes: ['AI_OUTPUT_DISTRIBUTION_STABLE'] },
 };
 const admin = { id: 'admin-1', name: 'Admin User', username: 'admin', role: 'ADMIN', active: true };
 
@@ -32,11 +32,12 @@ test('AI dashboard renders through the real browser shell and exports KPI CSV', 
   }));
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Raporlar & Analiz' }).click();
   await page.getByRole('button', { name: 'Sanal İstatistikçi' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Sanal İstatistikçi' }).first()).toBeVisible();
-  await expect(page.getByText('AI olgunluk skoru')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'AI Çıktı Dağılım Drift' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sanal İstatistikǧi' }).first()).toBeVisible();
+  await expect(page.getByText('AI olgunluk skorusu')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI Çıkısi Dağılim Drift' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Geçmiş Risk Backtest' })).toBeVisible();
   await expect(page.getByText('field-stat-v1.2')).toBeVisible();
 
