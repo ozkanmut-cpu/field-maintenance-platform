@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
 type Capability = { capability: string; state: string; score: number; qualityScore: number; reasons: string[] };
 type Baseline = { state: string; confidence: string; observedWeeks: number; serviceEvidenceWeeks: number; travelEvidenceWeeks: number; service: { completedVisits: { median: number | null; p75: number | null; p90: number | null } }; reasons: string[] };
@@ -29,15 +29,18 @@ const [error, setError] = useState('');
 const [feedbackBusy, setFeedbackBusy] = useState<string | null>(null);
 const [kpiBusy, setKpiBusy] = useState(false);
 const [feedbackById, setFeedbackById] = useState<Record<string, string>>({});
+const loadSequence = useRef(0);
 async function load() {
+const requestId = ++loadSequence.current;
 setBusy(true); setError('');
 try {
 const response = await fetch('/api/backend/ai/admin-dashboard?weeks=12');
 const body = await response.json().catch(() => null);
 if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
+if (requestId !== loadSequence.current) return;
 setData(body as Dashboard);
-} catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-finally { setBusy(false); }
+} catch (e) { if (requestId === loadSequence.current) setError(e instanceof Error ? e.message : String(e)); }
+finally { if (requestId === loadSequence.current) setBusy(false); }
 }
 useEffect(() => { void load(); }, []);
 async function downloadKpi() {
