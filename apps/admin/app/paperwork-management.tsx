@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import { LatestRequest, RequestActivity } from './latest-request.mjs';
 import { bulkPaperworkStatusOptions, paperworkStatusOptions } from './paperwork-status-policy.mjs';
 
 type User = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
@@ -57,8 +58,9 @@ export default function PaperworkManagement() {
   const [historyVisitId, setHistoryVisitId] = useState('');
   const [history, setHistory] = useState<PaperworkHistoryItem[]>([]);
   const [search, setSearch] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [mutationBusy, setMutationBusy] = useState(false);
+  const [visitsBusy, setVisitsBusy] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const analyticsToday = istanbulDateKey();
@@ -67,6 +69,12 @@ export default function PaperworkManagement() {
   const [analyticsFrom, setAnalyticsFrom] = useState(() => shiftDateKey(analyticsToday, -29));
   const [analyticsTo, setAnalyticsTo] = useState(analyticsToday);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const visitsRequests = useRef(new RequestActivity(setVisitsBusy));
+  const analyticsRequests = useRef(new LatestRequest());
+  const historyRequests = useRef(new RequestActivity(setHistoryBusy));
+  const visitsDatasetKeyRef = useRef('');
+  const busy = mutationBusy || visitsBusy || historyBusy;
+  const loading = visitsBusy;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
@@ -82,27 +90,57 @@ export default function PaperworkManagement() {
     setTechnicianId((current) => current || techs[0]?.id || '');
   }
 
+  function invalidateVisitContext() {
+    visitsRequests.current.invalidate();
+    historyRequests.current.invalidate();
+    visitsDatasetKeyRef.current = '';
+    setSelected([]);
+    setHistoryVisitId('');
+    setHistory([]);
+  }
+
   async function loadVisits() {
-    if (!technicianId || !date) { setVisits([]); return; }
-    setBusy(true); setLoading(true); setError('');
+    const requestEpoch = visitsRequests.current.begin();
+    if (!technicianId || !date) {
+      if (visitsRequests.current.isCurrent(requestEpoch)) { setVisits([]); setSelected([]); visitsRequests.current.finish(requestEpoch); }
+      return;
+    }
+    const datasetKey = `${technicianId}:${date}`;
+    setError('');
     try {
       const data = await api<TechnicianHistory>(`/api/backend/maintenance/technician-history?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`);
-      setVisits(data.items.filter((item) => item.type === 'MAINTENANCE'));
-      setSelected([]); setHistoryVisitId(''); setHistory([]);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); setLoading(false); }
+      if (!visitsRequests.current.isCurrent(requestEpoch)) return;
+      const items = data.items.filter((item) => item.type === 'MAINTENANCE');
+      const itemIds = new Set(items.map((item) => item.id));
+      const sameDataset = visitsDatasetKeyRef.current === datasetKey;
+      visitsDatasetKeyRef.current = datasetKey;
+      setVisits(items);
+      setSelected((current) => sameDataset ? current.filter((id) => itemIds.has(id)) : []);
+    } catch (e) {
+      if (!visitsRequests.current.isCurrent(requestEpoch)) return;
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      visitsRequests.current.finish(requestEpoch);
+    }
   }
 
   async function loadAnalytics() {
     if (!analyticsFrom || !analyticsTo) return;
+    const requestEpoch = analyticsRequests.current.next();
     setAnalytics(null);
     setAnalyticsLoading(true); setError('');
     try {
       const params = new URLSearchParams({ from: analyticsFrom, to: analyticsTo });
       if (analyticsTechnicianId) params.set('technicianId', analyticsTechnicianId);
-      setAnalytics(await api<PaperworkAnalytics>(`/api/backend/maintenance/paperwork-analytics?${params.toString()}`));
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setAnalyticsLoading(false); }
+      const data = await api<PaperworkAnalytics>(`/api/backend/maintenance/paperwork-analytics?${params.toString()}`);
+      if (!analyticsRequests.current.isCurrent(requestEpoch)) return;
+      setAnalytics(data);
+    } catch (e) {
+      if (!analyticsRequests.current.isCurrent(requestEpoch)) return;
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (analyticsRequests.current.isCurrent(requestEpoch)) setAnalyticsLoading(false);
+    }
   }
 
   useEffect(() => { void loadTechnicians().catch((e) => setError(e instanceof Error ? e.message : String(e))); }, []);
@@ -136,20 +174,20 @@ export default function PaperworkManagement() {
   async function updateOne(visitId: string, kind: PaperworkKind, status: PaperworkStatus) {
     const note = window.prompt('Not (opsiyonel):')?.trim();
     if (note === undefined) return;
-    setBusy(true); setError(''); setNotice('');
+    setMutationBusy(true); setError(''); setNotice('');
     try {
       await api('/api/backend/maintenance/paperwork', { method: 'POST', body: JSON.stringify({ visitId, kind, status, ...(note ? { note } : {}) }) });
       setNotice('Evrak durumu güncellendi.');
       await loadVisits();
       if (historyVisitId === visitId) await openHistory(visitId);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { setMutationBusy(false); }
   }
 
   async function bulkUpdate() {
     if (!actionableSelected.length) { setError('Toplu işlem için en az bir görünür bakım seç.'); return; }
     if (!window.confirm(`${actionableSelected.length} bakım kaydında ${bulkKind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'} durumu ${statusLabel[effectiveBulkStatus]} yapılsın mı?`)) return;
-    setBusy(true); setError(''); setNotice('');
+    setMutationBusy(true); setError(''); setNotice('');
     try {
       await api('/api/backend/maintenance/paperwork/bulk', {
         method: 'POST',
@@ -158,16 +196,22 @@ export default function PaperworkManagement() {
       setNotice(`${actionableSelected.length} bakım kaydının evrak durumu güncellendi.`);
       setBulkNote(''); await loadVisits();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { setMutationBusy(false); }
   }
 
   async function openHistory(visitId: string) {
-    setBusy(true); setError('');
+    const requestEpoch = historyRequests.current.begin();
+    setError('');
     try {
       const data = await api<PaperworkHistoryItem[]>(`/api/backend/maintenance/paperwork-history?visitId=${encodeURIComponent(visitId)}`);
+      if (!historyRequests.current.isCurrent(requestEpoch)) return;
       setHistoryVisitId(visitId); setHistory(data);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (!historyRequests.current.isCurrent(requestEpoch)) return;
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      historyRequests.current.finish(requestEpoch);
+    }
   }
 
   const pendingReviewSlip = visits.filter((v) => v.serviceSlipStatus === 'PENDING_REVIEW').length;
@@ -189,9 +233,9 @@ export default function PaperworkManagement() {
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
-        <select value={technicianId} onChange={(e) => { setSelected([]); setTechnicianId(e.target.value); }}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
-        <input type="date" value={date} onChange={(e) => { setSelected([]); setDate(e.target.value); }} />
-        <input value={search} onChange={(e) => { setSelected([]); setSearch(e.target.value); }} placeholder="Müşteri no / nokta ara" />
+        <select value={technicianId} onChange={(e) => { invalidateVisitContext(); setTechnicianId(e.target.value); }}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
+        <input type="date" value={date} onChange={(e) => { invalidateVisitContext(); setDate(e.target.value); }} />
+        <input value={search} onChange={(e) => { setSelected([]); setSearch(e.target.value); historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }} placeholder="Müşteri no / nokta ara" />
       </div>
     </section>
 
@@ -242,7 +286,7 @@ export default function PaperworkManagement() {
       </tbody></table></div>
     </section>
 
-    {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
+    {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Evrak</th><th>Önce</th><th>Sonra</th><th>Kullanıcı</th><th>Not</th></tr></thead><tbody>
         {history.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Evrak değişikliği yok</strong><span>Bu ziyaret için evrak audit kaydı bulunmuyor.</span></div></td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy?.name ?? (h.provenance === 'SAP_RECONCILIATION' ? 'SAP (otomatik)' : 'Sistem')}</td><td>{h.note || '—'}</td></tr>)}
       </tbody></table></div>
