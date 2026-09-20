@@ -106,6 +106,7 @@ test('records missing maintenance independently from missing confirmation', asyn
 
   const visit = await service.complete(completionInput({
     maintainedCoolerCount: 4,
+    partialMaintenanceConfirmed: true,
     missingMaintenanceExplanation: 'Bir ünite kapalıydı',
   }));
 
@@ -141,11 +142,21 @@ test('allows incomplete maintenance without an explanation when the technician e
 
   const visit = await service.complete(completionInput({
     maintainedCoolerCount: 4,
+    partialMaintenanceConfirmed: true,
     missingMaintenanceExplanation: '',
   }));
 
   assert.equal((visit as any).missingMaintenanceCount, 1);
   assert.equal((visit as any).missingMaintenanceExplanation, null);
+});
+
+test('rejects a partial maintenance record until the technician explicitly acknowledges the shortfall', async () => {
+  const { service } = makeService(5);
+
+  await assert.rejects(
+    () => service.complete(completionInput({ maintainedCoolerCount: 4 })),
+    /eksik bakım yapıldı/i,
+  );
 });
 
 test('uses an existing point cooler count as the immutable total while applying an explicit equipment correction', async () => {
@@ -155,6 +166,7 @@ test('uses an existing point cooler count as the immutable total while applying 
     coolerCount: 4,
     maintainedCoolerCount: 4,
     equipmentCorrectionRequested: true,
+    partialMaintenanceConfirmed: true,
   }));
 
   assert.equal((visit as any).totalCoolerCount, 5);
@@ -223,6 +235,7 @@ test('bootstraps the immutable total from a submitted count only when the point 
   const visit = await service.complete(completionInput({
     coolerCount: 4,
     maintainedCoolerCount: 3,
+    partialMaintenanceConfirmed: true,
   }));
 
   assert.equal((visit as any).totalCoolerCount, 4);

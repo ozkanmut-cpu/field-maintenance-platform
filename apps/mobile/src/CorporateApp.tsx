@@ -214,6 +214,7 @@ export default function CorporateApp() {
     }
     return {
       maintainedCoolerCount: maintained,
+      ...(maintained < operationalCoolerCount ? { partialMaintenanceConfirmed: true } : {}),
       ...(maintained < operationalCoolerCount && missingMaintenanceExplanation.trim()
         ? { missingMaintenanceExplanation: missingMaintenanceExplanation.trim() }
         : {}),
