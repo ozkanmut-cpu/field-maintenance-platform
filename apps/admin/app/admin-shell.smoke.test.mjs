@@ -23,6 +23,11 @@ test('shell provides a keyboard-dismissible text navigation drawer on compact sc
   assert.match(source, /Menüyü Aç/);
 });
 
+test('open compact drawer makes the background content inert', () => {
+  const source = readFileSync(shellPath, 'utf8');
+  assert.match(source, /className="adminMain" inert=\{isCompact && isDrawerOpen \? true : undefined\}/);
+});
+
 test('shell adds accessible names and captions to shared table wrappers', () => {
   const source = readFileSync(shellPath, 'utf8');
   assert.match(source, /tableWrap/);

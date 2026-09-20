@@ -126,7 +126,7 @@ export default function AdminShell({ me, location, onNavigate, onLogout, childre
       </nav>
       <button className="collapseControl" onClick={toggleCollapsed} title={sidebarIsCollapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'} aria-label={sidebarIsCollapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}><span aria-hidden="true">«</span><span>Menüyü Daralt</span></button>
     </aside>
-    <div className="adminMain">
+    <div className="adminMain" inert={isCompact && isDrawerOpen ? true : undefined}>
       <header className="topbar">
         <div className="pageHeading"><button ref={menuToggleRef} className="menuToggle" aria-controls="admin-navigation-drawer" aria-expanded={isDrawerOpen} aria-label={isDrawerOpen ? 'Menüyü Kapat' : 'Menüyü Aç'} onClick={() => setIsDrawerOpen((current) => !current)}><AdminIcon name="dashboard" size={17} /><span>{isDrawerOpen ? 'Menüyü Kapat' : 'Menüyü Aç'}</span></button><div><div className="breadcrumb">{active.group} <span>/</span> {active.label}</div><h1>{active.label}</h1></div></div>
         <div className="account"><span className="accountInitial">{me.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('')}</span><span><strong>{me.name}</strong><small>ADMIN</small></span><button className="ghost" onClick={onLogout}><AdminIcon name="logout" size={16} /><span>Çıkış</span></button></div>
