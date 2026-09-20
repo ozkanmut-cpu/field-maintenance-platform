@@ -1,0 +1,17 @@
+name: Main Exact-SHA CI Gate
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  main-exact-sha-ci:
+    name: Main exact-SHA CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm the check is attached to the pushed commit
+        env:
+          EXPECTED_SHA: ${{ github.event.after }}
+        run: |
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          echo "Exact-SHA CI gate passed for $GITHUB_SHA"
