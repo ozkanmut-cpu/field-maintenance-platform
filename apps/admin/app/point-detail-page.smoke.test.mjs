@@ -110,6 +110,8 @@ test('point detail header uses real ownership data and preserves return-to-list 
     'Point Detail must offer a visible return to the originating points list');
   assert.match(source, /const returnToPoints = \(\) => onNavigate\('points', \{ query: location\.query, status: location\.status, region: location\.region, maintenanceType: location\.maintenanceType, page: location\.page, scrollY: location\.scrollY \}\)/,
     'Returning to the list must retain the complete filter, page, and scroll context');
+  assert.match(source, /<button className="ghost" onClick=\{\(\) => returnToPoints\(\)\}>Geri dön: Noktalar<\/button>/,
+    'The General-tab header return must use the complete context-preserving return path rather than dropping region or maintenance type');
   assert.match(source, /onClick=\{\(\) => onNavigate\('points'\)\}/,
     'The shared detail tab control must provide the direct list return');
   assert.equal((source.match(/<DetailTabs activeTab=\{activeTab\} onNavigate=\{navigateTab\} \/>/g) ?? []).length, 4,
