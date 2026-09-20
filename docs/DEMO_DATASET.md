@@ -21,3 +21,5 @@ npm run demo:purge -w @fmp/api
 ```
 
 İlk komut paketi yeniden oluşturur. İkinci komut yalnız Kordon Operasyon Bölgesi, ona bağlı noktalar, iki önizleme kullanıcısı ve ilişkili kayıtları siler.
+
+<!-- CI tetikleme kaydı: 2026-09-21 -->
