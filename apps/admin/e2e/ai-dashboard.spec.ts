@@ -32,6 +32,7 @@ test('AI dashboard renders through the real browser shell and exports KPI CSV', 
   }));
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Raporlar & Analiz' }).click();
   await page.getByRole('button', { name: 'Sanal İstatistikçi' }).click();
 
   await expect(page.getByRole('heading', { name: 'Sanal İstatistikçi' }).first()).toBeVisible();
