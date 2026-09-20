@@ -79,39 +79,50 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 
 ## Active TODO — Full admin visual redesign
 
-> Added: 2026-09-20. This is not a dashboard-only polish task. The current admin is functionally mature but still visually uses the prior compact corporate theme. The target is one consistent desktop-first operations UI across every admin section, while preserving the existing real API contracts, business rules and completed workflows.
+> Scope: only the admin panel's visual design and user experience. Backend contracts, CI/release mechanics, SAP, database and mobile work are deliberately outside this TODO.
 
-### Delivery rules
+### Visual direction
 
-- [ ] Keep the existing single-page auth boundary, typed URL navigation and real backend metrics; do not introduce fake KPI/trend data.
-- [ ] Adopt the approved mockup direction: deep navy desktop sidebar with logo, icon and readable text labels; grouped navigation is visible by default, and tablet/phone drawer always retains group and submenu labels. Icon-only is never the default experience.
-- [ ] Preserve all existing endpoint contracts, permissions, audit behavior, point-list read-only rule and bulk-operation safeguards.
-- [ ] Use one shared component/style system for loading, empty, error and success states; do not create one-off screen styling.
-- [ ] Maintain keyboard access, visible focus, semantic tables/captions, horizontal table scroll and responsive action/filter wrapping.
+- [ ] Use the approved easy-to-use visual language: calm deep-navy navigation, bright white content surfaces, generous whitespace, clear blue primary actions and restrained green/amber/red statuses.
+- [ ] Keep desktop navigation wide and text-visible by default. Every group and submenu label remains visible; tablet and phone use a readable drawer rather than icon-only navigation.
+- [ ] Apply one consistent hierarchy across the entire admin: breadcrumb → title → short purpose → one primary action → content.
+- [ ] Use shared spacing, typography, panel, card, badge/chip, button, filter, table, dialog, loading, empty, error and success styles. Avoid screen-specific ad-hoc visuals.
+- [ ] Keep controls legible and touch-friendly; preserve visible focus, semantic labels and horizontal table scrolling.
 
-### Shared foundation
+### Dashboard and reports
 
-- [ ] Redesign app shell to the mockup standard: 260–280 px visible-label navy sidebar, simple Fıçıbakım mark, compact account area, low-noise topbar, breadcrumb, page title and one contextual primary action.
-- [ ] Establish shared visual primitives matching the mockups: spacious white panels, 8 px rhythm, strong title hierarchy, restrained blue/green/amber/red chips, clear search/filter toolbar, table selection summary, dialogs and loading/empty/error/success states.
-- [ ] Refresh typography, spacing, elevation, border/radius, state colors and interaction feedback consistently in globals.css without changing domain behavior. Use the approved family: navy #0F4C81, action blue #2563EB, success #16A34A, warning #F59E0B, error #EF4444, background #F8FAFC and white cards.
-- [ ] Add visual/regression coverage for desktop, tablet drawer and phone layouts, including a clean-session desktop navigation test (no persisted collapsed sidebar state).
+- [ ] Redesign Operations Dashboard as a task-first home: at most three real priority metrics, a prominent “Bugünün işleri” queue, compact technician activity and one obvious primary action.
+- [ ] Give KPI/Raporlama, Teknisyen Günlük Özeti and Sanal İstatistikçi the same card hierarchy, calm density and readable drill-down patterns.
+- [ ] Replace dense visual noise with progressive disclosure: summaries first, details only when the user asks for them.
 
-### Screen migration clusters
+### Operations and review
 
-- [ ] Dashboard and reporting: Operations Dashboard follows the mockup’s task-first layout—maximum three high-priority real metrics, a “Bugünün işleri” queue, compact technician activity and one clear primary action. KPI/Raporlama, Technician Daily Summary and Sanal İstatistikçi receive the same hierarchy, explainable states and drill-down affordances.
-- [ ] Operations: Bakım Takvimi, Görevlendirmeler, Bakım Dışı Ziyaretler and Evrak Yönetimi receive consistent page headers, filters, tables, selection/preview/confirmation states and narrow-screen behavior.
-- [ ] Approval & review: Yapılamadı, Konum & Anomali and fiş/teyit review states receive clear decision hierarchy; location confirmation remains explicitly independent from maintenance approval.
-- [ ] Point management: Noktalar, Nokta Detay, Ayar Bekleyenler, Bölgeler, SAP/Google, Mükerrer Noktalar, Timeline and Prospects receive consistent list → detail context, tabs, read-only/edit states. Nokta Detay follows the mockup: identity/status summary at top, one “Düzenle” action, secondary “Geri dön”, and Genel/Konum/Bakım/Atamalar/Evrak/Timeline/Audit tabs.
-- [ ] Toplu İşlemler follows the approved safe mockup exactly: Filtre → Seçim → Önizleme → Açık onay → Uygulama → Audit. Keep selected-count summary, visible current → new value preview, affected-point count, warning, mandatory acknowledgement and audit confirmation visibly separate from the selection table.
-- [ ] Users and system: Kullanıcılar, Yardım Yetkileri, SAP Sync and Audit receive the same visual system, deep-link-friendly state and accessible detail/filter surfaces.
+- [ ] Redesign Bakım Takvimi, Görevlendirmeler, Bakım Dışı Ziyaretler and Evrak Yönetimi with shared page headers, filter bars, selection feedback, readable tables and clear action priority.
+- [ ] Redesign Yapılamadı, Konum & Anomali and fiş/teyit review surfaces so the current decision, its consequence and the next action are immediately understandable.
+- [ ] Standardize loading, no-result, error and completed states across these screens.
 
-### Verification and release
+### Point management
 
-- [ ] Work each independent visual cluster in parallel only where source files do not overlap; keep merge and production deployment serialized.
-- [ ] For every behavior-affecting change: RED test, minimal GREEN change, relevant smoke/E2E, admin type check and production build.
-- [ ] Require exact PR SHA CI success and exact merge-SHA CI success before release; queued/in-progress is not success.
-- [ ] Build the candidate admin artifact in an isolated staging directory from the exact merge SHA; deploy only the Next artifact atomically, preserve prior artifact, restart only field-maintenance-admin.service, then run root/dashboard/API production smoke.
-- [ ] Do not touch API, SAP runtime, DB migrations or mobile artifacts unless a specific visual change demonstrably requires it.
+- [ ] Redesign Noktalar, Ayar Bekleyenler, Bölgeler, SAP/Google, Mükerrer Noktalar, Timeline and Prospects as consistent list-to-detail journeys with search/filter context visibly preserved.
+- [ ] Redesign Nokta Detay to the approved mockup: point identity and three critical statuses at the top, one primary “Düzenle” action, secondary “Geri dön”, and clear Genel/Konum/Bakım/Atamalar/Evrak/Timeline/Audit tabs.
+- [ ] Make point detail sections skimmable: compact information groups, aliases as chips, short recent activity and detail-on-demand instead of a dense wall of fields.
+
+### Bulk operations
+
+- [ ] Redesign Toplu İşlemler around the approved safety flow: Filtre → Seçim → Önizleme → Açık onay → Uygulama → Audit.
+- [ ] Keep filter controls compact and understandable; show selected count persistently while selecting points.
+- [ ] Make preview unmistakable: current value → new value, affected count and warnings live in a separate confirmation panel.
+- [ ] Require a highly visible acknowledgement before the primary apply action; show the audit result as the final state.
+
+### Users and system
+
+- [ ] Bring Kullanıcılar, Yardım Yetkileri, SAP Senkronizasyonu and İşlem Geçmişi into the same shared visual system.
+- [ ] Make filter-heavy and audit-heavy pages easy to scan with clear labels, readable JSON/detail panels and keyboard-friendly controls.
+
+### Responsive visual quality
+
+- [ ] Validate every redesigned screen at desktop, tablet and phone widths.
+- [ ] On narrow screens, preserve label visibility in the drawer, stack actions/filters naturally, prevent button overflow and keep dialogs/table regions usable.
 
 ## Current near-term priorities
 
