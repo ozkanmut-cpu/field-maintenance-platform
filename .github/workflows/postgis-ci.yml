@@ -2,33 +2,8 @@ name: PostGIS CI
 
 on:
   push:
-    paths:
-      - 'apps/api/prisma/**'
-      - 'apps/api/src/points/point-postgis-migration.spec.ts'
-      - 'apps/api/src/points/point-spatial.integration-config.ts'
-      - 'apps/api/src/points/point-spatial.integration-config.spec.ts'
-      - 'apps/api/src/points/point-spatial.service.ts'
-      - 'apps/api/src/points/point-spatial.service.spec.ts'
-      - 'apps/api/src/points/point-spatial.integration.spec.ts'
-      - 'apps/api/src/points/points.controller.ts'
-      - 'apps/api/src/points/points.module.ts'
-      - 'apps/api/src/points/points.nearby.controller.spec.ts'
-      - 'docs/V1_TODO.md'
-      - '.github/workflows/postgis-ci.yml'
+    branches: [main]
   pull_request:
-    paths:
-      - 'apps/api/prisma/**'
-      - 'apps/api/src/points/point-postgis-migration.spec.ts'
-      - 'apps/api/src/points/point-spatial.integration-config.ts'
-      - 'apps/api/src/points/point-spatial.integration-config.spec.ts'
-      - 'apps/api/src/points/point-spatial.service.ts'
-      - 'apps/api/src/points/point-spatial.service.spec.ts'
-      - 'apps/api/src/points/point-spatial.integration.spec.ts'
-      - 'apps/api/src/points/points.controller.ts'
-      - 'apps/api/src/points/points.module.ts'
-      - 'apps/api/src/points/points.nearby.controller.spec.ts'
-      - 'docs/V1_TODO.md'
-      - '.github/workflows/postgis-ci.yml'
 
 jobs:
   postgis-validation:
@@ -39,17 +14,18 @@ jobs:
         image: postgis/postgis:16-3.4
         env:
           POSTGRES_DB: field_maintenance_test
-          POSTGRES_USER: field_maintenance
-          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U field_maintenance -d field_maintenance_test"
+          --health-cmd "pg_isready -U postgres -d field_maintenance_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://field_maintenance:local-ci-only@127.0.0.1:5432/field_maintenance_test
+      POSTGRES_DB: field_maintenance_test
+      POSTGRES_USER: postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,10 +33,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Configure isolated test database
+        run: >-
+          printf 'DATABASE_URL=postgresql:%s%s@127.0.0.1:5432/%s\n' '//'
+          "$POSTGRES_USER" "$POSTGRES_DB" >> "$GITHUB_ENV"
       - name: Generate Prisma client
         run: npm --prefix apps/api run prisma:generate
       - name: Deploy all migrations
         run: npm --prefix apps/api run prisma:deploy
+      - name: Verify migration status
+        run: npm --prefix apps/api run prisma:status
+      - name: PostGIS workflow contract
+        run: >-
+          node --test --require ts-node/register
+          apps/api/src/points/point-postgis-ci-workflow.spec.ts
       - name: Migration and spatial unit contracts
         working-directory: apps/api
         run: >-
@@ -71,9 +57,9 @@ jobs:
           src/points/points.nearby.controller.spec.ts
       - name: Real PostGIS integration
         working-directory: apps/api
-        env:
-          POSTGIS_TEST_DATABASE_URL: postgresql://field_maintenance:local-ci-only@127.0.0.1:5432/field_maintenance_test
-        run: node --test --require ts-node/register src/points/point-spatial.integration.spec.ts
+        run: >-
+          POSTGIS_TEST_DATABASE_URL="$DATABASE_URL"
+          node --test --require ts-node/register src/points/point-spatial.integration.spec.ts
       - name: API typecheck
         run: npm --prefix apps/api run lint
       - name: API build

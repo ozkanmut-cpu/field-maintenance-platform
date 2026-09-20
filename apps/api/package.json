@@ -9,6 +9,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "prisma:status": "prisma migrate status",
     "lint": "tsc --noEmit",
     "test:rut-schedule": "node --test --require ts-node/register src/common/rut-schedule.spec.ts src/common/smartclean-schedule.spec.ts",
     "test:effective-workload": "node --test --require ts-node/register src/ai/effective-workload.service.spec.ts",
