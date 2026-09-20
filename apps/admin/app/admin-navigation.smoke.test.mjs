@@ -10,8 +10,8 @@ test('admin navigation registry defines deep-linkable point workflows', () => {
   assert.match(source, /'points'/);
   assert.match(source, /'point-detail'/);
   assert.match(source, /'bulk-operations'/);
-  assert.match(source, /export function parseAdminLocation/);
-  assert.match(source, /export function buildAdminLocation/);
+  assert.match(source, /admin-navigation-runtime/,
+    'URL behavior is covered by executable helper tests rather than source-shape assertions');
 });
 
 test('navigation registry groups every existing admin capability', () => {

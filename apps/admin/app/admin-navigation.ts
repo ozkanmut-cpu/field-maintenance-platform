@@ -1,4 +1,5 @@
 import type { AdminIconName } from './admin-icons';
+import { buildAdminLocation as buildLocation, parseAdminLocation as parseLocation } from './admin-navigation-runtime.js';
 
 export type AdminSection =
   | 'dashboard' | 'maintenance-calendar' | 'assignments' | 'non-maintenance-visits' | 'paperwork'
@@ -39,38 +40,10 @@ export const navigationItems: NavigationItem[] = [
   { section: 'audit-log', label: 'İşlem Geçmişi', group: 'Sistem', icon: 'history' },
 ];
 
-export type AdminLocation = { section: AdminSection; pointId?: string; detailTab?: string; query?: string; status?: string; page?: string; scrollY?: string; userId?: string; createUser?: boolean };
+export type AdminLocation = { section: AdminSection; pointId?: string; detailTab?: string; query?: string; status?: string; region?: string; maintenanceType?: string; page?: string; scrollY?: string; userId?: string; createUser?: boolean };
 
-const sections = new Set<AdminSection>(navigationItems.map((item) => item.section).concat('point-detail'));
-
-export function parseAdminLocation(search: string): AdminLocation {
-  const params = new URLSearchParams(search);
-  const candidate = params.get('section') as AdminSection | null;
-  return {
-    section: candidate && sections.has(candidate) ? candidate : 'dashboard',
-    ...(params.get('pointId') ? { pointId: params.get('pointId')! } : {}),
-    ...(params.get('tab') ? { detailTab: params.get('tab')! } : {}),
-    ...(params.get('query') ? { query: params.get('query')! } : {}),
-    ...(params.get('status') ? { status: params.get('status')! } : {}),
-    ...(params.get('page') ? { page: params.get('page')! } : {}),
-    ...(params.get('scrollY') ? { scrollY: params.get('scrollY')! } : {}),
-    ...(params.get('userId') ? { userId: params.get('userId')! } : {}),
-    ...(params.get('createUser') === '1' ? { createUser: true } : {}),
-  };
-}
-
-export function buildAdminLocation(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}): string {
-  const params = new URLSearchParams({ section });
-  if (values.pointId) params.set('pointId', values.pointId);
-  if (values.detailTab) params.set('tab', values.detailTab);
-  if (values.query) params.set('query', values.query);
-  if (values.status) params.set('status', values.status);
-  if (values.page) params.set('page', values.page);
-  if (values.scrollY) params.set('scrollY', values.scrollY);
-  if (values.userId) params.set('userId', values.userId);
-  if (values.createUser) params.set('createUser', '1');
-  return `?${params.toString()}`;
-}
+export const parseAdminLocation = (search: string): AdminLocation => parseLocation(search) as AdminLocation;
+export const buildAdminLocation = (section: AdminSection, values: Omit<AdminLocation, 'section'> = {}): string => buildLocation(section, values);
 
 export function getNavigationItem(section: AdminSection): NavigationItem {
   return navigationItems.find((item) => item.section === section) ?? navigationItems[0];

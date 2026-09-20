@@ -95,6 +95,29 @@ test('point detail stays read only until explicit edit mode', () => {
   assert.match(source, /previousStatus/,
     'Paperwork history must use the real Prisma previousStatus field');
   assert.match(source, /newStatus/);
+  assert.match(source, /status: location\.status/);
+  assert.match(source, /region: location\.region/);
+  assert.match(source, /maintenanceType: location\.maintenanceType/);
+  assert.match(source, /page: location\.page/);
+  assert.match(source, /scrollY: location\.scrollY/);
+});
+
+test('point detail header uses real ownership data and preserves return-to-list context', () => {
+  const source = readFileSync(path, 'utf8');
+  assert.match(source, /\/api\/backend\/assignments\/effective\/\$\{pointId\}/,
+    'The header must load the effective technician from the authoritative assignment endpoint');
+  assert.match(source, /Geri dön: Noktalar/,
+    'Point Detail must offer a visible return to the originating points list');
+  assert.match(source, /const returnToPoints = \(\) => onNavigate\('points', \{ query: location\.query, status: location\.status, region: location\.region, maintenanceType: location\.maintenanceType, page: location\.page, scrollY: location\.scrollY \}\)/,
+    'Returning to the list must retain the complete filter, page, and scroll context');
+  assert.match(source, /onClick=\{\(\) => onNavigate\('points'\)\}/,
+    'The shared detail tab control must provide the direct list return');
+  assert.equal((source.match(/<DetailTabs activeTab=\{activeTab\} onNavigate=\{navigateTab\} \/>/g) ?? []).length, 4,
+    'General, audit, timeline, and the shared remaining-tab view must each expose the direct list return');
+  assert.match(source, /Bakım tipi/,
+    'The header must expose the point maintenance type');
+  assert.match(source, /Geçerli teknisyen/,
+    'The header must identify the effective technician rather than assuming the region technician');
 });
 
 test('point detail manages aliases only through the supported list and add contract', () => {
