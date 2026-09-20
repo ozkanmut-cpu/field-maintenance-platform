@@ -56,3 +56,11 @@ test('late errors from an older technician summary request remain hidden', async
 
   assert.deepEqual(errors, beforeLateError);
 });
+
+test('technician summary uses semantic table headers and announces failures', () => {
+  const source = fs.readFileSync(new URL('./technician-daily-summary.tsx', import.meta.url), 'utf8');
+  for (const header of ['Evrak', 'Hareket']) assert.match(source, new RegExp(`<th scope="col">${header}</th>`));
+  assert.match(source, /<th scope="row"><strong>Servis fişi<\/strong><\/th>/);
+  assert.match(source, /className="error" role="alert"/);
+  assert.doesNotMatch(source, /<caption/);
+});

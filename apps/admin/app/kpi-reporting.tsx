@@ -47,7 +47,7 @@ export function startKpiRequest(filters: Filters, set: Setters,
 }
 
 function StatusRow({ label, value }: { label: string; value: Statuses }) {
-  return <tr><td><strong>{label}</strong></td><td>{value.pending}</td><td>{value.present}</td><td>{value.missing}</td></tr>;
+  return <tr><th scope="row"><strong>{label}</strong></th><td>{value.pending}</td><td>{value.present}</td><td>{value.missing}</td></tr>;
 }
 function rate(value: number | null) { return value === null ? '—' : `%${value.toLocaleString('tr-TR')}`; }
 
@@ -63,12 +63,12 @@ export function KpiReportView({ report }: { report: Report }) {
       <div className="dashboardCard"><span>Dönem sonu açık</span><strong>{m.currentOpen} / {m.overdueOpen}</strong><small>Güncel / geciken · Atamasız: {m.unassignedOpen}</small></div>
     </section>
     <p className="muted">Evrak sayıları dönem içindeki bakımların mevcut durumudur. Açık görevler dönem sonu için yeniden oluşturulan tarihsel görünümdür.</p>
-    <div className="tableWrap"><table><thead><tr><th>Evrak</th><th>Bekliyor</th><th>Var</th><th>Eksik</th></tr></thead>
+    <div className="tableWrap"><table><thead><tr><th scope="col">Evrak</th><th scope="col">Bekliyor</th><th scope="col">Var</th><th scope="col">Eksik</th></tr></thead>
       <tbody><StatusRow label="Servis fişi" value={report.paperwork.serviceSlip} /><StatusRow label="Teyit" value={report.paperwork.confirmation} /></tbody></table></div>
-    <div className="tableWrap"><table><thead><tr><th>Günlük trend</th><th>Bakım</th><th>Yapılamadı</th><th>Başarı</th><th>Yardım verdi</th><th>Yardım aldı</th></tr></thead>
-      <tbody>{report.daily.map(row => <tr key={row.date}><td>{row.date}</td><td>{row.completedMaintenance}</td><td>{row.attemptCount}</td><td>{rate(row.successRate)}</td><td>{row.helpedMaintenance}</td><td>{row.receivedHelpMaintenance}</td></tr>)}</tbody></table></div>
-    <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Bakım</th><th>Yapılamadı</th><th>Başarı</th><th>Yardım verdi</th><th>Yardım aldı</th></tr></thead>
-      <tbody>{report.technicians.length ? report.technicians.map(row => <tr key={row.technicianId}><td><strong>{row.name}</strong></td><td>{row.completedMaintenance}</td><td>{row.attemptCount}</td><td>{rate(row.successRate)}</td><td>{row.helpedMaintenance}</td><td>{row.receivedHelpMaintenance}</td></tr>) : <tr><td colSpan={6}>Dönemde teknisyen hareketi yok.</td></tr>}</tbody></table></div>
+    <div className="tableWrap"><table><thead><tr><th scope="col">Günlük trend</th><th scope="col">Bakım</th><th scope="col">Yapılamadı</th><th scope="col">Başarı</th><th scope="col">Yardım verdi</th><th scope="col">Yardım aldı</th></tr></thead>
+      <tbody>{report.daily.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{row.completedMaintenance}</td><td>{row.attemptCount}</td><td>{rate(row.successRate)}</td><td>{row.helpedMaintenance}</td><td>{row.receivedHelpMaintenance}</td></tr>)}</tbody></table></div>
+    <div className="tableWrap"><table><thead><tr><th scope="col">Teknisyen</th><th scope="col">Bakım</th><th scope="col">Yapılamadı</th><th scope="col">Başarı</th><th scope="col">Yardım verdi</th><th scope="col">Yardım aldı</th></tr></thead>
+      <tbody>{report.technicians.length ? report.technicians.map(row => <tr key={row.technicianId}><th scope="row"><strong>{row.name}</strong></th><td>{row.completedMaintenance}</td><td>{row.attemptCount}</td><td>{rate(row.successRate)}</td><td>{row.helpedMaintenance}</td><td>{row.receivedHelpMaintenance}</td></tr>) : <tr><td colSpan={6}>Dönemde teknisyen hareketi yok.</td></tr>}</tbody></table></div>
   </div>;
 }
 
@@ -90,7 +90,7 @@ export default function KpiReportingPanel({ technicians }: { technicians: Techni
         </select>
       </div>
     </div>
-    {error ? <div className="error">{error}</div> : null}
+    {error ? <div className="error" role="alert">{error}</div> : null}
     {report ? <KpiReportView report={report} /> : <div className="emptyState compact"><strong>{loading ? 'KPI raporu hazırlanıyor' : 'KPI raporu bulunamadı'}</strong><span>{filters.from} – {filters.to}</span></div>}
   </section>;
 }
