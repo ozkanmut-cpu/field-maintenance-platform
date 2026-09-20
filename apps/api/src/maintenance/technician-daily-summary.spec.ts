@@ -16,7 +16,7 @@ function makeService() {
   const visits = [
     { id: 'v1', technicianId: 't1', technician: t1, assistedForTechnicianId: null, assistedForTechnician: null, performedAt: new Date('2026-09-16T06:00:00Z'), enteredLate: false, serviceSlipStatus: PaperworkStatus.PENDING, confirmationStatus: PaperworkStatus.PRESENT, point: point('p1', 'Kendi Noktası') },
     { id: 'v2', technicianId: 't1', technician: t1, assistedForTechnicianId: 't2', assistedForTechnician: t2, performedAt: new Date('2026-09-16T07:00:00Z'), enteredLate: false, serviceSlipStatus: PaperworkStatus.PRESENT, confirmationStatus: PaperworkStatus.PRESENT, point: point('p2', 'Yardım Verilen') },
-    { id: 'v3', technicianId: 't2', technician: t2, assistedForTechnicianId: 't1', assistedForTechnician: t1, performedAt: new Date('2026-09-16T08:00:00Z'), enteredLate: false, serviceSlipStatus: PaperworkStatus.MISSING, confirmationStatus: PaperworkStatus.PENDING, point: point('p3', 'Yardım Alınan') },
+    { id: 'v3', technicianId: 't2', technician: t2, assistedForTechnicianId: 't1', assistedForTechnician: t1, performedAt: new Date('2026-09-16T08:00:00Z'), enteredLate: false, serviceSlipStatus: PaperworkStatus.PENDING_REVIEW, confirmationStatus: PaperworkStatus.PENDING, point: point('p3', 'Yardım Alınan') },
   ];
   const attempts = [
     { id: 'a1', technicianId: 't1', technician: t1, assistedForTechnicianId: null, assistedForTechnician: null, attemptedAt: new Date('2026-09-16T09:00:00Z'), reason: 'OTHER', note: null, point: point('p4', 'Kendi Deneme') },
@@ -77,8 +77,8 @@ test('technician daily summary separates own work from help given and received a
     receivedHelpAttempts: 1,
   });
   assert.deepEqual(result.paperwork, {
-    serviceSlip: { pending: 1, present: 0, missing: 1 },
-    confirmation: { pending: 1, present: 1, missing: 0 },
+    serviceSlip: { pending: 2, present: 0, missing: 0, approved: 0 },
+    confirmation: { pending: 1, present: 1, missing: 0, approved: 0 },
   });
   assert.equal(result.events.length, 8);
   assert.deepEqual(result.events.slice(0, 3).map((item: any) => item.relation), ['OWN', 'HELPED_OTHER', 'RECEIVED_HELP']);

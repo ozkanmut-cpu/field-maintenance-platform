@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AttemptReviewStatus,
+  ConfirmationApprovalSource,
   MaintenanceObligationStatus,
   MaintenanceType,
   PaperworkKind,
@@ -24,6 +25,7 @@ import { businessDateKey, businessDayRange, dateOnlyForBusinessDate } from '../c
 import { nextSmartcleanDueDate } from '../common/smartclean-schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
+import { CompleteServiceSlipReviewDto } from './dto/complete-service-slip-review.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
@@ -36,6 +38,21 @@ import { PointLocationLearningService } from './point-location-learning.service'
 import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
 import { evaluateMaintenanceLocation } from './maintenance-location-policy';
 import { evaluateMaintenanceDate } from './maintenance-date-policy';
+
+type ManualPaperworkEvent = {
+  kind: PaperworkKind;
+  newStatus: PaperworkStatus;
+  changedAt: Date;
+  [key: string]: unknown;
+};
+type SapReconciliationEvent = {
+  id: string;
+  importRunId: string;
+  previousStatus: PaperworkStatus;
+  nextStatus: PaperworkStatus;
+  approvalSource: ConfirmationApprovalSource | null;
+  createdAt: Date;
+};
 
 @Injectable()
 export class MaintenanceService {
@@ -100,6 +117,7 @@ export class MaintenanceService {
           status: VisitStatus.VALID,
           OR: [
             { serviceSlipStatus: PaperworkStatus.MISSING },
+            { serviceSlipStatus: PaperworkStatus.PENDING_REVIEW },
             { confirmationStatus: PaperworkStatus.MISSING },
           ],
         },
@@ -117,13 +135,15 @@ export class MaintenanceService {
     const paperwork = missingVisits.reduce(
       (acc, visit) => {
         const slipMissing = visit.serviceSlipStatus === PaperworkStatus.MISSING;
+        const slipReviewPending = visit.serviceSlipStatus === PaperworkStatus.PENDING_REVIEW;
         const confirmationMissing = visit.confirmationStatus === PaperworkStatus.MISSING;
+        if (slipMissing) acc.serviceSlip += 1;
+        if (slipReviewPending) acc.serviceSlipReviewPending += 1;
+        if (confirmationMissing) acc.confirmation += 1;
         if (slipMissing && confirmationMissing) acc.both += 1;
-        else if (slipMissing) acc.serviceSlip += 1;
-        else if (confirmationMissing) acc.confirmation += 1;
         return acc;
       },
-      { serviceSlip: 0, confirmation: 0, both: 0 },
+      { serviceSlip: 0, serviceSlipReviewPending: 0, confirmation: 0, both: 0 },
     );
 
     return {
@@ -160,6 +180,10 @@ export class MaintenanceService {
           assistedForTechnician: { select: { id: true, name: true, username: true } },
           serviceSlipStatus: true,
           confirmationStatus: true,
+          totalCoolerCount: true,
+          maintainedCoolerCount: true,
+          missingMaintenanceCount: true,
+          missingMaintenanceExplanation: true,
           point: { select: { id: true, code: true, name: true, maintenanceType: true } },
         },
         orderBy: { performedAt: 'asc' },
@@ -224,7 +248,7 @@ export class MaintenanceService {
     };
   }
 
-  async complete(dto: CompleteMaintenanceDto) {
+  async complete(dto: CompleteMaintenanceDto, now = new Date()) {
     const existingByKey = await this.prisma.maintenanceVisit.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
     });
@@ -241,7 +265,6 @@ export class MaintenanceService {
 
     await this.requireTechnician(dto.technicianId);
 
-    const now = new Date();
     const performedAt = dto.performedAt ? new Date(dto.performedAt) : now;
     const locationCapturedAt = dto.locationCapturedAt ? new Date(dto.locationCapturedAt) : null;
     const deviceRecordedAt = dto.deviceRecordedAt ? new Date(dto.deviceRecordedAt) : null;
@@ -304,15 +327,50 @@ export class MaintenanceService {
       : null;
 
     if (dto.equipmentConfirmed !== true) throw new BadRequestException('Nokta ekipman bilgisi doğrulanmalıdır');
-    const equipment = {
+    const submittedEquipment = {
       coolerCount: dto.coolerCount ?? point.coolerCount,
       towerCount: dto.towerCount ?? point.towerCount,
       tapCount: dto.tapCount ?? point.tapCount,
       smarttapCount: dto.smarttapCount ?? point.smarttapCount,
     };
-    if (Object.values(equipment).some((value) => value === null || value === undefined || !Number.isInteger(value) || value < 0)) {
+    if (Object.values(submittedEquipment).some((value) => value === null || value === undefined || !Number.isInteger(value) || value < 0)) {
       throw new BadRequestException('Soğutucu, kule, musluk ve SmartTap adetlerinin tamamı girilmelidir');
     }
+    // A known point count is the operational total for this visit. Only an unconfigured point
+    // may bootstrap that total from the submitted equipment confirmation.
+    const totalCoolerCount = point.coolerCount ?? submittedEquipment.coolerCount!;
+    const correctionNeeded = (point.coolerCount != null && point.coolerCount !== submittedEquipment.coolerCount)
+      || (point.towerCount != null && point.towerCount !== submittedEquipment.towerCount)
+      || (point.tapCount != null && point.tapCount !== submittedEquipment.tapCount)
+      || (point.smarttapCount != null && point.smarttapCount !== submittedEquipment.smarttapCount);
+    if (correctionNeeded && dto.equipmentCorrectionRequested !== true) {
+      throw new BadRequestException('Ekipman sayısı değişikliğini ayrıca onayla');
+    }
+    const equipment = {
+      coolerCount: point.coolerCount == null || dto.equipmentCorrectionRequested === true
+        ? submittedEquipment.coolerCount
+        : point.coolerCount,
+      towerCount: point.towerCount == null || dto.equipmentCorrectionRequested === true
+        ? submittedEquipment.towerCount
+        : point.towerCount,
+      tapCount: point.tapCount == null || dto.equipmentCorrectionRequested === true
+        ? submittedEquipment.tapCount
+        : point.tapCount,
+      smarttapCount: point.smarttapCount == null || dto.equipmentCorrectionRequested === true
+        ? submittedEquipment.smarttapCount
+        : point.smarttapCount,
+    };
+    const maintainedCoolerCount = dto.maintainedCoolerCount ?? totalCoolerCount;
+    if (!Number.isInteger(maintainedCoolerCount) || maintainedCoolerCount < 0) {
+      throw new BadRequestException('Bakımı yapılan soğutucu adedi 0 veya daha büyük tam sayı olmalıdır');
+    }
+    if (maintainedCoolerCount > totalCoolerCount) {
+      throw new BadRequestException('Bakımı yapılan soğutucu adedi toplam soğutucu adedinden büyük olamaz');
+    }
+    const missingMaintenanceCount = totalCoolerCount - maintainedCoolerCount;
+    const missingMaintenanceExplanation = missingMaintenanceCount > 0
+      ? dto.missingMaintenanceExplanation?.trim() || null
+      : null;
     const equipmentChanged = point.coolerCount !== equipment.coolerCount || point.towerCount !== equipment.towerCount || point.tapCount !== equipment.tapCount || point.smarttapCount !== equipment.smarttapCount;
     const locationPresenceConfirmed = dateDecision.locationRequired ? dto.locationPresenceConfirmed ?? true : false;
     const locationDecision = dateDecision.locationRequired
@@ -352,11 +410,16 @@ export class MaintenanceService {
             suspiciousBatch: false,
             reviewRecommended: dateDecision.locationRequired && locationDecision.locationReviewRequired,
             reviewReason: [enteredLate ? 'GERİYE DÖNÜK GİRİŞ' : null, locationDecision.reviewReason].filter(Boolean).join(' | ') || null,
+            totalCoolerCount,
+            maintainedCoolerCount,
+            missingMaintenanceCount,
+            missingMaintenanceExplanation,
             coolerCount: equipment.coolerCount!,
             towerCount: equipment.towerCount!,
             tapCount: equipment.tapCount!,
             smarttapCount: equipment.smarttapCount!,
             equipmentConfirmed: true,
+            confirmationReconciliationEligible: point.maintenanceType === MaintenanceType.STANDARD,
             status: VisitStatus.VALID,
             idempotencyKey: dto.idempotencyKey,
           },
@@ -388,6 +451,27 @@ export class MaintenanceService {
             },
           });
         }
+
+        await tx.adminAuditLog.create({
+          data: {
+            actorId: dto.technicianId,
+            entityType: 'MAINTENANCE_VISIT',
+            entityId: created.id,
+            action: missingMaintenanceCount > 0
+              ? 'MAINTENANCE_PARTIAL_COOLER_COUNT_RECORDED'
+              : 'MAINTENANCE_COOLER_COUNT_RECORDED',
+            oldValue: Prisma.JsonNull,
+            newValue: {
+              totalCoolerCount,
+              maintainedCoolerCount,
+              missingMaintenanceCount,
+              missingMaintenanceExplanation,
+            },
+            note: missingMaintenanceCount > 0
+              ? 'Eksik bakım teknisyen tarafından tamamlanmış olarak kaydedildi'
+              : 'Bakımı yapılan soğutucu adedi tamamlandı olarak kaydedildi',
+          },
+        });
 
         if (backlogToMiss.length) {
           await tx.maintenanceObligation.updateMany({
@@ -777,9 +861,10 @@ export class MaintenanceService {
     const receivedAttempts = attempts.filter((item) => relation(item.technicianId, item.assistedForTechnicianId) === 'RECEIVED_HELP');
     const responsibleVisits = [...ownVisits, ...receivedVisits];
     const paperworkCounts = (kind: 'serviceSlipStatus' | 'confirmationStatus') => ({
-      pending: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PENDING).length,
+      pending: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PENDING || (kind === 'serviceSlipStatus' && item[kind] === PaperworkStatus.PENDING_REVIEW)).length,
       present: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PRESENT).length,
       missing: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.MISSING).length,
+      approved: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.APPROVED).length,
     });
     const assigned = due.items.filter((item) => item.technicianId === technicianId);
     const events = [
@@ -840,7 +925,7 @@ export class MaintenanceService {
         select: { technicianId: true },
       }),
       this.prisma.maintenanceVisit.count({
-        where: { status: VisitStatus.VALID, serviceSlipStatus: PaperworkStatus.PENDING },
+        where: { status: VisitStatus.VALID, serviceSlipStatus: { in: [PaperworkStatus.PENDING, PaperworkStatus.PENDING_REVIEW] } },
       }),
       this.prisma.maintenanceVisit.count({
         where: { status: VisitStatus.VALID, confirmationStatus: PaperworkStatus.PENDING },
@@ -948,7 +1033,7 @@ export class MaintenanceService {
         select: { technicianId: true },
       }),
       this.prisma.maintenanceVisit.count({
-        where: { status: VisitStatus.VALID, serviceSlipStatus: PaperworkStatus.PENDING, recordedAtServer: { lt: end } },
+        where: { status: VisitStatus.VALID, serviceSlipStatus: { in: [PaperworkStatus.PENDING, PaperworkStatus.PENDING_REVIEW] }, recordedAtServer: { lt: end } },
       }),
       this.prisma.maintenanceVisit.count({
         where: { status: VisitStatus.VALID, confirmationStatus: PaperworkStatus.PENDING, recordedAtServer: { lt: end } },
@@ -1047,8 +1132,23 @@ export class MaintenanceService {
           select: { kind: true, newStatus: true, changedAt: true },
           orderBy: { changedAt: 'asc' },
         },
+        confirmationReconciliations: {
+          select: {
+            id: true,
+            importRunId: true,
+            previousStatus: true,
+            nextStatus: true,
+            approvalSource: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
+    const visitsWithSystemHistory = visits.map((visit) => ({
+      ...visit,
+      paperworkHistory: this.mergePaperworkHistory(visit.paperworkHistory, visit.confirmationReconciliations),
+    }));
 
     return {
       from: fromKey,
@@ -1056,8 +1156,8 @@ export class MaintenanceService {
       technicianId: query.technicianId ?? null,
       generatedAt: now.toISOString(),
       totalVisits: visits.length,
-      serviceSlip: this.paperworkKindAnalytics(visits, PaperworkKind.SERVICE_SLIP, 'serviceSlipStatus', now),
-      confirmation: this.paperworkKindAnalytics(visits, PaperworkKind.CONFIRMATION, 'confirmationStatus', now),
+      serviceSlip: this.paperworkKindAnalytics(visitsWithSystemHistory, PaperworkKind.SERVICE_SLIP, 'serviceSlipStatus', now),
+      confirmation: this.paperworkKindAnalytics(visitsWithSystemHistory, PaperworkKind.CONFIRMATION, 'confirmationStatus', now),
     };
   }
 
@@ -1073,19 +1173,54 @@ export class MaintenanceService {
     if (visit.status !== VisitStatus.VALID) {
       throw new BadRequestException('Geri alınmış bakımın evrak durumu değiştirilemez');
     }
-
+    if (dto.status === PaperworkStatus.PENDING_REVIEW) {
+      throw new BadRequestException('İnceleme bekleyen servis fişi yalnızca teknisyen tamamladığında oluşur');
+    }
     const previousStatus =
       dto.kind === PaperworkKind.SERVICE_SLIP ? visit.serviceSlipStatus : visit.confirmationStatus;
-    if (previousStatus === dto.status) return visit;
+    if (
+      dto.kind === PaperworkKind.SERVICE_SLIP
+      && previousStatus === PaperworkStatus.PENDING_REVIEW
+      && dto.status !== PaperworkStatus.MISSING
+      && dto.status !== PaperworkStatus.APPROVED
+    ) {
+      throw new BadRequestException('İnceleme bekleyen servis fişi yalnızca Eksik veya Onaylandı yapılabilir');
+    }
+    const isManualConfirmationApproval =
+      dto.kind === PaperworkKind.CONFIRMATION && dto.status === PaperworkStatus.APPROVED;
+    if (
+      previousStatus === dto.status
+      && (!isManualConfirmationApproval
+        || visit.confirmationApprovalSource === ConfirmationApprovalSource.MANUAL_ADMIN)
+    ) return visit;
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.maintenanceVisit.update({
-        where: { id: visit.id },
-        data:
-          dto.kind === PaperworkKind.SERVICE_SLIP
-            ? { serviceSlipStatus: dto.status }
-            : { confirmationStatus: dto.status },
-      });
+      let updated;
+      if (dto.kind === PaperworkKind.SERVICE_SLIP) {
+        const transition = await tx.maintenanceVisit.updateMany({
+          where: {
+            id: visit.id,
+            status: VisitStatus.VALID,
+            serviceSlipStatus: previousStatus,
+          },
+          data: { serviceSlipStatus: dto.status },
+        });
+        if (transition.count !== 1) {
+          throw new ConflictException('Servis fişi durumu değişmiş; listeyi yenileyip tekrar deneyin');
+        }
+        updated = await tx.maintenanceVisit.findUnique({ where: { id: visit.id } });
+        if (!updated) throw new NotFoundException('Bakım kaydı bulunamadı');
+      } else {
+        updated = await tx.maintenanceVisit.update({
+          where: { id: visit.id },
+          data: {
+            confirmationStatus: dto.status,
+            confirmationApprovalSource: isManualConfirmationApproval
+              ? ConfirmationApprovalSource.MANUAL_ADMIN
+              : null,
+          },
+        });
+      }
 
       await tx.paperworkStatusHistory.create({
         data: {
@@ -1098,6 +1233,75 @@ export class MaintenanceService {
         },
       });
 
+      if (dto.kind === PaperworkKind.CONFIRMATION) {
+        await tx.adminAuditLog.create({
+          data: {
+            entityType: 'MAINTENANCE_VISIT',
+            entityId: visit.id,
+            action: isManualConfirmationApproval
+              ? 'CONFIRMATION_MANUALLY_APPROVED'
+              : 'CONFIRMATION_STATUS_CHANGED',
+            actorId: admin.id,
+            oldValue: {
+              status: previousStatus,
+              approvalSource: visit.confirmationApprovalSource ?? null,
+            },
+            newValue: {
+              status: dto.status,
+              approvalSource: isManualConfirmationApproval
+                ? ConfirmationApprovalSource.MANUAL_ADMIN
+                : null,
+            },
+            note: dto.note ?? null,
+          },
+        });
+      }
+
+      return updated;
+    });
+  }
+
+  async completeMissingServiceSlip(dto: CompleteServiceSlipReviewDto & { technicianId: string }) {
+    const [technician, visit] = await Promise.all([
+      this.requireTechnician(dto.technicianId),
+      this.prisma.maintenanceVisit.findUnique({ where: { id: dto.visitId } }),
+    ]);
+    if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
+    if (visit.status !== VisitStatus.VALID) {
+      throw new BadRequestException('Geri alınmış bakımın servis fişi tamamlanamaz');
+    }
+    if (visit.technicianId !== technician.id) {
+      throw new ForbiddenException('Yalnızca kendi bakımınızdaki servis fişini tamamlayabilirsiniz');
+    }
+    if (visit.serviceSlipStatus !== PaperworkStatus.MISSING) {
+      throw new BadRequestException('Yalnızca eksik servis fişi incelemeye gönderilebilir');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const transition = await tx.maintenanceVisit.updateMany({
+        where: {
+          id: visit.id,
+          technicianId: technician.id,
+          status: VisitStatus.VALID,
+          serviceSlipStatus: PaperworkStatus.MISSING,
+        },
+        data: { serviceSlipStatus: PaperworkStatus.PENDING_REVIEW },
+      });
+      if (transition.count !== 1) {
+        throw new ConflictException('Servis fişi durumu değişmiş; listeyi yenileyip tekrar deneyin');
+      }
+      await tx.paperworkStatusHistory.create({
+        data: {
+          visitId: visit.id,
+          kind: PaperworkKind.SERVICE_SLIP,
+          previousStatus: PaperworkStatus.MISSING,
+          newStatus: PaperworkStatus.PENDING_REVIEW,
+          changedById: technician.id,
+          note: dto.note?.trim() || null,
+        },
+      });
+      const updated = await tx.maintenanceVisit.findUnique({ where: { id: visit.id } });
+      if (!updated) throw new NotFoundException('Bakım kaydı bulunamadı');
       return updated;
     });
   }
@@ -1121,11 +1325,26 @@ export class MaintenanceService {
     });
     if (!visit) throw new NotFoundException('Bakım kaydı bulunamadı');
 
-    const history = await this.prisma.paperworkStatusHistory.findMany({
-      where: { visitId },
-      include: { changedBy: { select: { id: true, name: true } } },
-      orderBy: { changedAt: 'asc' },
-    });
+    const [manualHistory, reconciliationHistory] = await Promise.all([
+      this.prisma.paperworkStatusHistory.findMany({
+        where: { visitId },
+        include: { changedBy: { select: { id: true, name: true } } },
+        orderBy: { changedAt: 'asc' },
+      }),
+      this.prisma.sapConfirmationReconciliation.findMany({
+        where: { visitId },
+        select: {
+          id: true,
+          importRunId: true,
+          previousStatus: true,
+          nextStatus: true,
+          approvalSource: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    const history = this.mergePaperworkHistory(manualHistory, reconciliationHistory);
     return { visit, history };
   }
 
@@ -1144,11 +1363,50 @@ export class MaintenanceService {
           include: { changedBy: { select: { id: true, name: true } } },
           orderBy: { changedAt: 'asc' },
         },
+        confirmationReconciliations: {
+          select: {
+            id: true,
+            importRunId: true,
+            previousStatus: true,
+            nextStatus: true,
+            approvalSource: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { performedAt: 'desc' },
       take: 200,
     });
-    return { count: items.length, items };
+    return {
+      count: items.length,
+      items: items.map(({ confirmationReconciliations, ...item }) => ({
+        ...item,
+        paperworkHistory: this.mergePaperworkHistory(item.paperworkHistory, confirmationReconciliations),
+      })),
+    };
+  }
+
+  private mergePaperworkHistory(
+    manualHistory: ManualPaperworkEvent[] = [],
+    reconciliationHistory: SapReconciliationEvent[] = [],
+  ) {
+    const manual = manualHistory.map((item) => ({ ...item, provenance: 'MANUAL_USER' as const }));
+    const automatic = reconciliationHistory.map((item) => ({
+      id: item.id,
+      kind: PaperworkKind.CONFIRMATION,
+      previousStatus: item.previousStatus,
+      newStatus: item.nextStatus,
+      changedAt: item.createdAt,
+      note: 'SAP otomatik teyit mutabakatı',
+      changedBy: null,
+      provenance: 'SAP_RECONCILIATION' as const,
+      importRunId: item.importRunId,
+      approvalSource: item.approvalSource,
+    }));
+    return [...manual, ...automatic].sort((left, right) =>
+      left.changedAt.getTime() - right.changedAt.getTime(),
+    );
   }
 
   private async runPostProcessing(technicianId: string, pointId: string) {
@@ -1174,18 +1432,20 @@ export class MaintenanceService {
     statusField: 'serviceSlipStatus' | 'confirmationStatus',
     now: Date,
   ) {
-    const statusCounts = { pending: 0, present: 0, missing: 0 };
+    const statusCounts = { pending: 0, present: 0, missing: 0, approved: 0 };
     const pendingAgeBuckets = { under24h: 0, h24to48: 0, d2to7: 0, d7plus: 0 };
     const arrivalDurations: number[] = [];
     const resolutionDurations: number[] = [];
 
     for (const visit of visits) {
       const status = visit[statusField];
-      if (status === PaperworkStatus.PENDING) statusCounts.pending += 1;
+      const isPending = status === PaperworkStatus.PENDING || (kind === PaperworkKind.SERVICE_SLIP && status === PaperworkStatus.PENDING_REVIEW);
+      if (isPending) statusCounts.pending += 1;
       else if (status === PaperworkStatus.PRESENT) statusCounts.present += 1;
-      else statusCounts.missing += 1;
+      else if (status === PaperworkStatus.MISSING) statusCounts.missing += 1;
+      else statusCounts.approved += 1;
 
-      if (status === PaperworkStatus.PENDING) {
+      if (isPending) {
         const ageHours = Math.max(0, now.getTime() - visit.recordedAtServer.getTime()) / 3_600_000;
         if (ageHours < 24) pendingAgeBuckets.under24h += 1;
         else if (ageHours < 48) pendingAgeBuckets.h24to48 += 1;
@@ -1196,8 +1456,14 @@ export class MaintenanceService {
       const validHistory = visit.paperworkHistory
         .filter((item) => item.kind === kind && item.changedAt.getTime() >= visit.recordedAtServer.getTime())
         .sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
-      const arrival = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT);
-      const resolution = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT || item.newStatus === PaperworkStatus.MISSING);
+      const arrival = validHistory.find((item) =>
+        item.newStatus === PaperworkStatus.PRESENT || item.newStatus === PaperworkStatus.APPROVED,
+      );
+      const resolution = validHistory.find((item) =>
+        item.newStatus === PaperworkStatus.PRESENT
+        || item.newStatus === PaperworkStatus.MISSING
+        || item.newStatus === PaperworkStatus.APPROVED,
+      );
       if (arrival) arrivalDurations.push(arrival.changedAt.getTime() - visit.recordedAtServer.getTime());
       if (resolution) resolutionDurations.push(resolution.changedAt.getTime() - visit.recordedAtServer.getTime());
     }
@@ -1209,6 +1475,7 @@ export class MaintenanceService {
         pending: this.rate(statusCounts.pending, total),
         present: this.rate(statusCounts.present, total),
         missing: this.rate(statusCounts.missing, total),
+        approved: this.rate(statusCounts.approved, total),
       },
       arrival: this.durationSummary(arrivalDurations, 'completedCount'),
       resolution: this.durationSummary(resolutionDurations, 'resolvedCount'),

@@ -5,6 +5,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
+const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
 
 function panel() {
   const filename = new URL('./technician-daily-summary.tsx', import.meta.url);
@@ -63,4 +65,26 @@ test('technician summary uses semantic table headers and announces failures', ()
   assert.match(source, /<th scope="row"><strong>Servis fişi<\/strong><\/th>/);
   assert.match(source, /className="error" role="alert"/);
   assert.doesNotMatch(source, /<caption/);
+});
+
+test('technician summary renders APPROVED paperwork counts in a dedicated column', () => {
+  const { PaperworkSummaryTable } = panel();
+  const summary = {
+    technician: { name: 'Ali' },
+    date: '2026-09-20',
+    metrics: {
+      completedMaintenance: 1, attemptCount: 0, nonMaintenanceVisitCount: 0, prospectVisitCount: 0,
+      currentOpen: 0, overdueOpen: 0, helpedMaintenance: 0, helpedAttempts: 0,
+      receivedHelpMaintenance: 0, receivedHelpAttempts: 0,
+    },
+    paperwork: {
+      serviceSlip: { pending: 1, present: 2, missing: 3, approved: 7 },
+      confirmation: { pending: 4, present: 5, missing: 6, approved: 8 },
+    },
+    events: [],
+  };
+  const html = renderToStaticMarkup(React.createElement(PaperworkSummaryTable, { paperwork: summary.paperwork }));
+  assert.match(html, /<th scope="col">Onaylandı<\/th>/);
+  assert.match(html, /<th scope="row"><strong>Servis fişi<\/strong><\/th><td>1<\/td><td>2<\/td><td>3<\/td><td>7<\/td>/);
+  assert.match(html, /<th scope="row"><strong>Teyit<\/strong><\/th><td>4<\/td><td>5<\/td><td>6<\/td><td>8<\/td>/);
 });

@@ -22,7 +22,7 @@ const counts = { completedMaintenance: 2, ownMaintenance: 1, attemptCount: 1, su
   helpedMaintenance: 1, helpedAttempts: 0, receivedHelpMaintenance: 1, receivedHelpAttempts: 0,
   currentOpen: 3, overdueOpen: 2, unassignedOpen: 1 };
 const report = { from: '2026-09-15', to: '2026-09-16', metrics: counts,
-  paperwork: { serviceSlip: { pending: 1, present: 1, missing: 0 }, confirmation: { pending: 0, present: 1, missing: 1 } },
+  paperwork: { serviceSlip: { pending: 1, present: 1, missing: 0, approved: 7 }, confirmation: { pending: 0, present: 1, missing: 1, approved: 8 } },
   daily: [{ date: '2026-09-15', ...counts }], technicians: [{ technicianId: 't1', name: 'Ali', ...counts }] };
 
 test('KPI report renders metrics, help separation, paperwork, daily trend and technicians', () => {
@@ -35,6 +35,9 @@ test('KPI report keeps table headers and row labels semantic without duplicating
   const { KpiReportView } = panel();
   const html = renderToStaticMarkup(React.createElement(KpiReportView, { report }));
   assert.match(html, /<th scope="col">Evrak<\/th>/);
+  assert.match(html, /<th scope="col">Onaylandı<\/th>/);
+  assert.match(html, /<th scope="row"><strong>Servis fişi<\/strong><\/th><td>1<\/td><td>1<\/td><td>0<\/td><td>7<\/td>/);
+  assert.match(html, /<th scope="row"><strong>Teyit<\/strong><\/th><td>0<\/td><td>1<\/td><td>1<\/td><td>8<\/td>/);
   assert.match(html, /<th scope="col">Günlük trend<\/th>/);
   assert.match(html, /<th scope="col">Teknisyen<\/th>/);
   assert.match(html, /<th scope="row"><strong>Servis fişi<\/strong><\/th>/);

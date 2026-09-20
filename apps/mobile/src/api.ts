@@ -185,11 +185,11 @@ export type DueTask = {
 export type MissingPaperworkItem = {
   id: string;
   performedAt: string;
-  serviceSlipStatus: 'PENDING' | 'PRESENT' | 'MISSING';
+  serviceSlipStatus: 'PENDING' | 'PRESENT' | 'MISSING' | 'PENDING_REVIEW';
   confirmationStatus: 'PENDING' | 'PRESENT' | 'MISSING';
   point: { id: string; code: string; name: string };
 };
-export type MissingPaperworkSummary = { serviceSlip: number; confirmation: number; both: number };
+export type MissingPaperworkSummary = { serviceSlip: number; serviceSlipReviewPending: number; confirmation: number; both: number };
 export type TechnicianDashboard = {
   technician: HelpTarget;
   overdue: number;
@@ -209,6 +209,13 @@ export function technicianDashboard(technicianId?: string) {
   return jsonRequest<TechnicianDashboard>(`/maintenance/technician-dashboard${query}`);
 }
 
+export function completeMissingServiceSlip(visitId: string, note?: string) {
+  return jsonRequest<Record<string, unknown>>('/maintenance/service-slip/complete', {
+    method: 'POST',
+    body: JSON.stringify({ visitId, ...(note?.trim() ? { note: note.trim() } : {}) }),
+  });
+}
+
 export function completeMaintenance(input: {
   pointId: string;
   assistedForTechnicianId?: string;
@@ -220,6 +227,9 @@ export function completeMaintenance(input: {
   locationCapturedAt?: string;
   deviceRecordedAt?: string;
   lateEntryReason?: string;
+  equipmentCorrectionRequested?: boolean;
+  maintainedCoolerCount?: number;
+  missingMaintenanceExplanation?: string;
   coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
   idempotencyKey: string;
 }) {
@@ -245,6 +255,10 @@ export type TechnicianHistoryItem = {
   point?: { id: string; code: string; name: string };
   prospect?: { id: string; name: string; sapNo?: string | null };
   assistedForTechnician?: { id: string; name: string; username: string } | null;
+  totalCoolerCount?: number | null;
+  maintainedCoolerCount?: number | null;
+  missingMaintenanceCount?: number | null;
+  missingMaintenanceExplanation?: string | null;
   reason?: AttemptReason;
   purpose?: string;
 };

@@ -1,0 +1,68 @@
+name: SAP Runtime CI
+
+on:
+  push:
+    paths:
+      - 'runtime/sap/**'
+      - 'apps/api/prisma/**'
+      - 'apps/api/src/maintenance/sap-confirmation-reconciliation.service.ts'
+      - 'apps/api/src/maintenance/sap-confirmation-reconciliation.service.spec.ts'
+      - '.github/workflows/sap-runtime-ci.yml'
+  pull_request:
+    paths:
+      - 'runtime/sap/**'
+      - 'apps/api/prisma/**'
+      - 'apps/api/src/maintenance/sap-confirmation-reconciliation.service.ts'
+      - 'apps/api/src/maintenance/sap-confirmation-reconciliation.service.spec.ts'
+      - '.github/workflows/sap-runtime-ci.yml'
+
+jobs:
+  receipt-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: field_maintenance_test
+          POSTGRES_USER: field_maintenance
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U field_maintenance -d field_maintenance_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://field_maintenance:local-ci-only@127.0.0.1:5432/field_maintenance_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Firefox for SAP DOM contract tests
+        run: npx playwright install --with-deps firefox
+      - run: npm --prefix apps/api run prisma:generate
+      - run: npm --prefix apps/api run prisma:deploy
+      - run: node --check runtime/sap/sap_db_writer.js
+      - run: node --check runtime/sap/sync_teyit_db.js
+      - name: SAP receipt, import metadata and secondary export contracts
+        run: >-
+          node --test
+          runtime/sap/sap_import_receipt.spec.js
+          runtime/sap/sap_import_metadata.spec.js
+          runtime/sap/export2_normalize.spec.js
+          runtime/sap/export2_search_verify.spec.js
+          runtime/sap/*cooler_movement*.spec.js
+          runtime/sap/sap_prod_runner_test.js
+      - name: Export 2 real SAP DOM control contract
+        run: node --test runtime/sap/export2_dom_contract.spec.js
+      - run: node --test runtime/sap/sap_import_transaction.integration.spec.js
+        env:
+          SAP_TRANSACTION_TEST_DATABASE_URL: postgresql://field_maintenance:local-ci-only@127.0.0.1:5432/field_maintenance_test
+      - working-directory: apps/api
+        run: node --test --require ts-node/register src/maintenance/sap-confirmation-reconciliation.service.spec.ts src/maintenance/paperwork-confirmation-approval.spec.ts
+      - run: npm --prefix apps/api run lint
+      - run: npm --prefix apps/api run build

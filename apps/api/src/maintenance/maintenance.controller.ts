@@ -6,6 +6,7 @@ import { Roles } from '../auth/roles.decorator';
 import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
+import { CompleteServiceSlipReviewDto } from './dto/complete-service-slip-review.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
@@ -209,6 +210,12 @@ export class MaintenanceController {
   @Post('paperwork')
   paperwork(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdatePaperworkDto) {
     return this.maintenance.updatePaperwork({ ...dto, adminUserId: user.id });
+  }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Post('service-slip/complete')
+  completeMissingServiceSlip(@CurrentUser() user: AuthenticatedUser, @Body() dto: CompleteServiceSlipReviewDto) {
+    return this.maintenance.completeMissingServiceSlip({ ...dto, technicianId: user.id });
   }
 
   @Roles(UserRole.ADMIN)

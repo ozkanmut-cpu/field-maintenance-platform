@@ -8,13 +8,13 @@ import { ROLES_KEY } from '../auth/auth.constants';
 // Missing service must fail before any production implementation exists.
 const loadService = () => require('./kpi-reporting.service').KpiReportingService;
 const now = new Date('2026-09-17T05:00:00Z');
-function fixture(empty = false) {
+function fixture(empty = false, pendingReview = false, confirmationPendingReview = false) {
   const calls: any[] = [];
   const users = [{ id: 't1', name: 'Ali', username: 'ali' }, { id: 't2', name: 'Zeynep', username: 'zeynep' }];
   const visit = (id: string, technicianId: string, helped: string | null, at: string, status: VisitStatus = VisitStatus.VALID) => ({
     id, technicianId, assistedForTechnicianId: helped, performedAt: new Date(at), status,
-    enteredLate: id === 'v2', serviceSlipStatus: id === 'v1' ? PaperworkStatus.PENDING : PaperworkStatus.PRESENT,
-    confirmationStatus: id === 'v3' ? PaperworkStatus.MISSING : PaperworkStatus.PRESENT,
+    enteredLate: id === 'v2', serviceSlipStatus: id === 'v1' ? PaperworkStatus.PENDING : id === 'v2' && pendingReview ? PaperworkStatus.PENDING_REVIEW : PaperworkStatus.PRESENT,
+    confirmationStatus: id === 'v2' && confirmationPendingReview ? PaperworkStatus.PENDING_REVIEW : id === 'v3' ? PaperworkStatus.MISSING : PaperworkStatus.PRESENT,
   });
   const visits = empty ? [] : [
     visit('v1', 't1', null, '2026-09-14T21:00:00Z'),
@@ -74,8 +74,8 @@ test('KPI counts valid actor activity once and includes zero days and unassigned
   assert.equal(r.metrics.overdueOpen, 2);
   assert.equal(r.metrics.unassignedOpen, 1);
   assert.deepEqual(r.daily.map((d: any) => [d.date, d.completedMaintenance]), [['2026-09-14', 0], ['2026-09-15', 2], ['2026-09-16', 1]]);
-  assert.deepEqual(r.paperwork.serviceSlip, { pending: 1, present: 2, missing: 0 });
-  assert.deepEqual(r.paperwork.confirmation, { pending: 0, present: 2, missing: 1 });
+  assert.deepEqual(r.paperwork.serviceSlip, { pending: 1, present: 2, missing: 0, approved: 0 });
+  assert.deepEqual(r.paperwork.confirmation, { pending: 0, present: 2, missing: 1, approved: 0 });
   assert.equal(r.technicians.reduce((n: number, t: any) => n + t.completedMaintenance, 0), 3);
   assert.deepEqual(calls.find(c => c[0] === 'snapshot'), ['snapshot', '2026-09-16', { readOnly: true }]);
 });
@@ -95,11 +95,23 @@ test('technician filter separates performed work, help given and help received',
   assert.equal(r.metrics.unassignedOpen, 0);
   assert.equal(r.technicians.length, 1);
   assert.equal(r.technicians[0].technicianId, 't1');
-  assert.deepEqual(r.paperwork.serviceSlip, { pending: 1, present: 1, missing: 0 });
+  assert.deepEqual(r.paperwork.serviceSlip, { pending: 1, present: 1, missing: 0, approved: 0 });
   const q = calls.find(c => c[0] === 'visits')[1].where;
   assert.equal(q.performedAt.gte.toISOString(), '2026-09-14T21:00:00.000Z');
   assert.equal(q.performedAt.lt.toISOString(), '2026-09-16T21:00:00.000Z');
   assert.deepEqual(q.OR, [{ technicianId: 't1' }, { assistedForTechnicianId: 't1' }]);
+});
+
+test('KPI treats a service-slip review handoff as unresolved pending paperwork', async () => {
+  const { service } = fixture(false, true);
+  const r = await service.report({ from: '2026-09-14', to: '2026-09-16' }, now);
+  assert.deepEqual(r.paperwork.serviceSlip, { pending: 2, present: 1, missing: 0, approved: 0 });
+});
+
+test('KPI does not count an invalid confirmation review state as pending service-slip work', async () => {
+  const { service } = fixture(false, false, true);
+  const r = await service.report({ from: '2026-09-14', to: '2026-09-16' }, now);
+  assert.deepEqual(r.paperwork.confirmation, { pending: 0, present: 1, missing: 1, approved: 0 });
 });
 
 test('empty KPI defaults to 30 Istanbul dates and does not invent a success rate', async () => {

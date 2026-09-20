@@ -39,6 +39,8 @@ test('point detail stays read only until explicit edit mode', () => {
     'Timeline tab must use the real point timeline endpoint');
   assert.match(source, /Bakım ziyaretleri/,
     'Timeline tab must group the real event stream into meaningful operational event types');
+  assert.match(source, /Soğutucu \$\{data\.maintainedCoolerCount\}\/\$\{data\.totalCoolerCount\}/,
+    'Timeline maintenance summaries must show the maintained/operational cooler counts');
   assert.match(source, /Yapılamadı kaydı/,
     'Timeline tab must distinguish an attempt from a completed maintenance visit');
   assert.match(source, /Atama değişikliği/,
@@ -120,6 +122,12 @@ test('paperwork rows keep confirmation and change history in their own columns',
     'Paperwork retains separate headers for confirmation and change history');
   assert.match(paperwork, /paperworkStatus\(item\.serviceSlipStatus\)\}<\/td><td>\{paperworkStatus\(item\.confirmationStatus\)\}<\/td><td>\{paperworkChanges/,
     'Each paperwork row needs a dedicated confirmation-status cell before its change history');
+});
+
+test('point detail localizes every paperwork lifecycle status', () => {
+  const source = readFileSync(path, 'utf8');
+  assert.match(source, /PENDING_REVIEW: 'İnceleme bekliyor'/);
+  assert.match(source, /APPROVED: 'Onaylandı'/);
 });
 
 test('point detail has keyboard-accessible tabs and Point Timeline and Prospects link into its real record', () => {
