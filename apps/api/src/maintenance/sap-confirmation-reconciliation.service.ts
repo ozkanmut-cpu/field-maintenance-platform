@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfirmationApprovalSource, MaintenanceType, PaperworkStatus, SapImportSource, VisitStatus } from '@prisma/client';
 import { businessDateKey, businessDayRange } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,19 +7,51 @@ type ReconcileResult = { processed: boolean; reason?: string; importRunId?: stri
 
 /** Consumes only a committed MAIN_CONFIRMATION_203 receipt; failed/dry runs have none. */
 @Injectable()
-export class SapConfirmationReconciliationService {
+export class SapConfirmationReconciliationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SapConfirmationReconciliationService.name);
+  private timer: NodeJS.Timeout | null = null;
+  private running = false;
 
   constructor(private readonly prisma: PrismaService) {}
 
+  onModuleInit() {
+    // SAP imports occur about every ten minutes. A short bounded poll gives an already
+    // committed receipt low latency without adding an API endpoint or parallel workers.
+    this.timer = setInterval(() => void this.poll(), 60_000);
+    void this.poll();
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
+  }
+
+  private async poll() {
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this.reconcileNext();
+    } catch (error) {
+      this.logger.error('SAP teyit mutabakatı yeniden denenecek', error as Error);
+    } finally {
+      this.running = false;
+    }
+  }
+
   async reconcileNext(): Promise<ReconcileResult> {
+    const claimExpiredBefore = new Date(Date.now() - 5 * 60_000);
     const run = await this.prisma.sapImportRun.findFirst({
-      where: { source: SapImportSource.MAIN_CONFIRMATION_203, reconciledAt: null, claimedAt: null },
+      where: {
+        source: SapImportSource.MAIN_CONFIRMATION_203, reconciledAt: null,
+        OR: [{ claimedAt: null }, { claimedAt: { lt: claimExpiredBefore } }],
+      },
       orderBy: { completedAt: 'asc' },
     });
     if (!run) return { processed: false, reason: 'NO_SUCCESSFUL_IMPORT' };
     const claim = await this.prisma.sapImportRun.updateMany({
-      where: { id: run.id, claimedAt: null, reconciledAt: null }, data: { claimedAt: new Date() },
+      where: {
+        id: run.id, reconciledAt: null,
+        OR: [{ claimedAt: null }, { claimedAt: { lt: claimExpiredBefore } }],
+      }, data: { claimedAt: new Date() },
     });
     if (claim.count !== 1) return { processed: false, reason: 'IMPORT_ALREADY_CLAIMED' };
     try {
