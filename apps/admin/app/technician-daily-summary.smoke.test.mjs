@@ -67,6 +67,12 @@ test('technician summary uses semantic table headers and announces failures', ()
   assert.doesNotMatch(source, /<caption/);
 });
 
+test('technician error state does not also render the empty selection state', () => {
+  const source = fs.readFileSync(new URL('./technician-daily-summary.tsx', import.meta.url), 'utf8');
+  assert.match(source, /error \? <><div className="error" role="alert">\{error\}<\/div><button className="ghost" onClick=\{\(\) => void load\(\)\} disabled=\{loading \|\| !technicianId\}>Tekrar dene<\/button><\/>/);
+  assert.match(source, /: summary \?/);
+});
+
 test('technician summary renders APPROVED paperwork counts in a dedicated column', () => {
   const { PaperworkSummaryTable } = panel();
   const summary = {
