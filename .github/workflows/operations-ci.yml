@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'apps/api/prisma/**'
+      - 'apps/api/src/assignments/**'
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
@@ -28,6 +29,7 @@ on:
   pull_request:
     paths:
       - 'apps/api/prisma/**'
+      - 'apps/api/src/assignments/**'
       - 'apps/api/src/points/**'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.bulk.smoke.test.mjs'
@@ -74,6 +76,7 @@ jobs:
           src/points/point-spatial.service.spec.ts
           src/points/points.nearby.controller.spec.ts
           src/points/points.mobile-search.spec.ts
+          src/assignments/assignments.service.spec.ts
       - name: API typecheck
         run: npm --prefix apps/api run lint
       - name: API build
