@@ -48,6 +48,11 @@ test('KPI failure is announced as an alert', () => {
   const source = fs.readFileSync(new URL('./kpi-reporting.tsx', import.meta.url), 'utf8');
   assert.match(source, /className="error" role="alert"/);
 });
+test('KPI error state does not fall through to the empty state and remains retryable', () => {
+  const source = fs.readFileSync(new URL('./kpi-reporting.tsx', import.meta.url), 'utf8');
+  assert.match(source, /error \? <><div className="error" role="alert">\{error\}<\/div><button className="ghost" onClick=\{\(\) => void refresh\(\)\}>Tekrar dene<\/button><\/>/);
+  assert.match(source, /: report \?/);
+});
 test('KPI loader encodes filters and clears old report before response', async () => {
   const { startKpiRequest } = panel();
   const events = [];
