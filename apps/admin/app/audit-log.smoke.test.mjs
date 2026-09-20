@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const source = readFileSync(new URL('./audit-log.tsx', import.meta.url), 'utf8');
+const require = createRequire(import.meta.url);
+
+function auditModule() {
+  const ts = require('typescript');
+  const js = ts.transpileModule(source, {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const mod = { exports: {} };
+  const auditRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : require(id);
+  new Function('require', 'module', 'exports', js)(auditRequire, mod, mod.exports);
+  return mod.exports;
+}
 
 test('audit filters are labelled and submit with the keyboard against the supported backend filters', () => {
   assert.match(source, /<form[^>]+onSubmit=/);
@@ -20,6 +33,49 @@ test('audit details expose readable before and after JSON in separate disclosure
   assert.match(source, /<summary>Yeni değer<\/summary>/);
   assert.match(source, /JSON\.stringify\(selected\.oldValue \?\? null, null, 2\)/);
   assert.match(source, /JSON\.stringify\(selected\.newValue \?\? null, null, 2\)/);
+});
+
+test('audit refreshes abort and ignore stale responses, while detail focus is keyboard-safe', () => {
+  assert.match(source, /requestControllerRef\.current\?\.abort\(\)/);
+  assert.match(source, /const requestId = \+\+requestIdRef\.current/);
+  assert.match(source, /signal: controller\.signal/);
+  assert.match(source, /requestId !== requestIdRef\.current/);
+  assert.match(source, /AbortError/);
+  assert.match(source, /detailCloseRef\.current\?\.focus\(\)/);
+  assert.match(source, /event\.key === 'Escape'/);
+  assert.match(source, /auditDetailFocusTarget\(trigger, auditHeadingRef\.current\)/);
+  assert.match(source, /<h2 ref=\{auditHeadingRef\} tabIndex=\{-1\}>İşlem Geçmişi<\/h2>/);
+  assert.match(source, /focusAfterCloseRef\.current = 'fallback'/);
+});
+
+test('shown audit count explains client-side text filtering accurately', () => {
+  assert.match(source, /auditShownCountLabel\(search, items\.length\)/);
+  assert.match(source, /Yüklenen en fazla 300 kayıt içinde metin aramasına uyan kayıt/);
+  assert.match(source, /Yüklenen \$\{loadedCount\} kaydın tamamı \(en fazla 300\)/);
+  assert.match(source, /Sunucu filtresine uyan toplam kayıt/);
+});
+
+test('a refreshed audit dataset closes a detail that no longer exists', () => {
+  const { reconcileAuditSelection } = auditModule();
+  const selected = { id: 'removed' };
+  assert.equal(reconcileAuditSelection(selected, [{ id: 'kept' }]), null);
+  assert.equal(reconcileAuditSelection(selected, [{ id: 'removed' }]), selected);
+  assert.equal(reconcileAuditSelection(null, [{ id: 'kept' }]), null);
+});
+
+test('shown count labels are bounded to the loaded 300-record dataset', () => {
+  const { auditShownCountLabel } = auditModule();
+  assert.equal(auditShownCountLabel('', 300), 'Yüklenen 300 kaydın tamamı (en fazla 300)');
+  assert.equal(auditShownCountLabel('konum', 300), 'Yüklenen en fazla 300 kayıt içinde metin aramasına uyan kayıt');
+});
+
+test('detail focus fallback is an enabled, connected audit heading while a refresh is busy', () => {
+  const { auditDetailFocusTarget } = auditModule();
+  const detachedTrigger = { isConnected: false, disabled: false, focus() {} };
+  const busyRefreshButton = { isConnected: true, disabled: true, focus() { throw new Error('disabled refresh must not receive focus'); } };
+  const stableHeading = { isConnected: true, focus() {} };
+  assert.equal(auditDetailFocusTarget(detachedTrigger, stableHeading), stableHeading);
+  assert.notEqual(auditDetailFocusTarget(detachedTrigger, stableHeading), busyRefreshButton);
 });
 
 test('reporting CI runs audit smoke when either audit source or test changes', () => {
