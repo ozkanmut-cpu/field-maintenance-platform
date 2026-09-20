@@ -25,3 +25,12 @@ test('AI dashboard ignores a superseded dashboard response', () => {
   assert.match(source, /const requestId = \+\+loadSequence\.current/);
   assert.match(source, /requestId !== loadSequence\.current/);
 });
+
+test('AI dashboard has a retryable initial-load alert and isolates secondary action failures', () => {
+  assert.match(source, /const \[loadError, setLoadError\] = useState\(''\)/);
+  assert.match(source, /const \[actionError, setActionError\] = useState\(''\)/);
+  assert.match(source, /role="alert"/);
+  assert.match(source, /Tekrar dene/);
+  assert.doesNotMatch(source, /async function downloadKpi\(\) \{\s*setKpiBusy\(true\); setLoadError\(''\)/);
+  assert.doesNotMatch(source, /async function sendFeedback[\s\S]*?setLoadError\(/);
+});
