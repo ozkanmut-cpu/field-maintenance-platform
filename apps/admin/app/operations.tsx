@@ -1,6 +1,7 @@
 'use client';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import { MetricCard } from './admin-primitives';
 import KpiReportingPanel from './kpi-reporting';
 import type { AdminSection } from './admin-navigation';
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
@@ -346,11 +347,11 @@ return (
 <>
 {error ? <div className="error banner">{error}</div> : null}
 {activeSection === 'dashboard' ? <>
-<section className="dashboardGrid">
-<button className="dashboardCard" onClick={() => onNavigate('setup-pending')}><span>Ayar bekleyen</span><strong>{setupPending.length}</strong><small>Eksik ayarları tamamla</small></button>
-<button className="dashboardCard" onClick={() => onNavigate('approvals')}><span>Bekleyen onay</span><strong>{attemptQueue.length}</strong><small>Yapılamadı kayıtlarını incele</small></button>
-<button className="dashboardCard" onClick={() => onNavigate('points')}><span>Noktalar</span><strong>{points.length}</strong><small>Nokta listesini yönet</small></button>
-<button className="dashboardCard" onClick={() => onNavigate('regions')}><span>Bölgeler</span><strong>{regions.length}</strong><small>Bölge ve sorumluları yönet</small></button>
+<section className="metricGrid dashboardQueueMetrics" aria-label="Operasyon kuyrukları">
+<MetricCard label="Ayar bekleyen" value={setupPending.length} description="Eksik ayarları tamamla" section="setup-pending" onNavigate={onNavigate} />
+<MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı kayıtlarını incele" section="approvals" onNavigate={onNavigate} />
+<MetricCard label="Noktalar" value={points.length} description="Nokta listesini yönet" section="points" onNavigate={onNavigate} />
+<MetricCard label="Bölgeler" value={regions.length} description="Bölge ve sorumluları yönet" section="regions" onNavigate={onNavigate} />
 </section>
 <section className="panel">
 <div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
