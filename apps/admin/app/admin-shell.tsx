@@ -43,7 +43,6 @@ export default function AdminShell({ me, location, onNavigate, onLogout, childre
   const [openGroups, setOpenGroups] = useState<string[]>([active.group]);
   const sidebarIsCollapsed = collapsed && !isCompact;
 
-  useEffect(() => { setCollapsed(localStorage.getItem('admin-sidebar-collapsed') === 'true'); }, []);
   useEffect(() => { setOpenGroups((current) => current.includes(active.group) ? current : [...current, active.group]); }, [active.group]);
   useEffect(() => {
     const media = window.matchMedia('(max-width: 960px)');
@@ -92,11 +91,7 @@ export default function AdminShell({ me, location, onNavigate, onLogout, childre
     window.requestAnimationFrame(() => menuToggleRef.current?.focus());
   }
   function toggleCollapsed() {
-    setCollapsed((current) => {
-      const next = !current;
-      localStorage.setItem('admin-sidebar-collapsed', String(next));
-      return next;
-    });
+    setCollapsed((current) => !current);
   }
   function navigate(section: AdminSection) {
     onNavigate(section);

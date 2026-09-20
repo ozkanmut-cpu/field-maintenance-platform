@@ -10,7 +10,13 @@ test('shell exposes accessible grouped navigation and collapse control', () => {
   assert.match(source, /aria-expanded/);
   assert.match(source, /aria-current/);
   assert.match(source, /Menüyü Daralt/);
-  assert.match(source, /localStorage/);
+  assert.match(source, /toggleCollapsed/);
+});
+
+test('desktop navigation starts expanded instead of inheriting an old collapsed preference', () => {
+  const source = readFileSync(shellPath, 'utf8');
+  assert.match(source, /const \[collapsed, setCollapsed\] = useState\(false\);/);
+  assert.doesNotMatch(source, /localStorage\.getItem\('admin-sidebar-collapsed'\)/);
 });
 
 test('shell provides a keyboard-dismissible text navigation drawer on compact screens', () => {
