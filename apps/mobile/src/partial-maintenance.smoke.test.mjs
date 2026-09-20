@@ -7,8 +7,10 @@ const api = fs.readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 
 test('maintenance completion sends a separately recorded maintained cooler count', () => {
   assert.match(api, /maintainedCoolerCount\??:\s*number/);
+  assert.match(api, /partialMaintenanceConfirmed\??:\s*boolean/);
   assert.match(api, /missingMaintenanceExplanation\??:\s*string/);
   assert.match(app, /maintainedCoolerCount/);
+  assert.match(app, /partialMaintenanceConfirmed:\s*true/);
   assert.match(app, /missingMaintenanceExplanation/);
   assert.match(app, /\.\.\.partialMaintenanceValues/);
 });

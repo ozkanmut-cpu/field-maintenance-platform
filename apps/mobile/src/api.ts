@@ -229,6 +229,7 @@ export function completeMaintenance(input: {
   lateEntryReason?: string;
   equipmentCorrectionRequested?: boolean;
   maintainedCoolerCount?: number;
+  partialMaintenanceConfirmed?: boolean;
   missingMaintenanceExplanation?: string;
   coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
   idempotencyKey: string;
