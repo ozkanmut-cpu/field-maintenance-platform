@@ -115,6 +115,48 @@ test('Export 2 permits only the cleared product slot to disappear from the live 
   });
 });
 
+test('Export 2 permits SAP to replace the cleared product row with a blank product slot', () => {
+  const after = export2State();
+  after.slots = after.slots
+    .filter((slot) => slot.key !== 'PRODUCT_ID')
+    .concat({ slot: 5, key: 'PRODUCT_ID', value1: '', value2: null });
+
+  assert.deepEqual(verifyExport2SearchDelta(export1State(), after), {
+    max: '2000',
+    slots: [
+      { slot: 1, key: 'DATE_RANGE', value1: '<- 14 gün ->', value2: null },
+      { slot: 3, key: 'REGION', value1: 'İzmir', value2: '' },
+      { slot: 4, key: 'STATUS', value1: 'Aktif', value2: null },
+      { slot: 5, key: 'PRODUCT_ID', value1: '', value2: null },
+    ],
+  });
+});
+
+test('Export 2 rejects an added non-product criterion even when its values are blank', () => {
+  const after = export2State();
+  after.slots.push({ slot: 5, key: 'PLANT', value1: '', value2: null });
+
+  assert.throws(
+    () => verifyExport2SearchDelta(export1State(), after),
+    /slot-added/,
+  );
+});
+
+test('Export 2 rejects duplicate blank product replacement slots', () => {
+  const after = export2State();
+  after.slots = after.slots
+    .filter((slot) => slot.key !== 'PRODUCT_ID')
+    .concat(
+      { slot: 5, key: 'PRODUCT_ID', value1: '', value2: null },
+      { slot: 6, key: 'PRODUCT_ID', value1: '', value2: null },
+    );
+
+  assert.throws(
+    () => verifyExport2SearchDelta(export1State(), after),
+    /product-slot-not-unique:2/,
+  );
+});
+
 test('Export 2 fails closed when any non-product criterion changes', () => {
   const changed = export2State();
   changed.slots.find((slot) => slot.key === 'REGION').value1 = 'Aydın';
