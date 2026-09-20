@@ -73,13 +73,46 @@ export class AssignmentsService {
           select: { id: true, technicianId: true, startsAt: true, endsAt: true, reason: true },
         });
 
-        if (previous.length > 0) {
+        const activeAtReplacement = previous.filter(
+          (old) => old.startsAt <= startsAt && (!old.endsAt || old.endsAt > startsAt),
+        );
+        const futureReplacements = previous.filter((old) => old.startsAt > startsAt);
+
+        if (activeAtReplacement.length > 0) {
           await tx.pointAssignment.updateMany({
-            where: { id: { in: previous.map((item) => item.id) } },
+            where: { id: { in: activeAtReplacement.map((item) => item.id) } },
+            data: { endsAt: startsAt },
+          });
+
+          for (const old of activeAtReplacement) {
+            await tx.adminAuditLog.create({
+              data: {
+                entityType: 'POINT_ASSIGNMENT',
+                entityId: old.id,
+                action: 'AUTO_ENDED_BY_REPLACEMENT',
+                actorId: admin.id,
+                oldValue: {
+                  pointId: dto.pointId,
+                  technicianId: old.technicianId,
+                  startsAt: old.startsAt.toISOString(),
+                  endsAt: old.endsAt?.toISOString() ?? null,
+                  reason: old.reason,
+                  active: true,
+                },
+                newValue: { active: true, endsAt: startsAt.toISOString() },
+                note: 'Yeni kalıcı nokta istisnası başlangıcında sona erecek',
+              },
+            });
+          }
+        }
+
+        if (futureReplacements.length > 0) {
+          await tx.pointAssignment.updateMany({
+            where: { id: { in: futureReplacements.map((item) => item.id) } },
             data: { active: false, deactivatedAt: new Date() },
           });
 
-          for (const old of previous) {
+          for (const old of futureReplacements) {
             await tx.adminAuditLog.create({
               data: {
                 entityType: 'POINT_ASSIGNMENT',
