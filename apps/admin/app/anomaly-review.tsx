@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminIcon } from "./admin-icons";
+import { AccessibleTable } from "./accessible-table";
 type Technician = {
   id: string;
   name: string;
@@ -262,8 +263,7 @@ export default function AnomalyReview() {
             {visible.length} / {items.length}
           </span>
         </div>
-        <div className="tableWrap">
-          <table>
+        <AccessibleTable caption="Konum ve anomali inceleme kuyruğu">
             <thead>
               <tr>
                 <th>Nokta</th>
@@ -374,8 +374,7 @@ export default function AnomalyReview() {
                 ))
               )}
             </tbody>
-          </table>
-        </div>
+        </AccessibleTable>
       </section>
       <section className="panel">
         <div className="panelHeader">
