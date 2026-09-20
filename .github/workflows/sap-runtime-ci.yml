@@ -42,8 +42,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Install Firefox for SAP DOM contract tests
-        run: npx playwright install --with-deps firefox
       - run: npm --prefix apps/api run prisma:generate
       - run: npm --prefix apps/api run prisma:deploy
       - run: node --check runtime/sap/sap_db_writer.js
@@ -57,8 +55,6 @@ jobs:
           runtime/sap/export2_search_verify.spec.js
           runtime/sap/*cooler_movement*.spec.js
           runtime/sap/sap_prod_runner_test.js
-      - name: Export 2 real SAP DOM control contract
-        run: node --test runtime/sap/export2_dom_contract.spec.js
       - run: node --test runtime/sap/sap_import_transaction.integration.spec.js
         env:
           SAP_TRANSACTION_TEST_DATABASE_URL: postgresql://field_maintenance:local-ci-only@127.0.0.1:5432/field_maintenance_test

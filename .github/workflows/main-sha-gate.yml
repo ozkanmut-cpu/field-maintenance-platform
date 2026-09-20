@@ -25,3 +25,22 @@ jobs:
         run: |
           test -n "$PR_HEAD_SHA"
           echo "PR head CI gate passed for $PR_HEAD_SHA"
+
+  browser-contracts:
+    name: Browser contracts (Chromium and Firefox)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium and Firefox for browser contracts
+        run: npx playwright install --with-deps chromium firefox
+      - name: Admin dashboard Chromium browser contract
+        working-directory: apps/admin
+        run: timeout 4m npx playwright test e2e/ai-dashboard.spec.ts --config=playwright.config.ts
+      - name: SAP Export 2 Firefox DOM contract
+        run: timeout 2m node --test runtime/sap/export2_dom_contract.spec.js
