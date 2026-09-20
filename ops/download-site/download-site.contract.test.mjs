@@ -7,7 +7,7 @@ const root = new URL('.', import.meta.url);
 test('download page identifies the published b7b2c038 Android build', async () => {
   const page = await readFile(new URL('index.html', root), 'utf8');
   assert.match(page, /b7b2c038/);
-  assert.match(page, /17e66737b4e86879c57b3eca1bf0f0e0df5ac6f718f03719507c115897495879/);
+  assert.match(page, /c8b0439190e350968b7dedd22c4f013b111c5900dfd501865a1c7f14c2d8ef03/);
   assert.match(page, /\/downloads\/fici-bakim\.apk/);
   assert.match(page, /\/kilavuz/);
 });
