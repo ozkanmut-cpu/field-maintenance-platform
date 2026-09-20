@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import Operations from './operations';
 import LocationMatching from './location-matching';
 import AiDashboard from './ai-dashboard';
@@ -21,6 +21,7 @@ import PointDetailPage from './point-detail-page';
 import BulkOperations from './bulk-operations';
 import KpiReportingPanel from './kpi-reporting';
 import TechnicianDailySummaryPanel from './technician-daily-summary';
+import { createRequestGate, isActiveTechnician } from './users-help-lifecycle.js';
 
 type User = {
   id: string;
@@ -50,6 +51,11 @@ export default function Home() {
   const [error, setError] = useState('');
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const usersRequestGate = useRef(createRequestGate());
+  const helpRequestGate = useRef(createRequestGate());
+  const helpRequestAbort = useRef<AbortController | null>(null);
   const [location, setLocation] = useState<AdminLocation>(() => typeof window === 'undefined' ? { section: 'dashboard' } : parseAdminLocation(window.location.search));
   const createUserOpen = location.createUser === true;
   const section = location.section;
@@ -58,20 +64,36 @@ export default function Home() {
     void restore();
   }, []);
   useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+  useEffect(() => {
     const restoreLocation = () => setLocation(parseAdminLocation(window.location.search));
     window.addEventListener('popstate', restoreLocation);
     return () => window.removeEventListener('popstate', restoreLocation);
   }, []);
+  useEffect(() => () => helpRequestAbort.current?.abort(), []);
+  useEffect(() => {
+    if (section === 'help-targets') return;
+    helpRequestAbort.current?.abort();
+    helpRequestGate.current.begin();
+  }, [section]);
   useEffect(() => {
     if (!me || section !== 'help-targets' || !location.userId) {
       if (!location.userId) setHelpEditorId('');
       return;
     }
+    if (!usersLoaded) return;
+    if (helpEditorId === location.userId && isActiveTechnician(users, location.userId)) return;
     void openHelpSettings(location.userId, false);
-  }, [location.userId, me, section]);
+  }, [helpEditorId, location.userId, me, section, users, usersLoaded]);
   function navigate(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}) {
     const next = { section, ...values } as AdminLocation;
     window.history.pushState({}, '', buildAdminLocation(section, values));
+    setLocation(next);
+  }
+  function replaceLocation(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}) {
+    const next = { section, ...values } as AdminLocation;
+    window.history.replaceState({}, '', buildAdminLocation(section, values));
     setLocation(next);
   }
   const setSection = navigate;
@@ -93,14 +115,34 @@ export default function Home() {
     try {
       const current = await api<User>('/api/session/me');
       setMe(current);
-      await loadUsers();
+      try {
+        await loadUsers();
+      } catch (e) {
+        setError(`Kullanıcı listesi yenilenemedi. Tekrar deneyin. ${e instanceof Error ? e.message : ''}`.trim());
+      }
     } catch {
       setMe(null);
     }
   }
   async function loadUsers() {
+    const requestId = usersRequestGate.current.begin();
     const list = await api<User[]>('/api/backend/users');
-    setUsers(list);
+    if (usersRequestGate.current.isCurrent(requestId)) {
+      setUsers(list);
+      setUsersLoaded(true);
+    }
+    return list;
+  }
+  async function refreshUsers() {
+    setBusy(true);
+    setError('');
+    try {
+      await loadUsers();
+    } catch (e) {
+      setError(`Kullanıcı listesi yenilenemedi. Tekrar deneyin. ${e instanceof Error ? e.message : ''}`.trim());
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function signIn(event: FormEvent) {
@@ -158,14 +200,31 @@ export default function Home() {
     }
   }
   async function openHelpSettings(helperId: string, updateLocation = true) {
+    helpRequestAbort.current?.abort();
+    const requestId = helpRequestGate.current.begin();
+    if (!isActiveTechnician(users, helperId)) {
+      setHelpEditorId('');
+      setHelpTargetIds([]);
+      setError('Yardım yetkileri yalnız aktif teknisyenler için düzenlenebilir.');
+      if (updateLocation) navigate('help-targets');
+      else replaceLocation('help-targets');
+      return;
+    }
+    const controller = new AbortController();
+    helpRequestAbort.current = controller;
     setBusy(true); setError('');
     try {
-      const data = await api<{ targets: User[] }>(`/api/backend/users/${helperId}/help-targets`);
+      const data = await api<{ targets: User[] }>(`/api/backend/users/${helperId}/help-targets`, { signal: controller.signal });
+      if (!helpRequestGate.current.isCurrent(requestId)) return;
       setHelpEditorId(helperId);
       setHelpTargetIds(data.targets.map((item) => item.id));
       if (updateLocation) navigate('help-targets', { userId: helperId });
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (!helpRequestGate.current.isCurrent(requestId) || (e instanceof Error && e.name === 'AbortError')) return;
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (helpRequestGate.current.isCurrent(requestId)) setBusy(false);
+    }
   }
 
   async function saveHelpSettings() {
@@ -218,13 +277,13 @@ export default function Home() {
   return (
     <AdminShell me={me} location={location} onNavigate={navigate} onLogout={() => void signOut()}>
 
-      {error ? <div className="error banner">{error}</div> : null}
+      {error ? <div className="error banner" role="alert" tabIndex={-1} ref={errorRef}>{error} {(section === 'users' || section === 'help-targets') ? <button className="small" type="button" onClick={() => void refreshUsers()} disabled={busy}>Tekrar dene</button> : null}</div> : null}
 
       {section === 'points' ? <PointList location={location} onNavigate={navigate} /> : section === 'bulk-operations' ? <BulkOperations /> : section === 'location-matching' ? <LocationMatching onNavigate={navigate} /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects onNavigate={navigate} /> : section === 'audit-log' ? <AuditLog /> : section === 'point-detail' ? <PointDetailPage location={location} onNavigate={navigate} /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline onNavigate={navigate} /> : section === 'duplicates' ? <DuplicateSuggestions onNavigate={navigate} /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : section === 'sap-sync' ? <SapSyncStatus /> : section === 'kpi-reporting' ? <KpiReportingPanel technicians={users.filter((user) => user.role === 'TECHNICIAN' && user.active)} /> : section === 'technician-daily-summary' ? <TechnicianDailySummaryPanel users={users} /> : section === 'dashboard' || section === 'approvals' || section === 'setup-pending' || section === 'regions' ? <Operations users={users} activeSection={section} onNavigate={navigate} /> : null}
       {section === 'users' || section === 'help-targets' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
-          <div className="rowActions"><button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button><button onClick={() => navigate('users', { createUser: true })}>Yeni Kullanıcı</button></div>
+          <div className="rowActions"><button className="ghost" onClick={() => void refreshUsers()} disabled={busy}>Yenile</button><button onClick={() => navigate('users', { createUser: true })}>Yeni Kullanıcı</button></div>
         </div>
         <div className="tableWrap">
           <table>
