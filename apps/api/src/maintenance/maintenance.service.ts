@@ -159,22 +159,29 @@ export class MaintenanceService {
     };
   }
 
-  async technicianHistory(technicianId: string, dateInput?: string) {
+  async technicianHistory(technicianId: string, dateInput?: string, now = new Date()) {
     await this.requireTechnician(technicianId);
-    const date = dateInput ? new Date(dateInput) : new Date();
+    const date = dateInput ? new Date(dateInput) : now;
     this.assertValidDate(date, 'date');
     const { start, end } = businessDayRange(date);
+    const historyRange = dateInput
+      ? { start, end }
+      : {
+          start: businessDayRange(new Date(`${this.previousBusinessDateKey(businessDateKey(now))}T12:00:00.000Z`)).start,
+          end,
+        };
 
     const [visits, attempts, nonMaintenanceVisits, prospectVisits] = await Promise.all([
       this.prisma.maintenanceVisit.findMany({
         where: {
           technicianId,
           status: VisitStatus.VALID,
-          performedAt: { gte: start, lt: end },
+          recordedAtServer: { gte: historyRange.start, lt: historyRange.end },
         },
         select: {
           id: true,
           performedAt: true,
+          recordedAtServer: true,
           enteredLate: true,
           assistedForTechnicianId: true,
           assistedForTechnician: { select: { id: true, name: true, username: true } },
@@ -227,7 +234,12 @@ export class MaintenanceService {
     ]);
 
     const items = [
-      ...visits.map((visit) => ({ type: 'MAINTENANCE' as const, at: visit.performedAt, ...visit })),
+      ...visits.map((visit) => ({
+        type: 'MAINTENANCE' as const,
+        at: visit.performedAt,
+        revertEligible: this.isWithinRevertWindow(visit.recordedAtServer, now),
+        ...visit,
+      })),
       ...attempts.map((attempt) => ({ type: 'ATTEMPT' as const, at: attempt.attemptedAt, ...attempt })),
       ...nonMaintenanceVisits.map((visit) => ({
         type: 'NON_MAINTENANCE_VISIT' as const,
@@ -582,7 +594,7 @@ export class MaintenanceService {
     });
   }
 
-  async revert(dto: RevertMaintenanceDto) {
+  async revert(dto: RevertMaintenanceDto, now = new Date()) {
     const [visit, actor] = await Promise.all([
       this.prisma.maintenanceVisit.findUnique({ where: { id: dto.visitId } }),
       this.prisma.user.findFirst({ where: { id: dto.userId, active: true } }),
@@ -592,6 +604,9 @@ export class MaintenanceService {
     if (actor.role !== UserRole.ADMIN && visit.technicianId !== actor.id) {
       throw new ForbiddenException('Teknisyen yalnızca kendi bakım kaydını geri alabilir');
     }
+    if (!this.isWithinRevertWindow(visit.recordedAtServer, now)) {
+      throw new BadRequestException('Bakım kaydı yalnızca girildiği gün veya ertesi gün geri alınabilir');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let reverted = visit;
@@ -600,7 +615,7 @@ export class MaintenanceService {
           where: { id: visit.id, status: { not: VisitStatus.REVERSED } },
           data: {
             status: VisitStatus.REVERSED,
-            reversedAt: new Date(),
+            reversedAt: now,
             reversedByUserId: actor.id,
             reviewRecommended: true,
             reviewReason: `GERİ ALINDI: ${dto.reason}`,
@@ -1515,6 +1530,18 @@ export class MaintenanceService {
     const date = this.analyticsDate(key, 'date');
     date.setUTCDate(date.getUTCDate() + days);
     return date.toISOString().slice(0, 10);
+  }
+
+  private previousBusinessDateKey(key: string) {
+    const date = new Date(`${key}T12:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
+  }
+
+  private isWithinRevertWindow(recordedAtServer: Date, now: Date) {
+    const today = businessDateKey(now);
+    const recordedDate = businessDateKey(recordedAtServer);
+    return recordedDate === today || recordedDate === this.previousBusinessDateKey(today);
   }
 
   private async requireTechnician(technicianId: string) {

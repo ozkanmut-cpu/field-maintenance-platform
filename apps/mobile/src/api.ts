@@ -261,6 +261,8 @@ export type TechnicianHistoryItem = {
   missingMaintenanceExplanation?: string | null;
   reason?: AttemptReason;
   purpose?: string;
+  /** Server-authorized: only maintenance entered today or yesterday can be reverted. */
+  revertEligible?: boolean;
 };
 
 export function revertMaintenance(visitId: string, reason: string) {

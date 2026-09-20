@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { MaintenanceObligationStatus, UserRole, VisitStatus } from '@prisma/client';
 import { MaintenanceService } from './maintenance.service';
 
@@ -22,6 +22,7 @@ test('revert repairs obligations when the visit is already reversed', async () =
     obligationId: 'obligation-1',
     technicianId: 'technician-1',
     status: VisitStatus.REVERSED,
+    recordedAtServer: new Date('2026-09-20T08:00:00.000Z'),
   };
   const obligationUpdates: any[] = [];
   const prisma: any = {
@@ -67,6 +68,7 @@ test('an unrelated technician cannot repair an already reversed visit', async ()
     obligationId: 'obligation-1',
     technicianId: 'technician-1',
     status: VisitStatus.REVERSED,
+    recordedAtServer: new Date('2026-09-20T08:00:00.000Z'),
   };
   const prisma: any = {
     maintenanceVisit: { findUnique: async () => visit },
@@ -92,6 +94,7 @@ test('a concurrent revert loser does not overwrite the winning reversal metadata
     obligationId: 'obligation-1',
     technicianId: 'technician-1',
     status: VisitStatus.VALID,
+    recordedAtServer: new Date('2026-09-20T08:00:00.000Z'),
   };
   const winningVisit = {
     ...staleVisit,
@@ -133,4 +136,46 @@ test('a concurrent revert loser does not overwrite the winning reversal metadata
     id: staleVisit.id,
     status: { not: VisitStatus.REVERSED },
   });
+});
+
+test('a technician can revert a visit entered yesterday in the Istanbul business day', async () => {
+  const visit = {
+    id: 'visit-yesterday', obligationId: null, technicianId: 'technician-1', status: VisitStatus.VALID,
+    recordedAtServer: new Date('2026-09-19T20:59:59.000Z'), // 23:59:59 Istanbul
+  };
+  const prisma: any = {
+    maintenanceVisit: { findUnique: async () => visit },
+    user: { findFirst: async () => ({ id: 'technician-1', role: UserRole.TECHNICIAN }) },
+    $transaction: async (operation: (tx: any) => Promise<unknown>) => operation({
+      maintenanceVisit: { updateMany: async () => ({ count: 1 }), findUnique: async () => ({ ...visit, status: VisitStatus.REVERSED }) },
+      maintenanceObligation: { updateMany: async () => ({ count: 0 }) },
+    }),
+  };
+
+  const result = await serviceWith(prisma).revert(
+    { visitId: visit.id, userId: 'technician-1', reason: 'Dün girilen kayıt' },
+    new Date('2026-09-20T20:59:59.000Z'),
+  );
+
+  assert.equal((result as any).status, VisitStatus.REVERSED);
+});
+
+test('revert rejects a visit entered before yesterday, using the Istanbul business day', async () => {
+  const visit = {
+    id: 'visit-expired', obligationId: null, technicianId: 'technician-1', status: VisitStatus.VALID,
+    recordedAtServer: new Date('2026-09-18T20:59:59.000Z'), // 23:59:59 Istanbul, two days ago
+  };
+  const prisma: any = {
+    maintenanceVisit: { findUnique: async () => visit },
+    user: { findFirst: async () => ({ id: 'technician-1', role: UserRole.TECHNICIAN }) },
+    $transaction: async () => assert.fail('expired visit must not start a transaction'),
+  };
+
+  await assert.rejects(
+    serviceWith(prisma).revert(
+      { visitId: visit.id, userId: 'technician-1', reason: 'Süresi geçmiş kayıt' },
+      new Date('2026-09-20T20:59:59.000Z'),
+    ),
+    BadRequestException,
+  );
 });
