@@ -84,24 +84,25 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 ### Delivery rules
 
 - [ ] Keep the existing single-page auth boundary, typed URL navigation and real backend metrics; do not introduce fake KPI/trend data.
-- [ ] Preserve the desktop-first, visible-text navigation rule: wide sidebar by default; tablet/phone drawer always shows group and submenu labels; icon-only is never the default experience.
+- [ ] Adopt the approved mockup direction: deep navy desktop sidebar with logo, icon and readable text labels; grouped navigation is visible by default, and tablet/phone drawer always retains group and submenu labels. Icon-only is never the default experience.
 - [ ] Preserve all existing endpoint contracts, permissions, audit behavior, point-list read-only rule and bulk-operation safeguards.
 - [ ] Use one shared component/style system for loading, empty, error and success states; do not create one-off screen styling.
 - [ ] Maintain keyboard access, visible focus, semantic tables/captions, horizontal table scroll and responsive action/filter wrapping.
 
 ### Shared foundation
 
-- [ ] Redesign app shell: desktop sidebar, grouped navigation, topbar, breadcrumb, account controls, page header and contextual primary actions.
-- [ ] Establish shared visual primitives: page headers, section panels, metric cards, status badges/chips, filter bars, search, table toolbar, dialogs, empty/loading/error/success states and confirmation surfaces.
-- [ ] Refresh typography, spacing, elevation, border/radius, state colors and interaction feedback consistently in globals.css without changing domain behavior.
+- [ ] Redesign app shell to the mockup standard: 260–280 px visible-label navy sidebar, simple Fıçıbakım mark, compact account area, low-noise topbar, breadcrumb, page title and one contextual primary action.
+- [ ] Establish shared visual primitives matching the mockups: spacious white panels, 8 px rhythm, strong title hierarchy, restrained blue/green/amber/red chips, clear search/filter toolbar, table selection summary, dialogs and loading/empty/error/success states.
+- [ ] Refresh typography, spacing, elevation, border/radius, state colors and interaction feedback consistently in globals.css without changing domain behavior. Use the approved family: navy #0F4C81, action blue #2563EB, success #16A34A, warning #F59E0B, error #EF4444, background #F8FAFC and white cards.
 - [ ] Add visual/regression coverage for desktop, tablet drawer and phone layouts, including a clean-session desktop navigation test (no persisted collapsed sidebar state).
 
 ### Screen migration clusters
 
-- [ ] Dashboard and reporting: Operations Dashboard, KPI/Raporlama, Technician Daily Summary and Sanal İstatistikçi receive the shared hierarchy, real metric cards, explainable states and drill-down affordances.
+- [ ] Dashboard and reporting: Operations Dashboard follows the mockup’s task-first layout—maximum three high-priority real metrics, a “Bugünün işleri” queue, compact technician activity and one clear primary action. KPI/Raporlama, Technician Daily Summary and Sanal İstatistikçi receive the same hierarchy, explainable states and drill-down affordances.
 - [ ] Operations: Bakım Takvimi, Görevlendirmeler, Bakım Dışı Ziyaretler and Evrak Yönetimi receive consistent page headers, filters, tables, selection/preview/confirmation states and narrow-screen behavior.
 - [ ] Approval & review: Yapılamadı, Konum & Anomali and fiş/teyit review states receive clear decision hierarchy; location confirmation remains explicitly independent from maintenance approval.
-- [ ] Point management: Noktalar, Nokta Detay, Ayar Bekleyenler, Bölgeler, SAP/Google, Mükerrer Noktalar, Timeline, Prospects and Toplu İşlemler receive consistent list → detail context, tabs, read-only/edit states and guarded bulk flow presentation.
+- [ ] Point management: Noktalar, Nokta Detay, Ayar Bekleyenler, Bölgeler, SAP/Google, Mükerrer Noktalar, Timeline and Prospects receive consistent list → detail context, tabs, read-only/edit states. Nokta Detay follows the mockup: identity/status summary at top, one “Düzenle” action, secondary “Geri dön”, and Genel/Konum/Bakım/Atamalar/Evrak/Timeline/Audit tabs.
+- [ ] Toplu İşlemler follows the approved safe mockup exactly: Filtre → Seçim → Önizleme → Açık onay → Uygulama → Audit. Keep selected-count summary, visible current → new value preview, affected-point count, warning, mandatory acknowledgement and audit confirmation visibly separate from the selection table.
 - [ ] Users and system: Kullanıcılar, Yardım Yetkileri, SAP Sync and Audit receive the same visual system, deep-link-friendly state and accessible detail/filter surfaces.
 
 ### Verification and release
