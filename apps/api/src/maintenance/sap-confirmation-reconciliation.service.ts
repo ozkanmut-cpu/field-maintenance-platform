@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { ConfirmationApprovalSource, MaintenanceType, PaperworkStatus, SapImportSource, VisitStatus } from '@prisma/client';
+import { ConfirmationApprovalSource, PaperworkStatus, SapImportSource, VisitStatus } from '@prisma/client';
 import { businessDateKey, businessDayRange } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -74,7 +74,6 @@ export class SapConfirmationReconciliationService implements OnModuleInit, OnMod
         where: {
           status: VisitStatus.VALID, confirmationReconciliationEligible: true,
           recordedAtServer: { lt: run.completedAt }, performedAt: { gte: visitWindow.start, lt: visitWindow.end },
-          point: { maintenanceType: MaintenanceType.STANDARD },
         },
         select: {
           id: true, performedAt: true, coolerCount: true, confirmationStatus: true,
