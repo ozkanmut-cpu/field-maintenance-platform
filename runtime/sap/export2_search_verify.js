@@ -87,6 +87,7 @@ function verifyExport2SearchDelta(export1State, export2State) {
   if (before.max !== '1000') throw new Error('SAFE_ABORT_EXPORT2_STATE:export1-max-not-1000');
   if (after.max !== '2000') throw new Error('SAFE_ABORT_EXPORT2_STATE:export2-max-not-2000');
   let productCount = 0;
+  let productSlotOmitted = false;
   const afterBySlot = new Map(after.slots.map((slot) => [slot.slot, slot]));
   if (afterBySlot.size !== after.slots.length) {
     throw new Error('SAFE_ABORT_EXPORT2_STATE:duplicate-slot');
@@ -96,6 +97,7 @@ function verifyExport2SearchDelta(export1State, export2State) {
     if (!current) {
       if (previous.key === 'PRODUCT_ID' && previous.value1 === '203') {
         productCount += 1;
+        productSlotOmitted = true;
         continue;
       }
       throw new Error(`SAFE_ABORT_EXPORT2_STATE:slot-missing:${previous.slot}`);
@@ -117,7 +119,22 @@ function verifyExport2SearchDelta(export1State, export2State) {
       throw new Error(`SAFE_ABORT_EXPORT2_STATE:unexpected-criterion-change:${previous.key}`);
     }
   }
-  if (after.slots.some((slot) => !before.slots.some((previous) => previous.slot === slot.slot))) {
+  const replacementSlots = after.slots.filter((slot) => {
+    if (before.slots.some((previous) => previous.slot === slot.slot)) return false;
+    return (
+      productSlotOmitted
+      && slot.key === 'PRODUCT_ID'
+      && slot.value1 === ''
+      && (slot.value2 === null || slot.value2 === '')
+    );
+  });
+  if (replacementSlots.length > 1) {
+    throw new Error(`SAFE_ABORT_EXPORT2_STATE:product-slot-not-unique:${replacementSlots.length}`);
+  }
+  if (after.slots.some((slot) => {
+    if (before.slots.some((previous) => previous.slot === slot.slot)) return false;
+    return !replacementSlots.includes(slot);
+  })) {
     throw new Error('SAFE_ABORT_EXPORT2_STATE:slot-added');
   }
   if (productCount !== 1) throw new Error(`SAFE_ABORT_EXPORT2_STATE:product-slot-not-unique:${productCount}`);
