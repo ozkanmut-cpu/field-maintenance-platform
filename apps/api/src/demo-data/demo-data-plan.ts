@@ -1,9 +1,18 @@
 export const DEMO_DATASET = {
-  regionName: '__DEMO__ Mobil ve Admin Önizleme',
-  pointCodePrefix: 'DEMO-',
-  pointNamePrefix: 'DEMO — ',
-  technicianUsername: 'demo-teknisyen',
-  helperUsername: 'demo-yardimci',
+  regionName: 'Kordon Operasyon Bölgesi',
+  pointCodePrefix: 'KOR-',
+  pointNamePrefix: '',
+  technicianUsername: 'ozge.kaya',
+  helperUsername: 'can.durmaz',
+} as const;
+
+export const showcaseCoverage = {
+  pointCount: 11,
+  maintenanceVisits: 7,
+  paperworkStates: ['PENDING', 'PRESENT', 'MISSING', 'PENDING_REVIEW', 'APPROVED'],
+  includesPartialMaintenance: true,
+  includesPastDatedMaintenance: true,
+  includesLocationReview: true,
 } as const;
 
 export function demoUsername(kind: 'technician' | 'helper') {
@@ -11,7 +20,7 @@ export function demoUsername(kind: 'technician' | 'helper') {
 }
 
 export function isDemoEntityName(value: string | null | undefined) {
-  return Boolean(value && (value === DEMO_DATASET.regionName || value.startsWith(DEMO_DATASET.pointNamePrefix)));
+  return Boolean(value && value === DEMO_DATASET.regionName);
 }
 
 // Child-first order keeps the purge safe under database foreign keys.

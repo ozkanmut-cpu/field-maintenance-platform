@@ -1,13 +1,15 @@
-# Silinebilir demo veri paketi
+# Silinebilir önizleme veri paketi
 
-Bu paket yalnızca `__DEMO__ Mobil ve Admin Önizleme` bölgesinde, `DEMO-` nokta kodlarında ve `demo-` kullanıcı adlarında veri oluşturur. Gerçek SAP verisi veya gerçek bakım noktası üretmez.
+Bu paket yalnızca `Kordon Operasyon Bölgesi` içindeki `KOR-` nokta kodlarında ve `ozge.kaya` / `can.durmaz` kullanıcılarında veri oluşturur. Gerçek SAP verisi veya gerçek bakım noktası üretmez.
 
 ## İçerik
 
-- Açık bakım görevi, kısmi bakım ve geçmiş kaydı
-- Eksik teyit, eksik servis fişi ve yönetici incelemesi bekleyen servis fişi
-- Yapılamadı kaydı, bakım dışı ziyaret, alias, geçici atama ve yardım yetkisi
-- Aktif, pasif ve iptal nokta örnekleri ile müşteri adayı
+- 11 nokta: aktif, pasif, iptal; Standard ve Smart Clean karışımı
+- 7 bakım kaydı: açık görev, kısmi bakım, geçmiş tarihli kayıt ve konum incelemesi
+- Tüm evrak statüleri: bekliyor, var, eksik, yönetici incelemesi ve onaylandı
+- Yapılamadı, bakım dışı ziyaret, alias, geçici atama, yardım yetkisi ve müşteri adayı
+
+Her kayıt yalnız önizleme amacıyla oluşturulur; kullanıcı arayüzünde “Demo” adı görünmez.
 
 ## Production işlemleri
 
@@ -18,4 +20,6 @@ DEMO_TECHNICIAN_PASSWORD='<en az 16 karakter>' npm run demo:seed -w @fmp/api
 npm run demo:purge -w @fmp/api
 ```
 
-İlk komut paketi yeniden oluşturur. İkinci komut yalnız demo bölgesi, demo noktaları, demo kullanıcıları ve bunlara bağlı kayıtları siler.
+İlk komut paketi yeniden oluşturur. İkinci komut yalnız Kordon Operasyon Bölgesi, ona bağlı noktalar, iki önizleme kullanıcısı ve ilişkili kayıtları siler.
+
+<!-- CI tetikleme kaydı: 2026-09-21 -->

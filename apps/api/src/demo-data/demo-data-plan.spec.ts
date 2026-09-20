@@ -2,13 +2,20 @@ import * as assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import { DEMO_DATASET, demoUsername, isDemoEntityName, purgeOrder } from './demo-data-plan';
+import { DEMO_DATASET, demoUsername, isDemoEntityName, purgeOrder, showcaseCoverage } from './demo-data-plan';
 
-test('demo dataset has a unique, visible identity', () => {
-  assert.equal(DEMO_DATASET.regionName, '__DEMO__ Mobil ve Admin Önizleme');
-  assert.equal(demoUsername('technician'), 'demo-teknisyen');
-  assert.equal(isDemoEntityName('DEMO — Eksik Evrak'), true);
+test('showcase dataset has a believable visible identity and enough screen coverage', () => {
+  assert.equal(DEMO_DATASET.regionName, 'Kordon Operasyon Bölgesi');
+  assert.equal(demoUsername('technician'), 'ozge.kaya');
+  assert.equal(demoUsername('helper'), 'can.durmaz');
+  assert.equal(isDemoEntityName('Kordon Operasyon Bölgesi'), true);
   assert.equal(isDemoEntityName('Gerçek Müşteri'), false);
+  assert.ok(showcaseCoverage.pointCount >= 10);
+  assert.ok(showcaseCoverage.maintenanceVisits >= 6);
+  assert.deepEqual([...showcaseCoverage.paperworkStates].sort(), ['APPROVED', 'MISSING', 'PENDING', 'PENDING_REVIEW', 'PRESENT']);
+  assert.ok(showcaseCoverage.includesPartialMaintenance);
+  assert.ok(showcaseCoverage.includesPastDatedMaintenance);
+  assert.ok(showcaseCoverage.includesLocationReview);
 });
 
 test('purge removes dependent records before demo users and region', () => {
