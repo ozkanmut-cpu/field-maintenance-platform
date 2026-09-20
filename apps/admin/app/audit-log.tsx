@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import { AccessibleTable } from './accessible-table';
 
 type AuditItem = {
   id: string; entityType: string; entityId: string; action: string; note?: string | null; createdAt: string;
@@ -131,11 +132,11 @@ export default function AuditLog() {
         <select aria-label="Kullanıcı filtresi" value={actorId} onChange={(e) => setActorId(e.target.value)}><option value="">Tüm kullanıcılar</option>{actors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
         <button type="submit" disabled={busy}>FİLTRELE</button>
       </form>
-      <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Entity</th><th>Kullanıcı</th><th>Not</th><th></th></tr></thead><tbody>
+      <AccessibleTable caption="Audit işlem geçmişi"><thead><tr><th>Tarih</th><th>İşlem</th><th>Entity</th><th>Kullanıcı</th><th>Not</th><th></th></tr></thead><tbody>
         {busy && items.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>İşlem geçmişi yükleniyor</strong><span>Audit kayıtları hazırlanıyor.</span></div></td></tr> : visible.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Audit kaydı bulunamadı</strong><span>Arama veya filtreleri değiştir.</span></div></td></tr> : visible.map((item) => <tr key={item.id}>
           <td>{new Date(item.createdAt).toLocaleString('tr-TR')}</td><td><strong>{item.action}</strong></td><td>{item.entityType}<div className="muted">{item.entityId}</div></td><td>{item.actor.name}<div className="muted">@{item.actor.username}</div></td><td>{item.note || '—'}</td><td><button className="small iconAction" onClick={(event) => openDetail(item, event.currentTarget)}><AdminIcon name="detail" size={15} /><span>DETAY</span></button></td>
         </tr>)}
-      </tbody></table></div>
+      </tbody></AccessibleTable>
     </section>
     {selected ? <section className="panel" role="region" aria-label="Audit kayıt detayı"><div className="panelHeader"><div><h2>{selected.action}</h2><p>{selected.entityType} · {selected.entityId}</p></div><button ref={detailCloseRef} className="ghost" onClick={closeDetail}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="auditJson"><details open><summary>Önceki değer</summary><pre>{JSON.stringify(selected.oldValue ?? null, null, 2)}</pre></details><details open><summary>Yeni değer</summary><pre>{JSON.stringify(selected.newValue ?? null, null, 2)}</pre></details></div>

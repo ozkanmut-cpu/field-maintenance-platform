@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import { AccessibleTable } from './accessible-table';
 import { LatestRequest, RequestActivity } from './latest-request.mjs';
 import { bulkPaperworkStatusOptions, paperworkStatusOptions } from './paperwork-status-policy.mjs';
 
@@ -233,9 +234,9 @@ export default function PaperworkManagement() {
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
-        <select value={technicianId} onChange={(e) => { invalidateVisitContext(); setTechnicianId(e.target.value); }}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
-        <input type="date" value={date} onChange={(e) => { invalidateVisitContext(); setDate(e.target.value); }} />
-        <input value={search} onChange={(e) => { setSelected([]); setSearch(e.target.value); historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }} placeholder="Müşteri no / nokta ara" />
+        <select aria-label="Evrak teknisyeni filtresi" value={technicianId} onChange={(e) => { invalidateVisitContext(); setTechnicianId(e.target.value); }}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
+        <input type="date" aria-label="Evrak kayıt tarihi" value={date} onChange={(e) => { invalidateVisitContext(); setDate(e.target.value); }} />
+        <input aria-label="Evrak kayıtlarında ara" value={search} onChange={(e) => { setSelected([]); setSearch(e.target.value); historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }} placeholder="Müşteri no / nokta ara" />
       </div>
     </section>
 
@@ -274,16 +275,16 @@ export default function PaperworkManagement() {
     </section>
 
     <section className="panel">
-      <div className="tableWrap"><table><thead><tr><th><input type="checkbox" checked={visible.length > 0 && visible.every((v) => selected.includes(v.id))} onChange={toggleAll} /></th><th>Saat</th><th>Nokta</th><th>Servis Fişi</th><th>Teyit</th><th></th></tr></thead><tbody>
+      <AccessibleTable caption="Seçilebilir bakım evrak kayıtları"><thead><tr><th><input type="checkbox" checked={visible.length > 0 && visible.every((v) => selected.includes(v.id))} onChange={toggleAll} aria-label="Görünen bakım kayıtlarının tümünü seç" /></th><th>Saat</th><th>Nokta</th><th>Servis Fişi</th><th>Teyit</th><th></th></tr></thead><tbody>
         {loading ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Bakım kayıtları yükleniyor</strong><span>Seçili teknisyen ve güne ait evraklar hazırlanıyor.</span></div></td></tr> : visible.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Bakım kaydı yok</strong><span>Seçili teknisyen, tarih veya arama için kayıt bulunamadı.</span></div></td></tr> : visible.map((visit) => <tr key={visit.id}>
-          <td><input type="checkbox" checked={selected.includes(visit.id)} onChange={() => toggle(visit.id)} /></td>
+          <td><input type="checkbox" checked={selected.includes(visit.id)} onChange={() => toggle(visit.id)} aria-label={`${visit.point?.code ?? 'Bilinmeyen'} kodlu bakım kaydını seç`} /></td>
           <td>{new Date(visit.performedAt || visit.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td>
           <td><strong>{visit.point?.name || '—'}</strong><div className="muted">{visit.point?.code || '—'}</div></td>
           <td><select value={visit.serviceSlipStatus || 'PENDING'} disabled={busy} onChange={(e) => void updateOne(visit.id, 'SERVICE_SLIP', e.target.value as PaperworkStatus)}>{paperworkStatusOptions('SERVICE_SLIP', visit.serviceSlipStatus || 'PENDING').map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></td>
           <td><select value={visit.confirmationStatus || 'PENDING'} disabled={busy} onChange={(e) => void updateOne(visit.id, 'CONFIRMATION', e.target.value as PaperworkStatus)}>{paperworkStatusOptions('CONFIRMATION', visit.confirmationStatus || 'PENDING').map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></td>
           <td><button className="small" disabled={busy} onClick={() => void openHistory(visit.id)}>GEÇMİŞ</button></td>
         </tr>)}
-      </tbody></table></div>
+      </tbody></AccessibleTable>
     </section>
 
     {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>

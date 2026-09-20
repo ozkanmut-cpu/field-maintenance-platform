@@ -12,7 +12,7 @@ function auditModule() {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const mod = { exports: {} };
-  const auditRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : require(id);
+  const auditRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : id === './accessible-table' ? { AccessibleTable: ({ children }) => children } : require(id);
   new Function('require', 'module', 'exports', js)(auditRequire, mod, mod.exports);
   return mod.exports;
 }
