@@ -195,9 +195,11 @@ test('a cancelled boundary refresh cannot replace the effective technician for a
 });
 
 test('Operations CI runs assignment reliability changes on pushes and pull requests', () => {
-  for (const path of ['apps/admin/app/assignment-management.tsx', 'apps/admin/app/assignment-management.smoke.test.mjs']) {
+  for (const path of ['apps/api/src/assignments/**', 'apps/admin/app/assignment-management.tsx', 'apps/admin/app/assignment-management.smoke.test.mjs']) {
     assert.equal(operationsWorkflow.split(`'${path}'`).length - 1, 2, `${path} must trigger both push and pull-request validation`);
   }
+  assert.match(operationsWorkflow, /src\/assignments\/assignments\.service\.spec\.ts/,
+    'Operations CI must run the assignment backend regression');
   assert.match(operationsWorkflow, /apps\/admin\/app\/assignment-management\.smoke\.test\.mjs/,
     'Operations CI must run the assignment smoke regression');
 });
