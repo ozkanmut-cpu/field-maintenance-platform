@@ -1,5 +1,5 @@
--- Additive, fail-closed SAP confirmation reconciliation state.
-ALTER TYPE "PaperworkStatus" ADD VALUE IF NOT EXISTS 'APPROVED';
+-- Additive, fail-closed SAP confirmation reconciliation state. APPROVED was
+-- committed by the immediately preceding migration before this constraint uses it.
 CREATE TYPE "ConfirmationApprovalSource" AS ENUM ('AUTO_SAP', 'MANUAL_ADMIN');
 CREATE TYPE "SapImportSource" AS ENUM ('MAIN_CONFIRMATION_203');
 CREATE TYPE "SapImportRunStatus" AS ENUM ('SUCCESS');
