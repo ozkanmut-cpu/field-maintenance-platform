@@ -19,6 +19,11 @@ assert.equal(
   false,
   'the exact-SHA gate must not be path-filtered',
 );
+assert.deepEqual(
+  triggers.pull_request?.branches,
+  ['main'],
+  'the gate must validate pull requests that target main',
+);
 assert.ok(workflow.jobs['main-exact-sha-ci'], 'the exact-SHA gate job is required');
 
 console.log('main exact-SHA gate configuration is valid');

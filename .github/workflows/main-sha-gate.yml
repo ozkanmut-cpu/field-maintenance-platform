@@ -3,15 +3,25 @@ name: Main Exact-SHA CI Gate
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   main-exact-sha-ci:
     name: Main exact-SHA CI
     runs-on: ubuntu-latest
     steps:
-      - name: Confirm the check is attached to the pushed commit
+      - name: Confirm the check is attached to the pushed main commit
+        if: github.event_name == 'push'
         env:
           EXPECTED_SHA: ${{ github.event.after }}
         run: |
           test "$GITHUB_SHA" = "$EXPECTED_SHA"
           echo "Exact-SHA CI gate passed for $GITHUB_SHA"
+      - name: Confirm the pull request head SHA is present
+        if: github.event_name == 'pull_request'
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test -n "$PR_HEAD_SHA"
+          echo "PR head CI gate passed for $PR_HEAD_SHA"
