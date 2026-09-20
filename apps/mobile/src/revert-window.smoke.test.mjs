@@ -10,5 +10,6 @@ test('history exposes server-authorized revert eligibility and renders GERI AL o
   assert.match(historyType, /revertEligible\?:\s*boolean/);
 
   const historyView = app.slice(app.indexOf('function HistoryView'), app.indexOf('\nfunction NewPointView'));
+  assert.match(historyView, /Bugün ve dün girilen bakım kayıtlarını kontrol edebilir/);
   assert.match(historyView, /i\.type==='MAINTENANCE'&&i\.revertEligible/);
 });
