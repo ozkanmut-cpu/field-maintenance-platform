@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import { bulkPaperworkStatusOptions, paperworkStatusOptions } from './paperwork-status-policy.mjs';
 
 type User = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
-type PaperworkStatus = 'PENDING' | 'PRESENT' | 'MISSING';
+type PaperworkStatus = 'PENDING' | 'PRESENT' | 'MISSING' | 'PENDING_REVIEW' | 'APPROVED';
 type PaperworkKind = 'SERVICE_SLIP' | 'CONFIRMATION';
 type MaintenanceItem = {
   type: string; id: string; at: string; performedAt?: string; serviceSlipStatus?: PaperworkStatus; confirmationStatus?: PaperworkStatus;
@@ -13,12 +14,13 @@ type MaintenanceItem = {
 type TechnicianHistory = { date: string; maintenanceCount: number; items: MaintenanceItem[] };
 type PaperworkHistoryItem = {
   id: string; kind: PaperworkKind; previousStatus: PaperworkStatus; newStatus: PaperworkStatus;
-  changedAt: string; note?: string | null; changedBy: { id: string; name: string };
+  changedAt: string; note?: string | null; changedBy: { id: string; name: string } | null;
+  provenance?: 'MANUAL_USER' | 'SAP_RECONCILIATION';
 };
 
 type PaperworkAnalyticsKind = {
-  statusCounts: { pending: number; present: number; missing: number };
-  statusRates: { pending: number; present: number; missing: number };
+  statusCounts: { pending: number; present: number; missing: number; approved: number };
+  statusRates: { pending: number; present: number; missing: number; approved: number };
   arrival: { completedCount: number; medianMinutes: number | null; p90Minutes: number | null };
   resolution: { resolvedCount: number; medianMinutes: number | null; p90Minutes: number | null };
   pendingAgeBuckets: { under24h: number; h24to48: number; d2to7: number; d7plus: number };
@@ -41,7 +43,7 @@ function formatMinutes(value: number | null) {
   return `${Math.floor(value / 1440)} gün ${Math.floor((value % 1440) / 60)} sa`;
 }
 
-const statusLabel: Record<PaperworkStatus, string> = { PENDING: 'Bekliyor', PRESENT: 'Var', MISSING: 'Eksik' };
+const statusLabel: Record<PaperworkStatus, string> = { PENDING: 'Bekliyor', PRESENT: 'Var', MISSING: 'Eksik', PENDING_REVIEW: 'İnceleme bekliyor', APPROVED: 'Onaylandı' };
 
 export default function PaperworkManagement() {
   const [technicians, setTechnicians] = useState<User[]>([]);
@@ -113,6 +115,17 @@ export default function PaperworkManagement() {
     return visits.filter((v) => `${v.point?.code ?? ''} ${v.point?.name ?? ''}`.toLocaleLowerCase('tr-TR').includes(q));
   }, [visits, search]);
   const actionableSelected = selected.filter((id) => visible.some((visit) => visit.id === id));
+  const bulkStatusOptions = bulkPaperworkStatusOptions(
+    bulkKind,
+    actionableSelected.flatMap((id) => {
+      const visit = visible.find((item) => item.id === id);
+      const status = bulkKind === 'SERVICE_SLIP' ? visit?.serviceSlipStatus : visit?.confirmationStatus;
+      return status ? [status] : [];
+    }),
+  );
+  const effectiveBulkStatus = bulkStatusOptions.some((option) => option.value === bulkStatus)
+    ? bulkStatus
+    : bulkStatusOptions[0].value;
 
   function toggle(id: string) { setSelected((items) => items.includes(id) ? items.filter((x) => x !== id) : [...items, id]); }
   function toggleAll() {
@@ -135,12 +148,12 @@ export default function PaperworkManagement() {
 
   async function bulkUpdate() {
     if (!actionableSelected.length) { setError('Toplu işlem için en az bir görünür bakım seç.'); return; }
-    if (!window.confirm(`${actionableSelected.length} bakım kaydında ${bulkKind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'} durumu ${statusLabel[bulkStatus]} yapılsın mı?`)) return;
+    if (!window.confirm(`${actionableSelected.length} bakım kaydında ${bulkKind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'} durumu ${statusLabel[effectiveBulkStatus]} yapılsın mı?`)) return;
     setBusy(true); setError(''); setNotice('');
     try {
       await api('/api/backend/maintenance/paperwork/bulk', {
         method: 'POST',
-        body: JSON.stringify({ items: actionableSelected.map((visitId) => ({ visitId, kind: bulkKind, status: bulkStatus, ...(bulkNote.trim() ? { note: bulkNote.trim() } : {}) })) }),
+        body: JSON.stringify({ items: actionableSelected.map((visitId) => ({ visitId, kind: bulkKind, status: effectiveBulkStatus, ...(bulkNote.trim() ? { note: bulkNote.trim() } : {}) })) }),
       });
       setNotice(`${actionableSelected.length} bakım kaydının evrak durumu güncellendi.`);
       setBulkNote(''); await loadVisits();
@@ -157,7 +170,8 @@ export default function PaperworkManagement() {
     finally { setBusy(false); }
   }
 
-  const pendingSlip = visits.filter((v) => v.serviceSlipStatus === 'PENDING').length;
+  const pendingReviewSlip = visits.filter((v) => v.serviceSlipStatus === 'PENDING_REVIEW').length;
+  const pendingSlip = visits.filter((v) => v.serviceSlipStatus === 'PENDING' || v.serviceSlipStatus === 'PENDING_REVIEW').length;
   const missingSlip = visits.filter((v) => v.serviceSlipStatus === 'MISSING').length;
   const pendingConfirmation = visits.filter((v) => v.confirmationStatus === 'PENDING').length;
   const missingConfirmation = visits.filter((v) => v.confirmationStatus === 'MISSING').length;
@@ -165,7 +179,7 @@ export default function PaperworkManagement() {
   return <>
     <section className="dashboardGrid">
       <div className="dashboardCard"><span>Bakım</span><strong>{visits.length}</strong><small>{date}</small></div>
-      <div className="dashboardCard"><span>Servis fişi bekleyen</span><strong>{pendingSlip}</strong><small>Eksik: {missingSlip}</small></div>
+      <div className="dashboardCard"><span>Servis fişi bekleyen</span><strong>{pendingSlip}</strong><small>Eksik: {missingSlip} · İnceleme: {pendingReviewSlip}</small></div>
       <div className="dashboardCard"><span>Teyit bekleyen</span><strong>{pendingConfirmation}</strong><small>Eksik: {missingConfirmation}</small></div>
       <div className="dashboardCard"><span>Seçili</span><strong>{actionableSelected.length}</strong><small>Toplu işlem için</small></div>
     </section>
@@ -195,8 +209,8 @@ export default function PaperworkManagement() {
           <div className="dashboardCard"><span>Teyit · Belge geliş medyanı</span><strong>{formatMinutes(analytics.confirmation.arrival.medianMinutes)}</strong><small>P90: {formatMinutes(analytics.confirmation.arrival.p90Minutes)} · {analytics.confirmation.arrival.completedCount} kayıt</small></div>
           <div className="dashboardCard"><span>Durum netleşme medyanı</span><strong>{formatMinutes(analytics.serviceSlip.resolution.medianMinutes)}</strong><small>Servis fişi · Teyit: {formatMinutes(analytics.confirmation.resolution.medianMinutes)}</small></div>
         </section>
-        <div className="tableWrap"><table><thead><tr><th>Evrak</th><th>Var</th><th>Bekliyor</th><th>Eksik</th><th>Belge geliş medyanı / P90</th><th>Durum netleşme medyanı / P90</th></tr></thead><tbody>
-          {([['Servis Fişi', analytics.serviceSlip], ['Teyit', analytics.confirmation]] as const).map(([label, item]) => <tr key={label}><td><strong>{label}</strong></td><td>{item.statusCounts.present} ({item.statusRates.present}%)</td><td>{item.statusCounts.pending} ({item.statusRates.pending}%)</td><td>{item.statusCounts.missing} ({item.statusRates.missing}%)</td><td>{formatMinutes(item.arrival.medianMinutes)} / {formatMinutes(item.arrival.p90Minutes)}</td><td>{formatMinutes(item.resolution.medianMinutes)} / {formatMinutes(item.resolution.p90Minutes)}</td></tr>)}
+        <div className="tableWrap"><table><thead><tr><th>Evrak</th><th>Var</th><th>Onaylandı</th><th>Bekliyor</th><th>Eksik</th><th>Belge geliş medyanı / P90</th><th>Durum netleşme medyanı / P90</th></tr></thead><tbody>
+          {([['Servis Fişi', analytics.serviceSlip], ['Teyit', analytics.confirmation]] as const).map(([label, item]) => <tr key={label}><td><strong>{label}</strong></td><td>{item.statusCounts.present} ({item.statusRates.present}%)</td><td>{item.statusCounts.approved} ({item.statusRates.approved}%)</td><td>{item.statusCounts.pending} ({item.statusRates.pending}%)</td><td>{item.statusCounts.missing} ({item.statusRates.missing}%)</td><td>{formatMinutes(item.arrival.medianMinutes)} / {formatMinutes(item.arrival.p90Minutes)}</td><td>{formatMinutes(item.resolution.medianMinutes)} / {formatMinutes(item.resolution.p90Minutes)}</td></tr>)}
         </tbody></table></div>
         <div className="tableWrap"><table><thead><tr><th>Bekleyen evrak yaşı</th><th>0–24 saat</th><th>24–48 saat</th><th>2–7 gün</th><th>7+ gün</th></tr></thead><tbody>
           <tr><td><strong>Servis Fişi</strong></td><td>{analytics.serviceSlip.pendingAgeBuckets.under24h}</td><td>{analytics.serviceSlip.pendingAgeBuckets.h24to48}</td><td>{analytics.serviceSlip.pendingAgeBuckets.d2to7}</td><td>{analytics.serviceSlip.pendingAgeBuckets.d7plus}</td></tr>
@@ -209,7 +223,7 @@ export default function PaperworkManagement() {
       <div className="panelHeader"><div><h2>Toplu Evrak İşlemi</h2><p>Seçili bakım kayıtlarına tek seferde aynı evrak durumunu uygula.</p></div></div>
       <div className="compactForm">
         <select value={bulkKind} onChange={(e) => setBulkKind(e.target.value as PaperworkKind)}><option value="SERVICE_SLIP">Servis Fişi</option><option value="CONFIRMATION">Teyit</option></select>
-        <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as PaperworkStatus)}><option value="PRESENT">Var</option><option value="MISSING">Eksik</option><option value="PENDING">Bekliyor</option></select>
+        <select value={effectiveBulkStatus} onChange={(e) => setBulkStatus(e.target.value as PaperworkStatus)}>{bulkStatusOptions.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select>
         <input value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} maxLength={250} placeholder="Toplu işlem notu (opsiyonel)" />
         <button disabled={busy || !actionableSelected.length} onClick={() => void bulkUpdate()}>SEÇİLİLERİ GÜNCELLE</button>
       </div>
@@ -221,8 +235,8 @@ export default function PaperworkManagement() {
           <td><input type="checkbox" checked={selected.includes(visit.id)} onChange={() => toggle(visit.id)} /></td>
           <td>{new Date(visit.performedAt || visit.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td>
           <td><strong>{visit.point?.name || '—'}</strong><div className="muted">{visit.point?.code || '—'}</div></td>
-          <td><select value={visit.serviceSlipStatus || 'PENDING'} disabled={busy} onChange={(e) => void updateOne(visit.id, 'SERVICE_SLIP', e.target.value as PaperworkStatus)}><option value="PENDING">Bekliyor</option><option value="PRESENT">Var</option><option value="MISSING">Eksik</option></select></td>
-          <td><select value={visit.confirmationStatus || 'PENDING'} disabled={busy} onChange={(e) => void updateOne(visit.id, 'CONFIRMATION', e.target.value as PaperworkStatus)}><option value="PENDING">Bekliyor</option><option value="PRESENT">Var</option><option value="MISSING">Eksik</option></select></td>
+          <td><select value={visit.serviceSlipStatus || 'PENDING'} disabled={busy} onChange={(e) => void updateOne(visit.id, 'SERVICE_SLIP', e.target.value as PaperworkStatus)}>{paperworkStatusOptions('SERVICE_SLIP', visit.serviceSlipStatus || 'PENDING').map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></td>
+          <td><select value={visit.confirmationStatus || 'PENDING'} disabled={busy} onChange={(e) => void updateOne(visit.id, 'CONFIRMATION', e.target.value as PaperworkStatus)}>{paperworkStatusOptions('CONFIRMATION', visit.confirmationStatus || 'PENDING').map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}</select></td>
           <td><button className="small" disabled={busy} onClick={() => void openHistory(visit.id)}>GEÇMİŞ</button></td>
         </tr>)}
       </tbody></table></div>
@@ -230,7 +244,7 @@ export default function PaperworkManagement() {
 
     {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Evrak</th><th>Önce</th><th>Sonra</th><th>Kullanıcı</th><th>Not</th></tr></thead><tbody>
-        {history.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Evrak değişikliği yok</strong><span>Bu ziyaret için evrak audit kaydı bulunmuyor.</span></div></td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy.name}</td><td>{h.note || '—'}</td></tr>)}
+        {history.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Evrak değişikliği yok</strong><span>Bu ziyaret için evrak audit kaydı bulunmuyor.</span></div></td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy?.name ?? (h.provenance === 'SAP_RECONCILIATION' ? 'SAP (otomatik)' : 'Sistem')}</td><td>{h.note || '—'}</td></tr>)}
       </tbody></table></div>
     </section> : null}
   </>;

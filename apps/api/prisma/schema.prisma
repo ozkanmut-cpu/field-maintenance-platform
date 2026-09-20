@@ -32,6 +32,21 @@ enum PaperworkStatus {
   PENDING
   PRESENT
   MISSING
+  PENDING_REVIEW
+  APPROVED
+}
+
+enum ConfirmationApprovalSource {
+  AUTO_SAP
+  MANUAL_ADMIN
+}
+
+enum SapImportSource {
+  MAIN_CONFIRMATION_203
+}
+
+enum SapImportRunStatus {
+  SUCCESS
 }
 
 enum PaperworkKind {
@@ -321,51 +336,64 @@ model MaintenanceObligation {
 }
 
 model MaintenanceVisit {
-  id                       String                        @id @default(uuid()) @db.Uuid
-  pointId                  String                        @map("point_id") @db.Uuid
-  point                    Point                         @relation(fields: [pointId], references: [id])
-  technicianId             String                        @map("technician_id") @db.Uuid
-  technician               User                          @relation(fields: [technicianId], references: [id])
-  assistedForTechnicianId  String?                       @map("assisted_for_technician_id") @db.Uuid
-  assistedForTechnician    User?                         @relation("AssistedForTechnician", fields: [assistedForTechnicianId], references: [id])
-  obligationId             String?                       @map("obligation_id") @db.Uuid
-  obligation               MaintenanceObligation?        @relation(fields: [obligationId], references: [id])
-  performedAt              DateTime                      @map("performed_at")
-  recordedAtServer         DateTime                      @default(now()) @map("recorded_at_server")
-  deviceRecordedAt         DateTime?                     @map("device_recorded_at")
-  enteredLate              Boolean                       @default(false) @map("entered_late")
-  lateEntryMinutes         Int?                          @map("late_entry_minutes")
-  lateEntryReason          String?                       @map("late_entry_reason")
+  id                                 String                          @id @default(uuid()) @db.Uuid
+  pointId                            String                          @map("point_id") @db.Uuid
+  point                              Point                           @relation(fields: [pointId], references: [id])
+  technicianId                       String                          @map("technician_id") @db.Uuid
+  technician                         User                            @relation(fields: [technicianId], references: [id])
+  assistedForTechnicianId            String?                         @map("assisted_for_technician_id") @db.Uuid
+  assistedForTechnician              User?                           @relation("AssistedForTechnician", fields: [assistedForTechnicianId], references: [id])
+  obligationId                       String?                         @map("obligation_id") @db.Uuid
+  obligation                         MaintenanceObligation?          @relation(fields: [obligationId], references: [id])
+  performedAt                        DateTime                        @map("performed_at")
+  recordedAtServer                   DateTime                        @default(now()) @map("recorded_at_server")
+  deviceRecordedAt                   DateTime?                       @map("device_recorded_at")
+  enteredLate                        Boolean                         @default(false) @map("entered_late")
+  lateEntryMinutes                   Int?                            @map("late_entry_minutes")
+  lateEntryReason                    String?                         @map("late_entry_reason")
   // Past-dated maintenance has no location evidence by policy.
-  latitude                 Decimal?                      @db.Decimal(9, 6)
-  longitude                Decimal?                      @db.Decimal(9, 6)
-  accuracyMeters           Decimal?                      @map("accuracy_meters") @db.Decimal(8, 2)
-  locationPresenceConfirmed Boolean                      @default(true) @map("location_presence_confirmed")
-  locationCapturedAt       DateTime?                     @map("location_captured_at")
-  locationLearningEligible Boolean                       @default(true) @map("location_learning_eligible")
-  locationReviewRequired   Boolean                       @default(false) @map("location_review_required")
-  suspiciousBatch          Boolean                       @default(false) @map("suspicious_batch")
-  reviewRecommended        Boolean                       @default(false) @map("review_recommended")
-  reviewReason             String?                       @map("review_reason")
-  status                   VisitStatus                   @default(VALID)
-  reversedAt               DateTime?                     @map("reversed_at")
-  reversedByUserId         String?                       @map("reversed_by_user_id") @db.Uuid
-  serviceSlipStatus        PaperworkStatus               @default(PENDING) @map("service_slip_status")
-  confirmationStatus       PaperworkStatus               @default(PENDING) @map("confirmation_status")
-  coolerCount              Int?                          @map("cooler_count")
-  towerCount               Int?                          @map("tower_count")
-  tapCount                 Int?                          @map("tap_count")
-  smarttapCount            Int?                          @map("smarttap_count")
-  equipmentConfirmed       Boolean                       @default(false) @map("equipment_confirmed")
-  idempotencyKey           String                        @unique @map("idempotency_key")
-  createdAt                DateTime                      @default(now()) @map("created_at")
-  paperworkHistory         PaperworkStatusHistory[]
-  reviewResolutions        MaintenanceReviewResolution[]
+  latitude                           Decimal?                        @db.Decimal(9, 6)
+  longitude                          Decimal?                        @db.Decimal(9, 6)
+  accuracyMeters                     Decimal?                        @map("accuracy_meters") @db.Decimal(8, 2)
+  locationPresenceConfirmed          Boolean                         @default(true) @map("location_presence_confirmed")
+  locationCapturedAt                 DateTime?                       @map("location_captured_at")
+  locationLearningEligible           Boolean                         @default(true) @map("location_learning_eligible")
+  locationReviewRequired             Boolean                         @default(false) @map("location_review_required")
+  suspiciousBatch                    Boolean                         @default(false) @map("suspicious_batch")
+  reviewRecommended                  Boolean                         @default(false) @map("review_recommended")
+  reviewReason                       String?                         @map("review_reason")
+  status                             VisitStatus                     @default(VALID)
+  reversedAt                         DateTime?                       @map("reversed_at")
+  reversedByUserId                   String?                         @map("reversed_by_user_id") @db.Uuid
+  serviceSlipStatus                  PaperworkStatus                 @default(PENDING) @map("service_slip_status")
+  confirmationStatus                 PaperworkStatus                 @default(PENDING) @map("confirmation_status")
+  confirmationReconciliationEligible Boolean                         @default(false) @map("confirmation_reconciliation_eligible")
+  confirmationApprovalSource         ConfirmationApprovalSource?     @map("confirmation_approval_source")
+  confirmationReconciledAt           DateTime?                       @map("confirmation_reconciled_at")
+  confirmationEvidenceAcquiredAt     DateTime?                       @map("confirmation_evidence_acquired_at")
+  confirmationEvidenceImportRunId    String?                         @map("confirmation_evidence_import_run_id") @db.Uuid
+  // These counts are immutable visit evidence and intentionally do not follow later point inventory edits.
+  totalCoolerCount                   Int?                            @map("total_cooler_count")
+  // Null preserves legacy visits so confirmation reconciliation can fall back to coolerCount.
+  maintainedCoolerCount              Int?                            @map("maintained_cooler_count")
+  missingMaintenanceCount            Int?                            @map("missing_maintenance_count")
+  missingMaintenanceExplanation      String?                         @map("missing_maintenance_explanation") @db.Text
+  coolerCount                        Int?                            @map("cooler_count")
+  towerCount                         Int?                            @map("tower_count")
+  tapCount                           Int?                            @map("tap_count")
+  smarttapCount                      Int?                            @map("smarttap_count")
+  equipmentConfirmed                 Boolean                         @default(false) @map("equipment_confirmed")
+  idempotencyKey                     String                          @unique @map("idempotency_key")
+  createdAt                          DateTime                        @default(now()) @map("created_at")
+  paperworkHistory                   PaperworkStatusHistory[]
+  reviewResolutions                  MaintenanceReviewResolution[]
+  confirmationReconciliations        SapConfirmationReconciliation[]
 
   @@index([pointId, performedAt])
   @@index([technicianId, performedAt])
   @@index([assistedForTechnicianId, performedAt])
   @@index([serviceSlipStatus, confirmationStatus])
+  @@index([confirmationReconciliationEligible, confirmationStatus])
   @@map("maintenance_visits")
 }
 
@@ -456,25 +484,81 @@ model MaintenanceReviewResolution {
 }
 
 model SapConfirmation {
-  confirmationId  String   @id @map("confirmation_id")
-  dealer          String?  @map("dealer")
-  pointCode       String?  @map("point_code")
-  pointName       String?  @map("point_name")
-  recordDate      DateTime @map("record_date") @db.Date
-  creator         String?  @map("creator")
-  netValue        Decimal? @map("net_value") @db.Decimal(14, 2)
-  status          String?  @map("status")
-  contact         String?  @map("contact")
-  costCenter      String?  @map("cost_center")
-  transactionType String?  @map("transaction_type")
-  systemStatus    String?  @map("system_status")
-  productId       String   @default("203") @map("product_id")
-  sourceSyncedAt  DateTime @default(now()) @map("source_synced_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  confirmationId   String        @id @map("confirmation_id")
+  dealer           String?       @map("dealer")
+  pointCode        String?       @map("point_code")
+  pointName        String?       @map("point_name")
+  recordDate       DateTime      @map("record_date") @db.Date
+  creator          String?       @map("creator")
+  netValue         Decimal?      @map("net_value") @db.Decimal(14, 2)
+  status           String?       @map("status")
+  contact          String?       @map("contact")
+  costCenter       String?       @map("cost_center")
+  transactionType  String?       @map("transaction_type")
+  systemStatus     String?       @map("system_status")
+  productId        String        @default("203") @map("product_id")
+  lastSeenImportId String?       @map("last_seen_import_id") @db.Uuid
+  lastSeenImport   SapImportRun? @relation(fields: [lastSeenImportId], references: [id])
+  sourceSyncedAt   DateTime      @default(now()) @map("source_synced_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   @@index([recordDate])
   @@index([pointCode])
   @@index([status])
+  @@index([lastSeenImportId])
   @@map("sap_confirmations")
+}
+
+model SapImportRun {
+  id                   String                          @id @db.Uuid
+  source               SapImportSource
+  status               SapImportRunStatus              @default(SUCCESS)
+  windowStart          DateTime                        @map("window_start") @db.Date
+  windowEnd            DateTime                        @map("window_end") @db.Date
+  rowCount             Int                             @map("row_count")
+  acquiredAt           DateTime                        @map("acquired_at")
+  completedAt          DateTime                        @default(now()) @map("completed_at")
+  claimedAt            DateTime?                       @map("claimed_at")
+  reconciledAt         DateTime?                       @map("reconciled_at")
+  confirmations        SapConfirmation[]
+  confirmationEvidence SapConfirmationImportEvidence[]
+  reconciliations      SapConfirmationReconciliation[]
+
+  @@index([source, reconciledAt, completedAt])
+  @@map("sap_import_runs")
+}
+
+model SapConfirmationImportEvidence {
+  id             String       @id @default(uuid()) @db.Uuid
+  importRunId    String       @map("import_run_id") @db.Uuid
+  importRun      SapImportRun @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  confirmationId String       @map("confirmation_id")
+  pointCode      String       @map("point_code")
+  recordDate     DateTime     @map("record_date") @db.Date
+  status         String?
+  productId      String       @map("product_id")
+
+  @@unique([importRunId, confirmationId])
+  @@index([importRunId, pointCode, recordDate])
+  @@map("sap_confirmation_import_evidence")
+}
+
+model SapConfirmationReconciliation {
+  id                        String                      @id @default(uuid()) @db.Uuid
+  importRunId               String                      @map("import_run_id") @db.Uuid
+  importRun                 SapImportRun                @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  visitId                   String                      @map("visit_id") @db.Uuid
+  visit                     MaintenanceVisit            @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  previousStatus            PaperworkStatus             @map("previous_status")
+  nextStatus                PaperworkStatus             @map("next_status")
+  approvalSource            ConfirmationApprovalSource? @map("approval_source")
+  sapCount                  Int                         @map("sap_count")
+  requiredConfirmationCount Int                         @map("required_confirmation_count")
+  maintenanceDate           DateTime                    @map("maintenance_date") @db.Date
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+
+  @@unique([importRunId, visitId])
+  @@index([visitId, createdAt])
+  @@map("sap_confirmation_reconciliations")
 }

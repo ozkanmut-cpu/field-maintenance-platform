@@ -36,7 +36,7 @@ function formatDateTime(value: unknown) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 function paperworkStatus(value: unknown) {
-  const labels: Record<string, string> = { PENDING: 'Bekliyor', PRESENT: 'Mevcut', MISSING: 'Eksik' };
+  const labels: Record<string, string> = { PENDING: 'Bekliyor', PRESENT: 'Mevcut', MISSING: 'Eksik', PENDING_REVIEW: 'İnceleme bekliyor', APPROVED: 'Onaylandı' };
   return labels[String(value)] ?? shortValue(value);
 }
 function technicianName(item: RecordItem) {
@@ -74,7 +74,10 @@ function timelineTitle(type: unknown) {
 }
 function timelineDetail(item: RecordItem) {
   const data = timelineData(item);
-  if (item.type === 'MAINTENANCE') return `${technicianName(data)} · ${maintenanceStatus(data.status)}`;
+  if (item.type === 'MAINTENANCE') {
+    const partialMaintenance = typeof data.totalCoolerCount === 'number' && typeof data.maintainedCoolerCount === 'number' ? ` · Soğutucu ${data.maintainedCoolerCount}/${data.totalCoolerCount}${typeof data.missingMaintenanceCount === 'number' && data.missingMaintenanceCount > 0 ? ` · ${data.missingMaintenanceCount} eksik` : ''}` : '';
+    return `${technicianName(data)} · ${maintenanceStatus(data.status)}${partialMaintenance}`;
+  }
   if (item.type === 'ATTEMPT') return `${technicianName(data)} · ${shortValue(data.reason)} · ${maintenanceStatus(data.reviewStatus)}`;
   if (item.type === 'NON_MAINTENANCE_VISIT') return `${technicianName(data)} · ${shortValue(data.purpose)}`;
   if (item.type === 'OBLIGATION') return `${shortValue(data.cycleKey)} · ${maintenanceStatus(data.status)}`;

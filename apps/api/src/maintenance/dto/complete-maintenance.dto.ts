@@ -47,6 +47,9 @@ export class CompleteMaintenanceDto {
   lateEntryReason?: string;
 
   @IsOptional() @IsInt() @Min(0) coolerCount?: number;
+  @IsOptional() @IsBoolean() equipmentCorrectionRequested?: boolean;
+  @IsOptional() @IsInt() @Min(0) maintainedCoolerCount?: number;
+  @IsOptional() @IsString() @MaxLength(500) missingMaintenanceExplanation?: string;
   @IsOptional() @IsInt() @Min(0) towerCount?: number;
   @IsOptional() @IsInt() @Min(0) tapCount?: number;
   @IsOptional() @IsInt() @Min(0) smarttapCount?: number;

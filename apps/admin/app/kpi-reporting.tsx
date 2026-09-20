@@ -12,7 +12,7 @@ type Report = {
   daily: Array<{ date: string } & Activity>;
   technicians: Array<{ technicianId: string; name: string } & Activity>;
 };
-type Statuses = { pending: number; present: number; missing: number };
+type Statuses = { pending: number; present: number; missing: number; approved: number };
 type Filters = { from: string; to: string; technicianId: string };
 type Setters = { report: (value: Report | null) => void; error: (value: string) => void; loading: (value: boolean) => void };
 type FetchResult = { ok: boolean; status?: number; json: () => Promise<any> };
@@ -47,7 +47,7 @@ export function startKpiRequest(filters: Filters, set: Setters,
 }
 
 function StatusRow({ label, value }: { label: string; value: Statuses }) {
-  return <tr><th scope="row"><strong>{label}</strong></th><td>{value.pending}</td><td>{value.present}</td><td>{value.missing}</td></tr>;
+  return <tr><th scope="row"><strong>{label}</strong></th><td>{value.pending}</td><td>{value.present}</td><td>{value.missing}</td><td>{value.approved}</td></tr>;
 }
 function rate(value: number | null) { return value === null ? '—' : `%${value.toLocaleString('tr-TR')}`; }
 
@@ -63,7 +63,7 @@ export function KpiReportView({ report }: { report: Report }) {
       <div className="dashboardCard"><span>Dönem sonu açık</span><strong>{m.currentOpen} / {m.overdueOpen}</strong><small>Güncel / geciken · Atamasız: {m.unassignedOpen}</small></div>
     </section>
     <p className="muted">Evrak sayıları dönem içindeki bakımların mevcut durumudur. Açık görevler dönem sonu için yeniden oluşturulan tarihsel görünümdür.</p>
-    <div className="tableWrap"><table><thead><tr><th scope="col">Evrak</th><th scope="col">Bekliyor</th><th scope="col">Var</th><th scope="col">Eksik</th></tr></thead>
+    <div className="tableWrap"><table><thead><tr><th scope="col">Evrak</th><th scope="col">Bekliyor</th><th scope="col">Var</th><th scope="col">Eksik</th><th scope="col">Onaylandı</th></tr></thead>
       <tbody><StatusRow label="Servis fişi" value={report.paperwork.serviceSlip} /><StatusRow label="Teyit" value={report.paperwork.confirmation} /></tbody></table></div>
     <div className="tableWrap"><table><thead><tr><th scope="col">Günlük trend</th><th scope="col">Bakım</th><th scope="col">Yapılamadı</th><th scope="col">Başarı</th><th scope="col">Yardım verdi</th><th scope="col">Yardım aldı</th></tr></thead>
       <tbody>{report.daily.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{row.completedMaintenance}</td><td>{row.attemptCount}</td><td>{rate(row.successRate)}</td><td>{row.helpedMaintenance}</td><td>{row.receivedHelpMaintenance}</td></tr>)}</tbody></table></div>

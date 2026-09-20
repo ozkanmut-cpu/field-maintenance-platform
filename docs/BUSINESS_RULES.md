@@ -97,18 +97,28 @@ This does not complete the obligation. The point remains due.
 ## Paperwork
 
 For every valid maintenance:
-- Service Slip: `PENDING | PRESENT | MISSING`
-- Confirmation: `PENDING | PRESENT | MISSING`
+- Service Slip: `PENDING | PRESENT | MISSING | APPROVED`
+- Confirmation: `PENDING | PRESENT | MISSING | APPROVED`
 
 Rules:
 - New maintenance starts `PENDING`.
 - Time passing never converts `PENDING` to `MISSING`.
-- Only admin can mark `MISSING`.
+- Only admin can mark a service slip `MISSING`; Standard confirmation has the successful-import rule below.
 - AI never decides `MISSING`.
 - `MISSING` may later become `PRESENT`.
 - All state changes are audited.
 - Paperwork does not change maintenance validity and does not reopen maintenance obligations.
 - Technician sees only admin-marked missing paperwork for their own valid maintenance.
+
+### Standard SAP confirmation reconciliation
+
+- Standard-point confirmation evidence is matched by point code and the Istanbul calendar date of the maintenance.
+- Only a committed successful Export 1 receipt may reconcile a visit; each receipt keeps an immutable evidence snapshot.
+- Each visit stores the newest processed acquisition watermark. Older receipts cannot change confirmation state or create reconciliation audit; equal acquisition times use receipt ID as a deterministic tiebreaker.
+- The required confirmation count is `maintainedCoolerCount ?? coolerCount`. A maintained count of zero creates no confirmation transition or audit. Track C owns capturing and validating `maintainedCoolerCount`; legacy visits continue to use their `coolerCount` snapshot.
+- `*Onay Bekliyor` evidence produces `PRESENT`; other SAP statuses produce `APPROVED/AUTO_SAP`; insufficient evidence after a successful post-maintenance snapshot produces `MISSING`.
+- `APPROVED/MANUAL_ADMIN` is locked against later SAP imports.
+- These rules do not apply to SmartClean visits.
 
 ## Location learning
 

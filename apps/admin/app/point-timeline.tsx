@@ -5,7 +5,19 @@ import { AdminIcon } from './admin-icons';
 import type { AdminLocation, AdminSection } from './admin-navigation';
 
 type Point = { id: string; code: string; name: string; maintenanceType: string; region?: { id: string; name: string } | null };
-type TimelineItem = { id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'OBLIGATION' | 'ASSIGNMENT'; at: string; data: Record<string, any> };
+type TimelineData = {
+  technician?: { name?: string };
+  status?: string;
+  serviceSlipStatus?: string;
+  confirmationStatus?: string;
+  enteredLate?: boolean;
+  totalCoolerCount?: number | null;
+  maintainedCoolerCount?: number | null;
+  missingMaintenanceCount?: number | null;
+  missingMaintenanceExplanation?: string | null;
+  [key: string]: any;
+};
+type TimelineItem = { id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'OBLIGATION' | 'ASSIGNMENT'; at: string; data: TimelineData };
 type TimelineResponse = {
   point: Point;
   counts: { maintenance: number; attempts: number; nonMaintenanceVisits: number; obligations: number; assignments: number };
@@ -59,7 +71,12 @@ export default function PointTimeline({ onNavigate }: { onNavigate: (section: Ad
 
   function summary(item: TimelineItem) {
     const d = item.data;
-    if (item.type === 'MAINTENANCE') return `${d.technician?.name || '—'} · ${d.status} · Fiş ${d.serviceSlipStatus} · Teyit ${d.confirmationStatus}${d.enteredLate ? ' · Geç giriş' : ''}`;
+    if (item.type === 'MAINTENANCE') {
+      const partial = d.totalCoolerCount != null && d.maintainedCoolerCount != null
+        ? ` · Soğutucu ${d.maintainedCoolerCount}/${d.totalCoolerCount}${d.missingMaintenanceCount ? ` (${d.missingMaintenanceCount} eksik${d.missingMaintenanceExplanation ? `: ${d.missingMaintenanceExplanation}` : ''})` : ''}`
+        : '';
+      return `${d.technician?.name || '—'} · ${d.status} · Fiş ${d.serviceSlipStatus} · Teyit ${d.confirmationStatus}${d.enteredLate ? ' · Geç giriş' : ''}${partial}`;
+    }
     if (item.type === 'ATTEMPT') return `${d.technician?.name || '—'} · ${d.reason} · ${d.reviewStatus}${d.note ? ` · ${d.note}` : ''}`;
     if (item.type === 'NON_MAINTENANCE_VISIT') return `${d.technician?.name || '—'} · ${d.purpose}${d.note ? ` · ${d.note}` : ''}`;
     if (item.type === 'OBLIGATION') return `${d.cycleKey} · ${d.status} · ${new Date(d.dueStart).toLocaleDateString('tr-TR')}–${new Date(d.dueEnd).toLocaleDateString('tr-TR')}`;

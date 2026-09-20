@@ -12,6 +12,7 @@ import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 import { PointTimelineController } from './point-timeline.controller';
 import { PointTimelineService } from './point-timeline.service';
+import { SapConfirmationReconciliationService } from './sap-confirmation-reconciliation.service';
 
 @Module({
   imports: [AssignmentsModule],
@@ -26,6 +27,7 @@ import { PointTimelineService } from './point-timeline.service';
     MaintenanceObligationService,
     MaintenanceService,
     PointTimelineService,
+    SapConfirmationReconciliationService,
   ],
   exports: [
     MaintenanceEngineService,
@@ -37,6 +39,7 @@ import { PointTimelineService } from './point-timeline.service';
     MaintenanceObligationService,
     MaintenanceService,
     PointTimelineService,
+    SapConfirmationReconciliationService,
   ],
 })
 export class MaintenanceModule {}

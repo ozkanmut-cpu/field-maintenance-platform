@@ -18,6 +18,7 @@ function makeService() {
       ]; },
       count: async (args: any) => {
         calls.push(['visitCount', args]);
+        if (args.where.serviceSlipStatus?.in?.includes(PaperworkStatus.PENDING_REVIEW)) return 6;
         if (args.where.serviceSlipStatus === PaperworkStatus.PENDING) return 4;
         if (args.where.confirmationStatus === PaperworkStatus.PENDING) return 3;
         return 0;
@@ -46,7 +47,7 @@ test('daily admin summary uses Istanbul day bounds and combines field activity, 
   assert.deepEqual(result.metrics, {
     completedMaintenance: 3, fieldTechnicianCount: 2, attemptCount: 2, nonMaintenanceVisitCount: 1,
     currentOpen: 2, overdueOpen: 2, unassignedOpen: 1,
-    paperworkPending: 7, serviceSlipPending: 4, confirmationPending: 3,
+    paperworkPending: 9, serviceSlipPending: 6, confirmationPending: 3,
   });
   assert.deepEqual(result.technicians, [
     { technicianId: 't1', name: 'Ali', username: 'ali', completedMaintenance: 2, attempts: 1, nonMaintenanceVisits: 0, currentOpen: 1, overdueOpen: 1 },
@@ -57,6 +58,7 @@ test('daily admin summary uses Istanbul day bounds and combines field activity, 
   assert.equal(visitQuery.where.performedAt.gte.toISOString(), '2026-09-15T21:00:00.000Z');
   assert.equal(visitQuery.where.performedAt.lt.toISOString(), '2026-09-16T21:00:00.000Z');
   assert.deepEqual(calls.find(([kind]) => kind === 'due'), ['due', '2026-09-16']);
+  assert.deepEqual(calls.find(([kind, args]) => kind === 'visitCount' && args.where.serviceSlipStatus?.in)?.[1].where.serviceSlipStatus.in, [PaperworkStatus.PENDING, PaperworkStatus.PENDING_REVIEW]);
 });
 
 test('daily admin summary rejects invalid date input', async () => {
