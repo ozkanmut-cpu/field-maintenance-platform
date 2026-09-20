@@ -743,31 +743,33 @@ export class MaintenanceService {
     if (!admin) throw new ForbiddenException('Bu işlemi yalnızca admin yapabilir');
     if (!attempt) throw new NotFoundException('Yapılamadı kaydı bulunamadı');
     if (attempt.reviewStatus !== AttemptReviewStatus.PENDING) {
-      throw new BadRequestException('Bu kayıt daha önce incelenmiş');
+      throw new ConflictException('Bu kayıt daha önce incelenmiş');
     }
 
     if (dto.decision === AttemptAdminDecision.REJECTED) {
-      const updated = await this.prisma.maintenanceAttempt.update({
-        where: { id: attempt.id },
-        data: { reviewStatus: AttemptReviewStatus.REJECTED, reviewedAt: new Date(), reviewedById: admin.id, reviewNote: dto.note?.trim() || null },
+      return this.prisma.$transaction(async (tx) => {
+        const reviewedAt = new Date();
+        const claimed = await tx.maintenanceAttempt.updateMany({
+          where: { id: attempt.id, reviewStatus: AttemptReviewStatus.PENDING },
+          data: { reviewStatus: AttemptReviewStatus.REJECTED, reviewedAt, reviewedById: admin.id, reviewNote: dto.note?.trim() || null },
+        });
+        if (claimed.count !== 1) throw new ConflictException('Bu kayıt başka bir admin tarafından incelendi');
+        const updated = await tx.maintenanceAttempt.findUnique({ where: { id: attempt.id } });
+        await tx.adminAuditLog.create({ data: { entityType: 'MAINTENANCE_ATTEMPT', entityId: attempt.id, action: 'REJECTED', actorId: admin.id, note: dto.note?.trim() || null } });
+        return { closed: false, attempt: updated };
       });
-      await this.prisma.adminAuditLog.create({ data: { entityType: 'MAINTENANCE_ATTEMPT', entityId: attempt.id, action: 'REJECTED', actorId: admin.id, note: dto.note?.trim() || null } });
-      return { closed: false, attempt: updated };
     }
 
     let closedDueDate: Date | null = null;
     return this.prisma.$transaction(async (tx) => {
       let closedObligations = 0;
+      let openObligationIds: string[] = [];
       if (attempt.point.maintenanceType === MaintenanceType.STANDARD) {
         const dueDate = this.dateOnly(attempt.attemptedAt);
         const open = await tx.maintenanceObligation.findMany({ where: { pointId: attempt.pointId, status: MaintenanceObligationStatus.OPEN, dueStart: { lte: dueDate } }, select: { id: true, dueStart: true } });
         if (open.length) {
           closedDueDate = open.reduce((latest, item) => item.dueStart > latest ? item.dueStart : latest, open[0].dueStart);
-          const result = await tx.maintenanceObligation.updateMany({
-            where: { id: { in: open.map((item) => item.id) }, status: MaintenanceObligationStatus.OPEN },
-            data: { status: MaintenanceObligationStatus.MISSED, resolvedAt: attempt.attemptedAt, resolvedByAttemptId: attempt.id, completedAt: null },
-          });
-          closedObligations = result.count;
+          openObligationIds = open.map((item) => item.id);
         }
       } else {
         const base = attempt.point.visits[0]?.performedAt ?? attempt.point.smartcleanReferenceAt;
@@ -778,10 +780,19 @@ export class MaintenanceService {
         }
       }
 
-      const updated = await tx.maintenanceAttempt.update({
-        where: { id: attempt.id },
+      const claimed = await tx.maintenanceAttempt.updateMany({
+        where: { id: attempt.id, reviewStatus: AttemptReviewStatus.PENDING },
         data: { reviewStatus: AttemptReviewStatus.APPROVED, reviewedAt: new Date(), reviewedById: admin.id, reviewNote: dto.note?.trim() || null, closedDueDate },
       });
+      if (claimed.count !== 1) throw new ConflictException('Bu kayıt başka bir admin tarafından incelendi');
+      if (openObligationIds.length) {
+        const result = await tx.maintenanceObligation.updateMany({
+          where: { id: { in: openObligationIds }, status: MaintenanceObligationStatus.OPEN },
+          data: { status: MaintenanceObligationStatus.MISSED, resolvedAt: attempt.attemptedAt, resolvedByAttemptId: attempt.id, completedAt: null },
+        });
+        closedObligations = result.count;
+      }
+      const updated = await tx.maintenanceAttempt.findUnique({ where: { id: attempt.id } });
       await tx.adminAuditLog.create({
         data: { entityType: 'MAINTENANCE_ATTEMPT', entityId: attempt.id, action: 'APPROVED_TASK_CLOSED', actorId: admin.id, newValue: { pointId: attempt.pointId, closedObligations, closedDueDate: closedDueDate?.toISOString() ?? null }, note: dto.note?.trim() || null },
       });
