@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AttemptReviewStatus,
+  ConfirmationApprovalSource,
   MaintenanceObligationStatus,
   MaintenanceType,
   PaperworkKind,
@@ -357,6 +358,7 @@ export class MaintenanceService {
             tapCount: equipment.tapCount!,
             smarttapCount: equipment.smarttapCount!,
             equipmentConfirmed: true,
+            confirmationReconciliationEligible: point.maintenanceType === MaintenanceType.STANDARD,
             status: VisitStatus.VALID,
             idempotencyKey: dto.idempotencyKey,
           },
@@ -1084,7 +1086,10 @@ export class MaintenanceService {
         data:
           dto.kind === PaperworkKind.SERVICE_SLIP
             ? { serviceSlipStatus: dto.status }
-            : { confirmationStatus: dto.status },
+            : {
+              confirmationStatus: dto.status,
+              confirmationApprovalSource: dto.status === PaperworkStatus.APPROVED ? ConfirmationApprovalSource.MANUAL_ADMIN : null,
+            },
       });
 
       await tx.paperworkStatusHistory.create({

@@ -32,6 +32,20 @@ enum PaperworkStatus {
   PENDING
   PRESENT
   MISSING
+  APPROVED
+}
+
+enum ConfirmationApprovalSource {
+  AUTO_SAP
+  MANUAL_ADMIN
+}
+
+enum SapImportSource {
+  MAIN_CONFIRMATION_203
+}
+
+enum SapImportRunStatus {
+  SUCCESS
 }
 
 enum PaperworkKind {
@@ -352,6 +366,10 @@ model MaintenanceVisit {
   reversedByUserId         String?                       @map("reversed_by_user_id") @db.Uuid
   serviceSlipStatus        PaperworkStatus               @default(PENDING) @map("service_slip_status")
   confirmationStatus       PaperworkStatus               @default(PENDING) @map("confirmation_status")
+  // Frozen at completion: only valid STANDARD visits can be reconciled from SAP.
+  confirmationReconciliationEligible Boolean             @default(false) @map("confirmation_reconciliation_eligible")
+  confirmationApprovalSource ConfirmationApprovalSource?  @map("confirmation_approval_source")
+  confirmationReconciledAt  DateTime?                     @map("confirmation_reconciled_at")
   coolerCount              Int?                          @map("cooler_count")
   towerCount               Int?                          @map("tower_count")
   tapCount                 Int?                          @map("tap_count")
@@ -361,11 +379,13 @@ model MaintenanceVisit {
   createdAt                DateTime                      @default(now()) @map("created_at")
   paperworkHistory         PaperworkStatusHistory[]
   reviewResolutions        MaintenanceReviewResolution[]
+  confirmationReconciliations SapConfirmationReconciliation[]
 
   @@index([pointId, performedAt])
   @@index([technicianId, performedAt])
   @@index([assistedForTechnicianId, performedAt])
   @@index([serviceSlipStatus, confirmationStatus])
+  @@index([confirmationReconciliationEligible, confirmationStatus])
   @@map("maintenance_visits")
 }
 
@@ -469,6 +489,8 @@ model SapConfirmation {
   transactionType String?  @map("transaction_type")
   systemStatus    String?  @map("system_status")
   productId       String   @default("203") @map("product_id")
+  lastSeenImportId String? @map("last_seen_import_id") @db.Uuid
+  lastSeenImport   SapImportRun? @relation(fields: [lastSeenImportId], references: [id])
   sourceSyncedAt  DateTime @default(now()) @map("source_synced_at")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -476,5 +498,44 @@ model SapConfirmation {
   @@index([recordDate])
   @@index([pointCode])
   @@index([status])
+  @@index([lastSeenImportId])
   @@map("sap_confirmations")
+}
+
+// A receipt is created in the same database transaction as the validated SAP import.
+// Failed and dry-run attempts intentionally have no row and therefore cannot reconcile visits.
+model SapImportRun {
+  id          String             @id @db.Uuid
+  source      SapImportSource
+  status      SapImportRunStatus @default(SUCCESS)
+  windowStart DateTime           @map("window_start") @db.Date
+  windowEnd   DateTime           @map("window_end") @db.Date
+  rowCount    Int                @map("row_count")
+  completedAt DateTime           @default(now()) @map("completed_at")
+  claimedAt   DateTime?          @map("claimed_at")
+  reconciledAt DateTime?         @map("reconciled_at")
+  confirmations SapConfirmation[]
+  reconciliations SapConfirmationReconciliation[]
+
+  @@index([source, reconciledAt, completedAt])
+  @@map("sap_import_runs")
+}
+
+// System reconciliation audit is separate from admin-owned paperwork history.
+model SapConfirmationReconciliation {
+  id          String             @id @default(uuid()) @db.Uuid
+  importRunId String             @map("import_run_id") @db.Uuid
+  importRun   SapImportRun       @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  visitId     String             @map("visit_id") @db.Uuid
+  visit       MaintenanceVisit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  previousStatus PaperworkStatus @map("previous_status")
+  nextStatus  PaperworkStatus    @map("next_status")
+  approvalSource ConfirmationApprovalSource? @map("approval_source")
+  sapCount    Int                @map("sap_count")
+  coolerCount Int                @map("cooler_count")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  @@unique([importRunId, visitId])
+  @@index([visitId, createdAt])
+  @@map("sap_confirmation_reconciliations")
 }
