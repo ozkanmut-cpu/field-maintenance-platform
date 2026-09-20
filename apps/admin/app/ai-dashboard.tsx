@@ -25,26 +25,27 @@ const riskLabel = (value: Risk['severity']) => ({ UNKNOWN: 'Bilinmiyor', LOW: 'D
 export default function AiDashboard() {
 const [data, setData] = useState<Dashboard | null>(null);
 const [busy, setBusy] = useState(false);
-const [error, setError] = useState('');
+const [loadError, setLoadError] = useState('');
+const [actionError, setActionError] = useState('');
 const [feedbackBusy, setFeedbackBusy] = useState<string | null>(null);
 const [kpiBusy, setKpiBusy] = useState(false);
 const [feedbackById, setFeedbackById] = useState<Record<string, string>>({});
 const loadSequence = useRef(0);
 async function load() {
 const requestId = ++loadSequence.current;
-setBusy(true); setError('');
+setBusy(true); setLoadError('');
 try {
 const response = await fetch('/api/backend/ai/admin-dashboard?weeks=12');
 const body = await response.json().catch(() => null);
 if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
 if (requestId !== loadSequence.current) return;
 setData(body as Dashboard);
-} catch (e) { if (requestId === loadSequence.current) setError(e instanceof Error ? e.message : String(e)); }
+} catch (e) { if (requestId === loadSequence.current) setLoadError(e instanceof Error ? e.message : String(e)); }
 finally { if (requestId === loadSequence.current) setBusy(false); }
 }
 useEffect(() => { void load(); }, []);
 async function downloadKpi() {
-  setKpiBusy(true); setError('');
+  setKpiBusy(true); setActionError('');
   try {
     const response = await fetch('/api/backend/ai/kpi-report?weeks=12');
     const body = await response.json().catch(() => null);
@@ -54,11 +55,12 @@ async function downloadKpi() {
     const anchor = document.createElement('a');
     anchor.href = url; anchor.download = body.filename || 'ai-kpi.csv'; anchor.click();
     URL.revokeObjectURL(url);
-  } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  } catch (e) { setActionError(e instanceof Error ? e.message : String(e)); }
   finally { setKpiBusy(false); }
 }
 async function sendFeedback(recommendationId: string, decision: 'ACCEPTED' | 'REJECTED') {
   setFeedbackBusy(recommendationId);
+  setActionError('');
   try {
     const response = await fetch('/api/backend/ai/recommendation-feedback', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -67,14 +69,14 @@ async function sendFeedback(recommendationId: string, decision: 'ACCEPTED' | 'RE
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(body?.message || `HTTP ${response.status}`);
     setFeedbackById((current) => ({ ...current, [recommendationId]: decision }));
-  } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  } catch (e) { setActionError(e instanceof Error ? e.message : String(e)); }
   finally { setFeedbackBusy(null); }
 }
-if (!data) return <section className="panel"><div className="panelHeader"><div><h2>Sanal İstatistikçi</h2><p>AI analizleri hazırlanıyor.</p></div></div>{error ? <div className="error banner">{error}</div> : <div className="emptyState"><AdminIcon name={busy ? 'clock' : 'analytics'} /><strong>{busy ? 'Analiz hazırlanıyor' : 'Analiz verisi yok'}</strong><span>{busy ? 'Son haftaların saha verileri işleniyor.' : 'Yeterli veri oluştuğunda burada görünecek.'}</span></div>}</section>;
+if (!data) return <section className="panel"><div className="panelHeader"><div><h2>Sanal İstatistikçi</h2><p>AI analizleri hazırlanıyor.</p></div></div>{loadError ? <div className="error banner" role="alert">{loadError}<div className="rowActions"><button className="ghost" onClick={() => void load()} disabled={busy}>Tekrar dene</button></div></div> : <div className="emptyState"><AdminIcon name={busy ? 'clock' : 'analytics'} /><strong>{busy ? 'Analiz hazırlanıyor' : 'Analiz verisi yok'}</strong><span>{busy ? 'Son haftaların saha verileri işleniyor.' : 'Yeterli veri oluştuğunda burada gösterilecek.'}</span></div>}</section>;
 const currentUnassigned = data.unassigned.standardCurrent + data.unassigned.smartcleanCurrent;
 return <>
 <section className="stats"><div className="stat"><strong>{data.maturity.overallScore}</strong><span>AI olgunluk skoru</span></div><div className="stat"><strong>{data.dataQuality.score}</strong><span>Veri kalite skoru</span></div><div className="stat"><strong>{stateLabel(data.maturity.overallState)}</strong><span>Genel durum</span></div><div className="stat"><strong>{Math.round(data.maturity.evidence.locationCoverage * 100)}%</strong><span>Konum kapsaması</span></div><div className="stat"><strong>{Math.round(data.maturity.evidence.equipmentProfileCoverage * 100)}%</strong><span>Ekipman kapsaması</span></div><div className="stat"><strong>{currentUnassigned}</strong><span>Atanmamış mevcut iş</span></div></section>
-<section className="panel"><div className="panelHeader"><div><h2>Sanal İstatistikçi</h2><p>Son {data.weeks} haftalık veriden üretilen kapasite, risk ve veri olgunluğu görünümü. · {data.engineVersion}</p></div><div className="rowActions"><button className="ghost" onClick={() => void downloadKpi()} disabled={kpiBusy}>{kpiBusy ? 'HAZIRLANIYOR' : 'KPI CSV'}</button><button className="ghost iconAction" onClick={() => void load()} disabled={busy}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div></div>{error ? <div className="error banner">{error}</div> : null}<div className="tableWrap"><table><thead><tr><th>Yetenek</th><th>Durum</th><th>Skor</th><th>Veri kalitesi</th><th>Açıklama</th></tr></thead><tbody>{data.maturity.capabilities.map((item) => <tr key={item.capability}><td><strong>{item.capability}</strong></td><td><span className={item.state === 'ACTIVE' || item.state === 'RELIABLE' ? 'pill active' : 'pill'}>{stateLabel(item.state)}</span></td><td>{item.score}</td><td>{item.qualityScore}</td><td className="muted">{item.reasons.join(' · ')}</td></tr>)}</tbody></table></div></section>
+<section className="panel"><div className="panelHeader"><div><h2>Sanal İstatistikçi</h2><p>Son {data.weeks} haftalık veriden üretilen kapasite, risk ve veri olgunluğu görünümü. · {data.engineVersion}</p></div><div className="rowActions"><button className="ghost" onClick={() => void downloadKpi()} disabled={kpiBusy}>{kpiBusy ? 'HAZIRLANIYOR' : 'KPI CSV'}</button><button className="ghost iconAction" onClick={() => void load()} disabled={busy}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div></div>{loadError ? <div className="error banner" role="alert">{loadError}</div> : null}{actionError ? <div className="error banner" role="alert">{actionError}</div> : null}<div className="tableWrap"><table><thead><tr><th>Yetenek</th><th>Durum</th><th>Skor</th><th>Veri kalitesi</th><th>Açıklama</th></tr></thead><tbody>{data.maturity.capabilities.map((item) => <tr key={item.capability}><td><strong>{item.capability}</strong></td><td><span className={item.state === 'ACTIVE' || item.state === 'RELIABLE' ? 'pill active' : 'pill'}>{stateLabel(item.state)}</span></td><td>{item.score}</td><td>{item.qualityScore}</td><td className="muted">{item.reasons.join(' · ')}</td></tr>)}</tbody></table></div></section>
 <section className="panel"><div className="panelHeader"><div><h2>Teknisyen Kapasitesi</h2><p>Mevcut iş yükü ile öğrenilmiş haftalık baseline karşılaştırması.</p></div></div><div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Baseline</th><th>Mevcut iş</th><th>Devreden</th><th>Ekipman verisi</th><th>Servis iş yükü indeksi</th><th>Servis baskısı</th><th>Coğrafi baskı</th><th>Rota baskısı</th><th>Risk</th><th>Medyan tamamlanan</th></tr></thead><tbody>{data.technicians.map((item) => { const current = item.workload.standardCurrent + item.workload.smartcleanCurrent; const carry = item.workload.standardCarryover + item.workload.smartcleanCarryover; const servicePressure = worstPressure(Object.values(item.assessment.servicePressure)); const geoPressure = item.assessment.travelPressure.fieldP90RadiusMeters; return <tr key={item.id}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td><span className={item.baseline.state === 'ACTIVE' ? 'pill active' : 'pill'}>{stateLabel(item.baseline.state)} / {item.baseline.confidence}</span><div className="muted">{item.baseline.observedWeeks} hafta gözlem</div></td><td>{current}</td><td>{carry}</td><td>{item.workload.equipmentKnownPointCount} bilinen / {item.workload.equipmentUnknownPointCount} eksik<div className="muted">Konum: {item.workload.assignedLocatedPointCount} / {item.workload.assignedUnlocatedPointCount} eksik</div></td><td><strong>{item.assessment.serviceWorkload.index ?? '—'}</strong><div className="muted">100 = teknisyenin öğrenilmiş tipik ekipman karması · {item.assessment.serviceWorkload.confidence}</div></td><td><span className={servicePressure === 'WITHIN_BASELINE' ? 'pill active' : 'pill'}>{pressureLabel(servicePressure)}</span></td><td><span className={geoPressure === 'WITHIN_BASELINE' ? 'pill active' : 'pill'}>{pressureLabel(geoPressure)}</span><div className="muted">{item.workload.assignedFieldP90RadiusMeters === null ? '—' : `${Math.round(item.workload.assignedFieldP90RadiusMeters / 100) / 10} km P90`}</div></td><td><span className={item.assessment.travelPressure.routeDistanceMeters === 'WITHIN_BASELINE' ? 'pill active' : 'pill'}>{pressureLabel(item.assessment.travelPressure.routeDistanceMeters)}</span><div className="muted">{item.workload.assignedRouteEstimateMeters === null ? '—' : `${Math.round(item.workload.assignedRouteEstimateMeters / 100) / 10} km tahmini rota`} · bütünlük {item.workload.assignedRouteCoherenceRatio === null ? '—' : item.workload.assignedRouteCoherenceRatio.toFixed(2)} · parçalanma {item.workload.assignedFragmentationRatio === null ? '—' : item.workload.assignedFragmentationRatio.toFixed(2)} · çalışma alanı sapması {item.workload.workAreaCenterDistanceMeters === null ? '—' : `${Math.round(item.workload.workAreaCenterDistanceMeters / 100) / 10} km`}</div></td><td><span className={item.risk.severity === 'LOW' ? 'pill active' : 'pill'}>{riskLabel(item.risk.severity)}</span><div className="muted">{item.risk.signals.map((signal) => signal.code).join(' · ') || item.risk.reasons.join(' · ') || 'Risk sinyali yok'}</div></td><td>{item.baseline.service.completedVisits.median ?? '—'}<div className="muted">{item.assessment.reasons.join(' · ') || 'Veri yeterli'}</div></td></tr>; })}</tbody></table></div></section>
 
 <section className="panel"><div className="panelHeader"><div><h2>AI Çalışma Sağlığı</h2><p>API hesaplama süresi ve hata oranı süreç belleğinde izlenir.</p></div></div>{data.telemetry.operations.length ? <div className="tableWrap"><table><thead><tr><th>İşlem</th><th>Çağrı</th><th>Hata</th><th>Ortalama</th><th>P95</th><th>Maks.</th></tr></thead><tbody>{data.telemetry.operations.map((item) => <tr key={item.operation}><td><strong>{item.operation}</strong></td><td>{item.count}</td><td>{item.errorCount} ({Math.round(item.errorRate*100)}%)</td><td>{item.averageDurationMs} ms</td><td>{item.p95DurationMs} ms</td><td>{item.maxDurationMs} ms</td></tr>)}</tbody></table></div> : <p className="muted">Bu process için henüz tamamlanmış AI çağrısı yok.</p>}</section>
