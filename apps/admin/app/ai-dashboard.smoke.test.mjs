@@ -19,3 +19,9 @@ test('AI dashboard renders explainability and version fields', () => {
   assert.ok(source.includes('reasonCodes'));
   assert.ok(source.includes('confidence'));
 });
+
+test('AI dashboard ignores a superseded dashboard response', () => {
+  assert.match(source, /const loadSequence = useRef\(0\)/);
+  assert.match(source, /const requestId = \+\+loadSequence\.current/);
+  assert.match(source, /requestId !== loadSequence\.current/);
+});
