@@ -144,6 +144,7 @@ export class KpiReportingService {
       pending: visits.filter(v => v[field] === PaperworkStatus.PENDING).length,
       present: visits.filter(v => v[field] === PaperworkStatus.PRESENT).length,
       missing: visits.filter(v => v[field] === PaperworkStatus.MISSING).length,
+      approved: visits.filter(v => v[field] === PaperworkStatus.APPROVED).length,
     };
   }
   private parse(key: string, field: string) {

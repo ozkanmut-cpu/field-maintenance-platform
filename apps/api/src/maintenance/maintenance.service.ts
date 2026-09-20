@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AttemptReviewStatus,
+  ConfirmationApprovalSource,
   MaintenanceObligationStatus,
   MaintenanceType,
   PaperworkKind,
@@ -357,6 +358,7 @@ export class MaintenanceService {
             tapCount: equipment.tapCount!,
             smarttapCount: equipment.smarttapCount!,
             equipmentConfirmed: true,
+            confirmationReconciliationEligible: point.maintenanceType === MaintenanceType.STANDARD,
             status: VisitStatus.VALID,
             idempotencyKey: dto.idempotencyKey,
           },
@@ -780,6 +782,7 @@ export class MaintenanceService {
       pending: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PENDING).length,
       present: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.PRESENT).length,
       missing: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.MISSING).length,
+      approved: responsibleVisits.filter((item) => item[kind] === PaperworkStatus.APPROVED).length,
     });
     const assigned = due.items.filter((item) => item.technicianId === technicianId);
     const events = [
@@ -1084,7 +1087,10 @@ export class MaintenanceService {
         data:
           dto.kind === PaperworkKind.SERVICE_SLIP
             ? { serviceSlipStatus: dto.status }
-            : { confirmationStatus: dto.status },
+            : {
+              confirmationStatus: dto.status,
+              confirmationApprovalSource: dto.status === PaperworkStatus.APPROVED ? ConfirmationApprovalSource.MANUAL_ADMIN : null,
+            },
       });
 
       await tx.paperworkStatusHistory.create({
@@ -1174,7 +1180,7 @@ export class MaintenanceService {
     statusField: 'serviceSlipStatus' | 'confirmationStatus',
     now: Date,
   ) {
-    const statusCounts = { pending: 0, present: 0, missing: 0 };
+    const statusCounts = { pending: 0, present: 0, missing: 0, approved: 0 };
     const pendingAgeBuckets = { under24h: 0, h24to48: 0, d2to7: 0, d7plus: 0 };
     const arrivalDurations: number[] = [];
     const resolutionDurations: number[] = [];
@@ -1183,7 +1189,8 @@ export class MaintenanceService {
       const status = visit[statusField];
       if (status === PaperworkStatus.PENDING) statusCounts.pending += 1;
       else if (status === PaperworkStatus.PRESENT) statusCounts.present += 1;
-      else statusCounts.missing += 1;
+      else if (status === PaperworkStatus.MISSING) statusCounts.missing += 1;
+      else statusCounts.approved += 1;
 
       if (status === PaperworkStatus.PENDING) {
         const ageHours = Math.max(0, now.getTime() - visit.recordedAtServer.getTime()) / 3_600_000;
@@ -1197,7 +1204,7 @@ export class MaintenanceService {
         .filter((item) => item.kind === kind && item.changedAt.getTime() >= visit.recordedAtServer.getTime())
         .sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
       const arrival = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT);
-      const resolution = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT || item.newStatus === PaperworkStatus.MISSING);
+      const resolution = validHistory.find((item) => item.newStatus === PaperworkStatus.PRESENT || item.newStatus === PaperworkStatus.MISSING || item.newStatus === PaperworkStatus.APPROVED);
       if (arrival) arrivalDurations.push(arrival.changedAt.getTime() - visit.recordedAtServer.getTime());
       if (resolution) resolutionDurations.push(resolution.changedAt.getTime() - visit.recordedAtServer.getTime());
     }
