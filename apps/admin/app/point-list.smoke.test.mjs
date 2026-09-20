@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const pointListPath = new URL('./point-list.tsx', import.meta.url);
+const navigationPath = new URL('./admin-navigation.ts', import.meta.url);
 
 test('point list is a read-only finding surface', () => {
   assert.equal(existsSync(pointListPath), true);
@@ -14,4 +15,23 @@ test('point list is a read-only finding surface', () => {
   assert.doesNotMatch(source, /method: 'PATCH'/);
   assert.doesNotMatch(source, /bulk-update/);
   assert.doesNotMatch(source, /onChange=.*point\.status/);
+});
+
+test('point list keeps real region and maintenance filters in the list-detail URL context', () => {
+  const source = readFileSync(pointListPath, 'utf8');
+  const navigation = readFileSync(navigationPath, 'utf8');
+
+  assert.match(source, /region\?\.technician/);
+  assert.match(source, /locationSource/);
+  assert.match(source, /Bölge filtresi/);
+  assert.match(source, /Bakım tipi filtresi/);
+  assert.match(source, /scrollY/);
+  assert.match(source, /pageSize = 25/);
+  assert.match(source, /window\.history\.pushState/);
+  assert.doesNotMatch(source, /function replaceListLocation/);
+  assert.match(navigation, /region\?: string/);
+  assert.match(navigation, /maintenanceType\?: string/);
+  assert.match(navigation, /scrollY\?: string/);
+  assert.match(navigation, /admin-navigation-runtime/,
+    'the executable navigation helper owns URL parsing and building');
 });
