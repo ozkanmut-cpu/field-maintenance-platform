@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "sha": "b7b2c0388c546a00523460bae2937e29e353a44a"
+  },
+  "apk": {
+    "sha256": "c8b0439190e350968b7dedd22c4f013b111c5900dfd501865a1c7f14c2d8ef03",
+    "certificateSha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c"
+  },
+  "packageName": "com.fmp.mobile",
+  "versionCode": 1,
+  "versionName": "0.1.0"
+}
