@@ -8,7 +8,12 @@ on:
       - 'apps/admin/app/paperwork-analytics.smoke.test.mjs'
       - 'apps/admin/app/paperwork-selection-safety.smoke.test.mjs'
       - 'apps/admin/app/paperwork-service-slip-review.smoke.test.mjs'
+      - 'apps/admin/app/source-recovery-runtime.test.mjs'
+      - 'apps/admin/app/bulk-safety.runtime.test.mjs'
       - 'apps/admin/app/paperwork-status-policy.mjs'
+      - 'apps/admin/app/latest-request.mjs'
+      - 'apps/admin/app/assignment-management.tsx'
+      - 'apps/admin/app/bulk-operations.tsx'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.approvals.smoke.test.mjs'
       - 'apps/admin/app/kpi-reporting.tsx'
@@ -44,7 +49,12 @@ on:
       - 'apps/admin/app/paperwork-analytics.smoke.test.mjs'
       - 'apps/admin/app/paperwork-selection-safety.smoke.test.mjs'
       - 'apps/admin/app/paperwork-service-slip-review.smoke.test.mjs'
+      - 'apps/admin/app/source-recovery-runtime.test.mjs'
+      - 'apps/admin/app/bulk-safety.runtime.test.mjs'
       - 'apps/admin/app/paperwork-status-policy.mjs'
+      - 'apps/admin/app/latest-request.mjs'
+      - 'apps/admin/app/assignment-management.tsx'
+      - 'apps/admin/app/bulk-operations.tsx'
       - 'apps/admin/app/operations.tsx'
       - 'apps/admin/app/operations.approvals.smoke.test.mjs'
       - 'apps/admin/app/kpi-reporting.tsx'
@@ -95,7 +105,7 @@ jobs:
       - name: API build
         run: npm --prefix apps/api run build
       - name: Reporting admin smoke
-        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs apps/admin/app/paperwork-selection-safety.smoke.test.mjs apps/admin/app/paperwork-service-slip-review.smoke.test.mjs apps/admin/app/daily-admin-summary.smoke.test.mjs apps/admin/app/period-admin-summary.smoke.test.mjs apps/admin/app/technician-daily-summary.smoke.test.mjs apps/admin/app/non-maintenance-visits.smoke.test.mjs apps/admin/app/audit-log.smoke.test.mjs apps/admin/app/sap-sync-status.smoke.test.mjs apps/admin/app/kpi-reporting.smoke.test.mjs apps/admin/app/point-detail-page.smoke.test.mjs apps/admin/app/point-timeline.partial-maintenance.smoke.test.mjs apps/admin/app/point-navigation-coverage.smoke.test.mjs apps/admin/app/point-list.smoke.test.mjs apps/admin/app/point-list-navigation.smoke.test.mjs apps/admin/app/page-route-coverage.smoke.test.mjs apps/admin/app/operations.approvals.smoke.test.mjs
+        run: node --test apps/admin/app/paperwork-analytics.smoke.test.mjs apps/admin/app/paperwork-selection-safety.smoke.test.mjs apps/admin/app/paperwork-service-slip-review.smoke.test.mjs apps/admin/app/source-recovery-runtime.test.mjs apps/admin/app/bulk-safety.runtime.test.mjs apps/admin/app/daily-admin-summary.smoke.test.mjs apps/admin/app/period-admin-summary.smoke.test.mjs apps/admin/app/technician-daily-summary.smoke.test.mjs apps/admin/app/non-maintenance-visits.smoke.test.mjs apps/admin/app/audit-log.smoke.test.mjs apps/admin/app/sap-sync-status.smoke.test.mjs apps/admin/app/kpi-reporting.smoke.test.mjs apps/admin/app/point-detail-page.smoke.test.mjs apps/admin/app/point-timeline.partial-maintenance.smoke.test.mjs apps/admin/app/point-navigation-coverage.smoke.test.mjs apps/admin/app/point-list.smoke.test.mjs apps/admin/app/point-list-navigation.smoke.test.mjs apps/admin/app/page-route-coverage.smoke.test.mjs apps/admin/app/operations.approvals.smoke.test.mjs
       - name: Admin typecheck
         run: npm --prefix apps/admin run lint
       - name: Admin build
