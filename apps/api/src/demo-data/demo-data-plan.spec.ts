@@ -83,6 +83,37 @@ test('named mockup point scope excludes KOR-external records in the same region'
   ], 'mockup-region'), /outside the named mockup scope/i);
 });
 
+test('real purge fails closed before every mutation when a named region contains LIVE-5001', async () => {
+  const { purgeNamedMockupData: purge } = require('./mockup-data.repository') as {
+    purgeNamedMockupData: (store: any, note: string) => Promise<unknown>;
+  };
+  const calls = { transaction: 0, deleteMany: 0, regionDelete: 0 };
+  const store = {
+    region: { findUnique: async () => ({ id: 'mockup-region' }), delete: async () => { calls.regionDelete++; } },
+    point: {
+      findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }, { id: 'live-point', regionId: 'mockup-region', code: 'LIVE-5001' }],
+      deleteMany: async () => { calls.deleteMany++; },
+    },
+    user: { findMany: async () => { throw new Error('must not query users after the fail-closed point guard'); }, deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceVisit: { findMany: async () => [], deleteMany: async () => { calls.deleteMany++; } },
+    prospectCustomer: { findMany: async () => [], deleteMany: async () => { calls.deleteMany++; } },
+    paperworkStatusHistory: { deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceReviewResolution: { deleteMany: async () => { calls.deleteMany++; } },
+    sapConfirmationReconciliation: { deleteMany: async () => { calls.deleteMany++; } },
+    adminAuditLog: { deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceAttempt: { deleteMany: async () => { calls.deleteMany++; } },
+    nonMaintenanceVisit: { deleteMany: async () => { calls.deleteMany++; } },
+    pointAssignment: { deleteMany: async () => { calls.deleteMany++; } },
+    pointAlias: { deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceObligation: { deleteMany: async () => { calls.deleteMany++; } },
+    prospectVisit: { deleteMany: async () => { calls.deleteMany++; } },
+    technicianHelpPermission: { deleteMany: async () => { calls.deleteMany++; } },
+    $transaction: async () => { calls.transaction++; },
+  };
+  await assert.rejects(() => purge!(store, 'mockup note'), /outside the named mockup scope/i);
+  assert.deepEqual(calls, { transaction: 0, deleteMany: 0, regionDelete: 0 });
+});
+
 test('mockup reset is idempotent and leaves non-mockup records untouched', async () => {
   const execute = Reflect.get(mockupPlan, 'resetMockupDataset');
   assert.equal(typeof execute, 'function');
