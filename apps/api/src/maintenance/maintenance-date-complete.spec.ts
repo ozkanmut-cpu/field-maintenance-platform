@@ -11,7 +11,9 @@ function makeService(created: any[], audits: any[] = [], locationCalls: string[]
   };
   const prisma: any = {
     maintenanceVisit: {
-      findUnique: async ({ where }: any) => where.idempotencyKey ? null : created[0],
+      findUnique: async ({ where }: any) => where.idempotencyKey
+        ? created.find((visit) => visit.idempotencyKey === where.idempotencyKey) ?? null
+        : created[0],
       create: async ({ data }: any) => { const visit = { id: 'visit-1', ...data }; created.push(visit); return visit; },
     },
     point: { findFirst: async () => point },
@@ -79,4 +81,20 @@ test('past-dated completion rejects every GPS metadata field', async () => {
     coolerCount: 1, towerCount: 0, tapCount: 0, smarttapCount: 0, equipmentConfirmed: true,
     idempotencyKey: 'past-date-with-accuracy',
   } as any), /Geriye dönük bakımda konum bilgisi kaydedilemez/);
+});
+
+test('idempotent retry preserves the historical marker for a past-dated visit', async () => {
+  const service = makeService([]);
+  const request = {
+    pointId: 'point-1', technicianId: 'tech-1', performedAt: '2026-09-18T12:00:00.000Z',
+    lateEntryReason: 'Dünkü bakım internet kesintisi nedeniyle bugün girildi',
+    coolerCount: 1, towerCount: 0, tapCount: 0, smarttapCount: 0, equipmentConfirmed: true,
+    idempotencyKey: 'past-date-idempotent-retry',
+  };
+
+  const first = await service.complete(request as any);
+  const retry = await service.complete(request as any);
+
+  assert.equal((first as any).pastDated, true);
+  assert.equal((retry as any).pastDated, true);
 });

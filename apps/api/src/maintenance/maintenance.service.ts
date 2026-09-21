@@ -268,7 +268,7 @@ export class MaintenanceService {
     const existingByKey = await this.prisma.maintenanceVisit.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
     });
-    if (existingByKey) return existingByKey;
+    if (existingByKey) return { ...existingByKey, pastDated: existingByKey.enteredLate };
 
     const point = await this.prisma.point.findFirst({
       where: { id: dto.pointId, deletedAt: null },

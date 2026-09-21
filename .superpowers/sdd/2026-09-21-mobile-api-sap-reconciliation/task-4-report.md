@@ -146,3 +146,54 @@ No remaining Critical, Important, or Minor findings were identified.
 - Historical state uses the existing persisted `enteredLate` column and adds
   an explicit derived `pastDated` response/audit marker; no schema or
   migration was required.
+
+
+## Fix round 1/5 — idempotent marker and post-save GPS isolation
+
+Reviewer findings were reproduced by tracing the exact response and refresh
+boundaries:
+
+1. `MaintenanceService.complete()` returned raw `existingByKey` before the
+   derived `pastDated` response marker was applied.
+2. `savePastCompletedTask()` awaited `loadTasks()`; a successful task reload
+   unconditionally called `refreshDeviceLocation()`, which requests location
+   permission and obtains GPS after the historical record was saved.
+
+RED:
+
+```text
+node --test apps/mobile/src/maintenance-date.smoke.test.mjs
+tests 4, pass 3, fail 1
+missing location-free refresh propagation
+
+cd apps/api
+node --test --require ts-node/register \
+  src/maintenance/maintenance-date-complete.spec.ts
+tests 4, pass 3, fail 1
+idempotent retry pastDated actual undefined, expected true
+```
+
+Minimum fixes:
+
+- The idempotency fast path derives `pastDated` from the persisted
+  `enteredLate` value, matching the first-save response without another write.
+- `loadTasks(refreshLocation = true)` keeps existing behavior by default.
+  Only the past-date post-save call passes `false`; the normal/today save
+  continues to call `loadTasks()` and therefore keeps location refresh.
+
+GREEN and regressions:
+
+```text
+focused mobile: tests 4, pass 4, fail 0
+focused API: tests 4, pass 4, fail 0
+all mobile: tests 47, pass 47, fail 0
+related API: tests 37, pass 37, fail 0
+mobile TypeScript: pass
+API TypeScript: pass
+API build: pass
+git diff --check: pass
+```
+
+Self-review found no remaining issue in these two boundaries. The change does
+not alter navigation, the current-date location flow, or the >250 m decision
+flow.

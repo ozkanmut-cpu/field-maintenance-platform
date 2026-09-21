@@ -145,7 +145,7 @@ export default function CorporateApp() {
   }
 
   async function signOut() { tasksLoadSequence.current += 1; await clearSessionToken(); setUser(null); setDashboard(null); setTasksError(null); setPassword(''); resetNavigation(); }
-  async function loadTasks(): Promise<boolean> {
+  async function loadTasks(refreshLocation = true): Promise<boolean> {
     const requestId = ++tasksLoadSequence.current;
     setTasksLoading(true);
     setTasksError(null);
@@ -153,7 +153,7 @@ export default function CorporateApp() {
       const nextDashboard = await technicianDashboard();
       if (requestId !== tasksLoadSequence.current) return false;
       setDashboard(nextDashboard);
-      void refreshDeviceLocation();
+      if (refreshLocation) void refreshDeviceLocation();
       return true;
     } catch (e) {
       if (requestId !== tasksLoadSequence.current) return false;
@@ -371,7 +371,7 @@ export default function CorporateApp() {
     const partialMaintenanceValues = parsedPartialMaintenance(task, equipmentValues);
     const equipmentCorrection = parsedEquipmentCorrection(task, equipmentValues);
     await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, performedAt: maintenanceTimestamp(selectedDateKey), lateEntryReason: lateEntryReason.trim(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, ...partialMaintenanceValues, ...equipmentCorrection, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
-    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setSuccessPastDated(true); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setSuccessPastDated(true); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks(false);
   }
 
   async function completeTask(task: DueTask, assistedForTechnicianId?: string) {
