@@ -60,3 +60,24 @@ test('success and history distinguish the visit without maintenance behaviors', 
   assert.doesNotMatch(api, /recordNonMaintenanceVisit[\s\S]*completeMaintenance/);
   assert.match(app, /i\.type==='NON_MAINTENANCE_VISIT'/);
 });
+
+test('immediate Jobs entry refreshes location before fetching and renders the matching distance origin', () => {
+  const start = app.indexOf('async function openNonMaintenanceVisit');
+  const end = app.indexOf('\n  function chooseNonMaintenanceCustomer', start);
+  const open = app.slice(start, end);
+  const locationIndex = open.indexOf('const origin = await refreshDeviceLocation()');
+  const customersIndex = open.indexOf('await myCustomers()');
+  assert.ok(locationIndex >= 0 && customersIndex > locationIndex, 'location must be refreshed before customers are fetched');
+  assert.match(open, /setNonMaintenanceOrigin\(origin\)/);
+  assert.match(app, /origin=\{nonMaintenanceOrigin\}/);
+});
+
+test('denied or unavailable location visibly falls back to deterministic alphabetical customer order', () => {
+  assert.match(app, /if \(!permission\.granted \|\| !\(await Location\.hasServicesEnabledAsync\(\)\)\) return null/);
+  assert.match(app, /Konum alınamadı; müşteriler alfabetik gösteriliyor\./);
+  const sortStart = app.indexOf('function sortNonMaintenanceCustomers');
+  const sortEnd = app.indexOf('\nfunction NonMaintenanceCustomerView', sortStart);
+  const sort = app.slice(sortStart, sortEnd);
+  assert.match(sort, /if \(!origin\) return customers\.slice\(\)\.sort/);
+  assert.match(sort, /localeCompare/);
+});

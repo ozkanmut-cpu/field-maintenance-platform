@@ -85,6 +85,8 @@ export default function CorporateApp() {
   const [taskSearch, setTaskSearch] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [nonMaintenanceCustomers, setNonMaintenanceCustomers] = useState<MyCustomer[]>([]);
+  const [nonMaintenanceOrigin, setNonMaintenanceOrigin] = useState<{ latitude:number; longitude:number } | null>(null);
+  const [nonMaintenanceLocationNotice, setNonMaintenanceLocationNotice] = useState<string | null>(null);
   const [nonMaintenanceSearch, setNonMaintenanceSearch] = useState('');
   const [nonMaintenanceCustomer, setNonMaintenanceCustomer] = useState<MyCustomer | null>(null);
   const [nonMaintenanceNoCustomer, setNonMaintenanceNoCustomer] = useState(false);
@@ -196,13 +198,15 @@ export default function CorporateApp() {
       if (requestId === tasksLoadSequence.current) setTasksLoading(false);
     }
   }
-  async function refreshDeviceLocation() {
+  async function refreshDeviceLocation(): Promise<{ latitude:number; longitude:number } | null> {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted || !(await Location.hasServicesEnabledAsync())) return;
+      if (!permission.granted || !(await Location.hasServicesEnabledAsync())) return null;
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setDeviceLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-    } catch { /* Konum alınamazsa mevcut görev sırası korunur. */ }
+      const origin = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setDeviceLocation(origin);
+      return origin;
+    } catch { return null; }
   }
   async function openHelp() { setBusy(true); try { setHelpPeople(await helpTargets()); setHelpDashboard(null); navigate('HELP'); } catch (e) { Alert.alert('Yardım listesi alınamadı', message(e)); } finally { setBusy(false); } }
   async function selectHelper(target: HelpTarget) { setBusy(true); try { setHelpDashboard(await technicianDashboard(target.id)); } catch (e) { Alert.alert('Görevler alınamadı', message(e)); } finally { setBusy(false); } }
@@ -269,7 +273,11 @@ export default function CorporateApp() {
   async function openNonMaintenanceVisit() {
     setBusy(true);
     try {
-      setNonMaintenanceCustomers(await myCustomers());
+      const origin = await refreshDeviceLocation();
+      const nextCustomers = await myCustomers();
+      setNonMaintenanceOrigin(origin);
+      setNonMaintenanceLocationNotice(origin ? null : 'Konum alınamadı; müşteriler alfabetik gösteriliyor.');
+      setNonMaintenanceCustomers(nextCustomers);
       setNonMaintenanceSearch('');
       setNonMaintenanceCustomer(null);
       setNonMaintenanceNoCustomer(false);
@@ -506,7 +514,7 @@ export default function CorporateApp() {
       {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={goBack} busy={busy} />}
       {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} selectedDateKey={selectedDateKey} setSelectedDateKey={setSelectedDateKey} lateEntryReason={lateEntryReason} setLateEntryReason={setLateEntryReason} maintainedCoolerCount={maintainedCoolerCount} setMaintainedCoolerCount={setMaintainedCoolerCount} partialMaintenanceMode={partialMaintenanceMode} setPartialMaintenanceMode={setPartialMaintenanceMode} missingMaintenanceExplanation={missingMaintenanceExplanation} setMissingMaintenanceExplanation={setMissingMaintenanceExplanation} equipmentCorrectionRequested={equipmentCorrectionRequested} setEquipmentCorrectionRequested={setEquipmentCorrectionRequested} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); goBack(); }} busy={busy} />}
       {screen === 'HISTORY' && <HistoryView items={historyItems} busy={busy} onRevert={confirmRevert} />}
-      {screen === 'NON_MAINTENANCE_VISIT' && <NonMaintenanceCustomerView customers={nonMaintenanceCustomers} search={nonMaintenanceSearch} setSearch={setNonMaintenanceSearch} origin={deviceLocation} choose={chooseNonMaintenanceCustomer} />}
+      {screen === 'NON_MAINTENANCE_VISIT' && <NonMaintenanceCustomerView customers={nonMaintenanceCustomers} search={nonMaintenanceSearch} setSearch={setNonMaintenanceSearch} origin={nonMaintenanceOrigin} locationNotice={nonMaintenanceLocationNotice} choose={chooseNonMaintenanceCustomer} />}
       {screen === 'NON_MAINTENANCE_FORM' && <NonMaintenanceForm customer={nonMaintenanceCustomer} noCustomer={nonMaintenanceNoCustomer} customerName={nonMaintenanceCustomerName} setCustomerName={setNonMaintenanceCustomerName} purpose={nonMaintenanceType} setPurpose={setNonMaintenanceType} note={nonMaintenanceNote} setNote={setNonMaintenanceNote} efesimImageBase64={efesimImageBase64} visualExplanation={visualExplanation} setVisualExplanation={setVisualExplanation} chooseVisual={() => void chooseNonMaintenanceEfesim()} save={() => void saveNonMaintenanceVisit()} busy={busy} />}
       {screen === 'NON_MAINTENANCE_VISIT_SAVED' && <NonMaintenanceSuccessView point={nonMaintenanceSuccessName} done={resetNavigation} />}
       {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} pastDated={successPastDated} done={() => { setSuccessAssist(''); setSuccessPastDated(false); resetNavigation(); }} />}
@@ -638,7 +646,7 @@ const NON_MAINTENANCE_TYPES: ReadonlyArray<{ value: NonMaintenanceVisitType; lab
 ];
 
 function sortNonMaintenanceCustomers(customers: MyCustomer[], origin: { latitude:number; longitude:number } | null) {
-  if (!origin) return customers.slice();
+  if (!origin) return customers.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   return customers.slice().sort((a, b) => {
     const aDistance = a.canonicalLatitude != null && a.canonicalLongitude != null
       ? distanceMetersStatic(origin.latitude, origin.longitude, a.canonicalLatitude, a.canonicalLongitude)
@@ -646,15 +654,15 @@ function sortNonMaintenanceCustomers(customers: MyCustomer[], origin: { latitude
     const bDistance = b.canonicalLatitude != null && b.canonicalLongitude != null
       ? distanceMetersStatic(origin.latitude, origin.longitude, b.canonicalLatitude, b.canonicalLongitude)
       : Number.POSITIVE_INFINITY;
-    return aDistance - bDistance;
+    return aDistance - bDistance || a.name.localeCompare(b.name, 'tr');
   });
 }
 
-function NonMaintenanceCustomerView({customers,search,setSearch,origin,choose}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;origin:{latitude:number;longitude:number}|null;choose:(customer:MyCustomer|null)=>void}) {
+function NonMaintenanceCustomerView({customers,search,setSearch,origin,locationNotice,choose}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;origin:{latitude:number;longitude:number}|null;locationNotice:string|null;choose:(customer:MyCustomer|null)=>void}) {
   const nonMaintenanceSearch = search;
   const visible = sortNonMaintenanceCustomers(customers, origin).filter(customer =>
     matchesSearch(nonMaintenanceSearch, [customer.name, customer.code, customer.region?.name ?? '', customer.address ?? '', ...(customer.aliases ?? [])]));
-  return <><SectionHeader title="Müşteri seç" subtitle="Yakındaki müşteriler önce gösterilir"/><SearchBox value={search} onChange={setSearch} placeholder="Müşteri adı, kod, bölge veya adres ara"/><TouchableOpacity accessibilityRole="button" style={styles.noCustomerChoice} onPress={()=>choose(null)}><Feather name="user-x" size={19} color={ORANGE}/><View style={styles.personText}><Text style={styles.personName}>Müşteri kaydı yok</Text><Text style={styles.personMeta}>EFESİM ekran görüntüsü veya açıklama ile devam et</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>{visible.length===0?<Empty icon="search" title="Müşteri bulunamadı" text="Aramayı değiştir veya müşteri kaydı yok seçeneğini kullan."/>:<View style={styles.listCard}>{visible.map(customer=><TouchableOpacity key={customer.id} style={styles.customerRow} onPress={()=>choose(customer)}><Feather name="map-pin" size={18} color={BLUE}/><View style={styles.personText}><Text style={styles.personName}>{customer.name}</Text><Text style={styles.personMeta}>{customer.code}{customer.address?` · ${customer.address}`:''}</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>)}</View>}</>;
+  return <><SectionHeader title="Müşteri seç" subtitle={origin ? 'Yakındaki müşteriler önce gösterilir' : locationNotice ?? 'Müşteriler alfabetik gösteriliyor.'}/><SearchBox value={search} onChange={setSearch} placeholder="Müşteri adı, kod, bölge veya adres ara"/><TouchableOpacity accessibilityRole="button" style={styles.noCustomerChoice} onPress={()=>choose(null)}><Feather name="user-x" size={19} color={ORANGE}/><View style={styles.personText}><Text style={styles.personName}>Müşteri kaydı yok</Text><Text style={styles.personMeta}>EFESİM ekran görüntüsü veya açıklama ile devam et</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>{visible.length===0?<Empty icon="search" title="Müşteri bulunamadı" text="Aramayı değiştir veya müşteri kaydı yok seçeneğini kullan."/>:<View style={styles.listCard}>{visible.map(customer=><TouchableOpacity key={customer.id} style={styles.customerRow} onPress={()=>choose(customer)}><Feather name="map-pin" size={18} color={BLUE}/><View style={styles.personText}><Text style={styles.personName}>{customer.name}</Text><Text style={styles.personMeta}>{customer.code}{customer.address?` · ${customer.address}`:''}</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>)}</View>}</>;
 }
 
 function CustomersView({customers,search,setSearch,open}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;open:(c:MyCustomer)=>void}) {
