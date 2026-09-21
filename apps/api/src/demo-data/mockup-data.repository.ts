@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { NonMaintenanceVisitPurpose, type PrismaClient } from '@prisma/client';
 import { MOCKUP_DATASET, assertNamedMockupRegion, buildNamedMockupPointWhere } from './demo-data-plan';
 
 export type MockupPurgeStore = Pick<PrismaClient,
@@ -58,11 +58,12 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
     })
     : [];
   const visitIds = visits.map((visit) => visit.id);
-  const nonMaintenanceVisits = pointIds.length && userIds.length
+  const nonMaintenanceVisits = userIds.length
     ? await prisma.nonMaintenanceVisit.findMany({
       where: {
-        pointId: { in: pointIds },
         technicianId: { in: userIds },
+        purpose: { in: Object.values(NonMaintenanceVisitPurpose) },
+        OR: [{ pointId: { in: pointIds } }, { pointId: null }],
       },
       select: { id: true },
     })
@@ -75,18 +76,19 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
     })
     : [];
   const prospectIds = prospects.map((prospect) => prospect.id);
-  const auditLogs = region && userIds.length
+  const auditLogs = userIds.length
     ? await prisma.adminAuditLog.findMany({
       where: {
-        note: datasetNote,
         OR: [
-          {
+          ...(region ? [{
+            note: datasetNote,
             entityType: 'SHOWCASE_DATASET',
             entityId: region.id,
             action: 'SEED_CREATED',
             actorId: { in: userIds },
-          },
+          }] : []),
           {
+            note: datasetNote,
             entityType: 'MaintenanceVisit',
             entityId: { in: visitIds },
             action: 'PARTIAL_MAINTENANCE',
@@ -102,6 +104,12 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
                 'MAINTENANCE_ENTERED_LATE',
               ],
             },
+            actorId: { in: userIds },
+          },
+          {
+            entityType: 'POINT_EQUIPMENT',
+            entityId: { in: pointIds },
+            action: 'MAINTENANCE_VERIFIED_CHANGED',
             actorId: { in: userIds },
           },
           {
@@ -126,10 +134,13 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
 
     if (auditIds.length) await tx.adminAuditLog.deleteMany({ where: { id: { in: auditIds } } });
 
+    if (nonMaintenanceVisitIds.length) {
+      await tx.nonMaintenanceVisit.deleteMany({ where: { id: { in: nonMaintenanceVisitIds } } });
+    }
+
     if (pointIds.length) {
       await tx.maintenanceVisit.deleteMany({ where: { pointId: { in: pointIds } } });
       await tx.maintenanceAttempt.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.nonMaintenanceVisit.deleteMany({ where: { pointId: { in: pointIds } } });
       await tx.pointAssignment.deleteMany({ where: { pointId: { in: pointIds } } });
       await tx.pointAlias.deleteMany({ where: { pointId: { in: pointIds } } });
       await tx.maintenanceObligation.deleteMany({ where: { pointId: { in: pointIds } } });

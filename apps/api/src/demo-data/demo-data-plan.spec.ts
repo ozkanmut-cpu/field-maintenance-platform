@@ -158,10 +158,10 @@ test('purge removes only explicitly owned mockup audits sharing its fixture note
   assert.deepEqual(audits.map((audit) => audit.id), ['unrelated-audit']);
   assert.deepEqual(calls.auditDeleteWhere, { id: { in: ['mockup-audit'] } });
   assert.deepEqual(calls.auditFindWhere, {
-    note,
     OR: [
-      { entityType: 'SHOWCASE_DATASET', entityId: 'mockup-region', action: 'SEED_CREATED', actorId: { in: ['mockup-user'] } },
+      { note, entityType: 'SHOWCASE_DATASET', entityId: 'mockup-region', action: 'SEED_CREATED', actorId: { in: ['mockup-user'] } },
       {
+        note,
         entityType: 'MaintenanceVisit',
         entityId: { in: ['mockup-visit'] },
         action: 'PARTIAL_MAINTENANCE',
@@ -177,6 +177,12 @@ test('purge removes only explicitly owned mockup audits sharing its fixture note
             'MAINTENANCE_ENTERED_LATE',
           ],
         },
+        actorId: { in: ['mockup-user'] },
+      },
+      {
+        entityType: 'POINT_EQUIPMENT',
+        entityId: { in: ['mockup-point'] },
+        action: 'MAINTENANCE_VERIFIED_CHANGED',
         actorId: { in: ['mockup-user'] },
       },
       {
@@ -202,8 +208,8 @@ test('purge removes owned runtime audits before mockup users while keeping unrel
   ];
   const deletedAuditIds: string[] = [];
   const noop = async () => undefined;
-  const matchesWhere = (audit: typeof audits[number], where: any) => where.note === audit.note && where.OR.some((rule: any) =>
-    rule.entityType === audit.entityType
+  const matchesWhere = (audit: typeof audits[number], where: any) => (where.note === undefined || where.note === audit.note) && where.OR.some((rule: any) =>
+    (rule.note === undefined || rule.note === audit.note) && rule.entityType === audit.entityType
       && (rule.entityId === audit.entityId || rule.entityId?.in?.includes(audit.entityId))
       && (rule.action === audit.action || rule.action?.in?.includes(audit.action))
       && rule.actorId?.in?.includes(audit.actorId));
