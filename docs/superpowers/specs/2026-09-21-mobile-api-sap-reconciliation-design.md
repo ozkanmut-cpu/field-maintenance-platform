@@ -33,7 +33,7 @@ Baseline APK emülatöre kurulur. Açılış, giriş, İşler, bakım ve Geçmi�
 
 ### Kısmi bakım
 
-Mobil ve API aynı alan setini kullanır. `partialMaintenanceConfirmed` DTO tarafından kabul edilir. Toplam soğutucu, bakımı yapılan soğutucu, eksik adet, teknisyen, tarih/saat ve isteğe bağlı açıklama atomik kaydedilir.
+Mobil ve API aynı alan setini kullanır. Kısmi bakım, toplam ve bakımı yapılan soğutucu adetleri arasındaki farktan türetilir; `partialMaintenanceConfirmed` mobil payload'ında gönderilmez ve DTO tarafından reddedilir. Toplam soğutucu, bakımı yapılan soğutucu, eksik adet, teknisyen, tarih/saat ve isteğe bağlı açıklama atomik kaydedilir.
 
 Kısmi bakım açık görev bırakmaz; audit kaydı ve gerçek başarı sonucu üretir. Geçmiş özeti `4/5 soğutucu bakım · 1 eksik` gibi kesin sayısal gösterim kullanır. Normal bakım path'i ayrı contract ile korunur.
 

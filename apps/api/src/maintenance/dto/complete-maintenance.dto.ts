@@ -49,7 +49,6 @@ export class CompleteMaintenanceDto {
   @IsOptional() @IsInt() @Min(0) coolerCount?: number;
   @IsOptional() @IsBoolean() equipmentCorrectionRequested?: boolean;
   @IsOptional() @IsInt() @Min(0) maintainedCoolerCount?: number;
-  @IsOptional() @IsBoolean() partialMaintenanceConfirmed?: boolean;
   @IsOptional() @IsString() @MaxLength(500) missingMaintenanceExplanation?: string;
   @IsOptional() @IsInt() @Min(0) towerCount?: number;
   @IsOptional() @IsInt() @Min(0) tapCount?: number;

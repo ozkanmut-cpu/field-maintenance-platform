@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import {
   MaintenanceObligationStatus,
   MaintenanceType,
@@ -25,7 +25,6 @@ function mobilePayload(overrides: Record<string, unknown> = {}) {
     lateEntryReason: 'Çevrimdışı bakım kaydı',
     coolerCount: 5,
     maintainedCoolerCount: 4,
-    partialMaintenanceConfirmed: true,
     towerCount: 0,
     tapCount: 0,
     smarttapCount: 0,
@@ -205,12 +204,23 @@ test('mobile partial payload without the optional explanation still closes and s
   );
 });
 
+test('API whitelist rejects the obsolete partial confirmation field from stale clients', async () => {
+  await assert.rejects(
+    () => validateMobilePayload({ ...mobilePayload(), partialMaintenanceConfirmed: true }),
+    (error: unknown) => {
+      if (!(error instanceof BadRequestException)) return false;
+      const response = error.getResponse() as { message?: unknown };
+      return Array.isArray(response.message)
+        && response.message.includes('property partialMaintenanceConfirmed should not exist');
+    },
+  );
+});
+
 test('normal maintenance keeps its complete counts, closure and audit contract', async () => {
   const harness = makeHarness();
 
   await harness.completeFromMobile(mobilePayload({
     maintainedCoolerCount: 5,
-    partialMaintenanceConfirmed: undefined,
     idempotencyKey: 'mobile-normal-maintenance-contract',
   }));
   const history = await harness.history();

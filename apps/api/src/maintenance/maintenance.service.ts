@@ -384,9 +384,6 @@ export class MaintenanceService {
       throw new BadRequestException('Bakımı yapılan soğutucu adedi toplam soğutucu adedinden büyük olamaz');
     }
     const missingMaintenanceCount = totalCoolerCount - maintainedCoolerCount;
-    if (missingMaintenanceCount > 0 && dto.partialMaintenanceConfirmed !== true) {
-      throw new BadRequestException('Eksik bakım için “Eksik bakım yapıldı” seçeneğini onayla');
-    }
     const missingMaintenanceExplanation = missingMaintenanceCount > 0
       ? dto.missingMaintenanceExplanation?.trim() || null
       : null;

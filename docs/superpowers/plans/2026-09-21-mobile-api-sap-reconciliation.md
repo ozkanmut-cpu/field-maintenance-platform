@@ -64,13 +64,13 @@ Run: `node --test apps/mobile/src/mobile-release-baseline.smoke.test.mjs`
 - Create: `apps/api/src/maintenance/partial-maintenance-contract.spec.ts`
 - Test: `apps/api/src/maintenance/partial-maintenance.spec.ts`
 
-**Produces:** `complete()` accepts `partialMaintenanceConfirmed`, persists summary/audit and closes the obligation.
+**Produces:** `complete()` kısmi bakımı sayısal adetlerden türetir, artık `partialMaintenanceConfirmed` alanını reddeder, summary/audit yazar ve yükümlülüğü kapatır.
 
-- [ ] **Step 1: Add failing DTO contract tests for `partialMaintenanceConfirmed`, explanation present/absent, audit, closed obligation and normal-maintenance regression.**
+- [ ] **Step 1: Add failing contract tests: mobil payload alanı göndermez; DTO eski alanı reddeder; açıklama present/absent, audit, closed obligation ve normal-maintenance regression korunur.**
 
-- [ ] **Step 2: Run:** `npm test -w @fmp/api -- partial-maintenance-contract.spec.ts`; **Expected:** DTO rejects the payload or summary/audit assertion fails.
+- [ ] **Step 2: Run:** `node --test --require ts-node/register src/maintenance/partial-maintenance-contract.spec.ts`; **Expected:** mevcut DTO eski alanı kabul eder veya servis kısmi kaydı eski onay alanı olmadan reddeder.
 
-- [ ] **Step 3: Add only the DTO field, invariant validation and transaction writes required for the tests.**
+- [ ] **Step 3: Eski DTO alanını ve servis bağımlılığını kaldır; invariant, transaction writes ve count-derived partial semantics'i koru.**
 
 - [ ] **Step 4: Run API unit/integration suites and inspect the persisted `4/5 · 1 eksik` projection.**
 
