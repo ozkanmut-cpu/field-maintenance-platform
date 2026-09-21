@@ -1,20 +1,22 @@
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import ts from 'typescript';
 
-const primitivesPath = new URL('./admin-primitives.tsx', import.meta.url);
-const operationsPath = new URL('./operations.tsx', import.meta.url);
+const require = createRequire(import.meta.url);
+const code = ts.transpileModule(readFileSync(new URL('./admin-primitives.tsx', import.meta.url), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+}).outputText;
+const exports = {};
+new Function('require', 'exports', code)(require, exports);
 
-test('dashboard queue metrics use the reusable accessible MetricCard destinations', () => {
-  assert.equal(existsSync(primitivesPath), true, 'shared dashboard primitives must exist');
-  const primitives = readFileSync(primitivesPath, 'utf8');
-  const operations = readFileSync(operationsPath, 'utf8');
-
-  assert.match(primitives, /export function MetricCard/);
-  assert.match(primitives, /aria-label/);
-  assert.match(operations, /import \{ MetricCard \} from '\.\/admin-primitives'/);
-  assert.match(operations, /<MetricCard[\s\S]*section="setup-pending"/);
-  assert.match(operations, /<MetricCard[\s\S]*section="approvals"/);
-  assert.match(operations, /<MetricCard[\s\S]*section="points"/);
-  assert.match(operations, /<MetricCard[\s\S]*section="regions"/);
+test('metric cards name the real count and navigate to their declared workflow', () => {
+  const destinations = [];
+  const card = exports.MetricCard({ label: 'Bekleyen onay', value: 7, description: 'Kayıtları incele',
+    section: 'approvals', onNavigate: section => destinations.push(section) });
+  assert.equal(card.type, 'button');
+  assert.equal(card.props['aria-label'], 'Bekleyen onay: 7. Kayıtları incele');
+  card.props.onClick();
+  assert.deepEqual(destinations, ['approvals']);
 });

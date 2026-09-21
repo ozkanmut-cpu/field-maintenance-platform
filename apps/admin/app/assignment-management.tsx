@@ -201,13 +201,18 @@ export default function AssignmentManagement() {
   const [pointLoading, setPointLoading] = useState(false);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [baseLoading, setBaseLoading] = useState(true);
+  const [baseError, setBaseError] = useState('');
+  const [pointError, setPointError] = useState('');
+  const [auditError, setAuditError] = useState('');
+  const [auditId, setAuditId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const cancelPointRequest = useRef<(() => void) | null>(null);
   const cancelAuditRequest = useRef<(() => void) | null>(null);
   const cancelEffectiveRequest = useRef<(() => void) | null>(null);
   const [now, setNow] = useState(() => new Date());
-  const busy = isAssignmentBusy({ point: pointLoading, mutation: mutationBusy, audit: auditLoading });
+  const busy = baseLoading || isAssignmentBusy({ point: pointLoading, mutation: mutationBusy, audit: auditLoading });
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
@@ -217,12 +222,16 @@ export default function AssignmentManagement() {
   }
 
   async function loadBase() {
-    const [pointList, userList] = await Promise.all([api<Point[]>('/api/backend/points'), api<Technician[]>('/api/backend/users')]);
-    setPoints(pointList);
-    const techs = userList.filter((u) => u.role === 'TECHNICIAN' && u.active);
-    setTechnicians(techs);
-    setPointId((current) => current || pointList[0]?.id || '');
-    setTechnicianId((current) => current || techs[0]?.id || '');
+    setBaseLoading(true); setBaseError('');
+    try {
+      const [pointList, userList] = await Promise.all([api<Point[]>('/api/backend/points'), api<Technician[]>('/api/backend/users')]);
+      setPoints(pointList);
+      const techs = userList.filter((u) => u.role === 'TECHNICIAN' && u.active);
+      setTechnicians(techs);
+      setPointId((current) => current || pointList[0]?.id || '');
+      setTechnicianId((current) => current || techs[0]?.id || '');
+    } catch (cause) { setBaseError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBaseLoading(false); }
   }
 
   function loadPoint(id: string) {
@@ -231,18 +240,18 @@ export default function AssignmentManagement() {
     cancelEffectiveRequest.current?.();
     cancelAuditRequest.current = null;
     cancelEffectiveRequest.current = null;
-    setAuditLoading(false);
+    setAuditLoading(false); setAuditId(''); setAuditError(''); setPointError('');
     if (!id) { setHistory(null); setEffective(null); setAudit(null); setPointLoading(false); return; }
     cancelPointRequest.current = startAssignmentPointRequest(id, {
       history: setHistory,
       effective: setEffective,
       audit: setAudit,
-      error: setError,
+      error: setPointError,
       loading: setPointLoading,
     });
   }
 
-  useEffect(() => { void loadBase().catch((e) => setError(e instanceof Error ? e.message : String(e))); }, []);
+  useEffect(() => { void loadBase(); }, []);
   useEffect(() => {
     loadPoint(pointId);
     return () => {
@@ -258,7 +267,7 @@ export default function AssignmentManagement() {
     cancelEffectiveRequest.current?.();
     cancelEffectiveRequest.current = startAssignmentEffectiveRequest(id, {
       effective: setEffective,
-      error: setError,
+      error: setPointError,
       loading: setPointLoading,
     });
   }
@@ -314,9 +323,10 @@ export default function AssignmentManagement() {
 
   function openAudit(id: string) {
     cancelAuditRequest.current?.();
+    setAuditId(id);
     cancelAuditRequest.current = startAssignmentAuditRequest(id, {
       audit: setAudit,
-      error: setError,
+      error: setAuditError,
       loading: setAuditLoading,
     });
   }
@@ -338,16 +348,18 @@ export default function AssignmentManagement() {
   }, [history, historyFilter, historySearch, now]);
 
   return <>
-    <section className="dashboardGrid">
+    {history && effective && !baseLoading && !baseError && !pointLoading && !pointError ? <section className="dashboardGrid">
       <div className="dashboardCard"><span>Effective kaynak</span><strong>{effective?.source ?? '—'}</strong><small>{effective?.technician?.name || 'Teknisyen yok'}</small></div>
       <div className="dashboardCard"><span>Yürürlükte istisna</span><strong>{activeCount}</strong><small>Bu nokta için</small></div>
       <div className="dashboardCard"><span>Kalıcı override</span><strong>{overrideCount}</strong><small>Toplam geçmiş</small></div>
       <div className="dashboardCard"><span>Geçici</span><strong>{temporaryCount}</strong><small>Toplam geçmiş</small></div>
-    </section>
+    </section> : null}
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Görevlendirme Yönetimi</h2><p>Bölge teknisyenini ezmeden nokta bazlı kalıcı istisna veya süreli görevlendirme tanımla.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadPoint(pointId)}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
-      {error ? <div className="error banner">{error}</div> : null}
+      <div className="panelHeader"><div><h2>Görevlendirme Yönetimi</h2><p>Bölge teknisyenini ezmeden nokta bazlı kalıcı istisna veya süreli görevlendirme tanımla.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => baseError || !pointId ? void loadBase() : loadPoint(pointId)}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
+      {baseLoading ? <p role="status">Temel veriler yükleniyor…</p> : baseError ? <div className="error banner" role="alert">{baseError}<button className="ghost" onClick={() => void loadBase()}>Temel verileri yeniden dene</button></div> : null}
+      {pointError ? <div className="error banner" role="alert">{pointError}<button className="ghost" disabled={pointLoading} onClick={() => loadPoint(pointId)}>Nokta verilerini yeniden dene</button></div> : null}
+      {error ? <div className="error banner" role="alert">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / nokta / bölge ara" />
@@ -363,7 +375,7 @@ export default function AssignmentManagement() {
         <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
         {kind === 'TEMPORARY' ? <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} required /> : null}
         <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={240} placeholder="Neden / açıklama (opsiyonel)" />
-        <button type="submit" disabled={busy}>GÖREVLENDİR</button>
+        <button type="submit" disabled={busy || Boolean(baseError || pointError) || !history}>GÖREVLENDİR</button>
       </form>
     </section>
 
@@ -374,7 +386,7 @@ export default function AssignmentManagement() {
         <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı / sona ermiş</option><option value="POINT_OVERRIDE">Kalıcı override</option><option value="TEMPORARY">Geçici</option></select>
       </div>
       <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>Neden</th><th></th></tr></thead><tbody>
-        {busy && !history ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Görevlendirmeler yükleniyor</strong><span>Nokta geçmişi hazırlanıyor.</span></div></td></tr> : !filteredHistory.length ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="search" /><strong>Görevlendirme kaydı yok</strong><span>Seçili filtrelerde kayıt bulunamadı.</span></div></td></tr> : filteredHistory.map((a) => {
+        {baseError || pointError ? <tr><td colSpan={7}>Görevlendirme verileri alınamadı. Yukarıdaki yeniden deneme aksiyonunu kullanın.</td></tr> : baseLoading || pointLoading ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Görevlendirmeler yükleniyor</strong><span>Nokta geçmişi hazırlanıyor.</span></div></td></tr> : !pointId || !history ? <tr><td colSpan={7}>Görevlendirmeleri görmek için nokta seçin.</td></tr> : !filteredHistory.length ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="search" /><strong>Görevlendirme kaydı yok</strong><span>Seçili filtrelerde kayıt bulunamadı.</span></div></td></tr> : filteredHistory.map((a) => {
           const timing = assignmentTimingStatus(a, now);
           return <tr key={a.id}>
             <td><strong>{a.technician.name}</strong></td><td>{a.kind === 'POINT_OVERRIDE' ? 'Kalıcı override' : 'Geçici'}</td><td>{new Date(a.startsAt).toLocaleString('tr-TR')}</td><td>{a.endsAt ? new Date(a.endsAt).toLocaleString('tr-TR') : 'Süresiz'}</td><td><span className={timing === 'CURRENT' ? 'pill active' : 'pill'}>{assignmentTimingLabel(timing)}</span></td><td>{a.reason || '—'}</td><td className="actions"><button className="small iconAction" type="button" disabled={busy} onClick={() => void openAudit(a.id)}><AdminIcon name="history" size={15} /><span>AUDIT</span></button>{a.active ? <button className="small" type="button" disabled={busy} onClick={() => void deactivate(a)}><AdminIcon name="error" size={16} /><span>KAPAT</span></button> : null}</td>
@@ -383,9 +395,9 @@ export default function AssignmentManagement() {
       </tbody></table></div>
     </section>
 
-    {audit ? <section className="panel"><div className="panelHeader"><div><h2>Görevlendirme Audit Geçmişi</h2><p>{audit.assignment.kind} · {audit.assignment.active ? 'Aktif' : 'Kapalı'}</p></div><button className="ghost" onClick={() => setAudit(null)}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
+    {auditId ? <section className="panel"><div className="panelHeader"><div><h2>Görevlendirme Audit Geçmişi</h2>{audit ? <p>{audit.assignment.kind} · {audit.assignment.active ? 'Aktif' : 'Kapalı'}</p> : null}</div><button className="ghost" onClick={() => { cancelAuditRequest.current?.(); setAuditLoading(false); setAudit(null); setAuditId(''); setAuditError(''); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Kullanıcı</th><th>Not</th><th>Değişiklik</th></tr></thead><tbody>
-        {audit.history.map((h) => <tr key={h.id}><td>{new Date(h.createdAt).toLocaleString('tr-TR')}</td><td>{h.action}</td><td>{h.actor.name}</td><td>{h.note || '—'}</td><td><details><summary>JSON</summary><pre>{JSON.stringify({ before: h.oldValue ?? null, after: h.newValue ?? null }, null, 2)}</pre></details></td></tr>)}
+        {auditLoading ? <tr><td colSpan={5} role="status">Audit geçmişi yükleniyor…</td></tr> : auditError ? <tr><td colSpan={5}><div role="alert">{auditError}<button className="ghost" onClick={() => openAudit(auditId)}>Audit geçmişini yeniden dene</button></div></td></tr> : audit && audit.history.length === 0 ? <tr><td colSpan={5}><div className="emptyState compact"><strong>Audit kaydı yok</strong><span>Bu görevlendirme için değişiklik kaydı bulunmuyor.</span></div></td></tr> : audit?.history.map((h) => <tr key={h.id}><td>{new Date(h.createdAt).toLocaleString('tr-TR')}</td><td>{h.action}</td><td>{h.actor.name}</td><td>{h.note || '—'}</td><td><details><summary>JSON</summary><pre>{JSON.stringify({ before: h.oldValue ?? null, after: h.newValue ?? null }, null, 2)}</pre></details></td></tr>)}
       </tbody></table></div>
     </section> : null}
   </>;

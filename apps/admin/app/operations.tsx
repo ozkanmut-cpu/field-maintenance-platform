@@ -100,6 +100,10 @@ const [technicianDailySummaryLoading, setTechnicianDailySummaryLoading] = useSta
 const [busy, setBusy] = useState(false);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState('');
+const [loadError, setLoadError] = useState('');
+const [dailySummaryError, setDailySummaryError] = useState('');
+const [periodSummaryError, setPeriodSummaryError] = useState('');
+const [technicianDailySummaryError, setTechnicianDailySummaryError] = useState('');
 const [pointSearch, setPointSearch] = useState('');
 const [pointStatusFilter, setPointStatusFilter] = useState<'ALL' | Point['status']>('ALL');
 const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
@@ -157,29 +161,36 @@ async function loadDailySummary(date = dailySummaryDate) {
 if (!date) { setDailySummary(null); return; }
 setDailySummary(null);
 setDailySummaryLoading(true);
+setDailySummaryError('');
 try {
 setDailySummary(await api<DailyAdminSummary>(`/api/backend/maintenance/admin-daily-summary?date=${encodeURIComponent(date)}`));
-} finally { setDailySummaryLoading(false); }
+} catch (cause) { setDailySummaryError(cause instanceof Error ? cause.message : String(cause)); }
+finally { setDailySummaryLoading(false); }
 }
 async function loadPeriodSummary(date = periodSummaryDate) {
 if (!date) { setPeriodSummary(null); return; }
 setPeriodSummary(null);
 setPeriodSummaryLoading(true);
+setPeriodSummaryError('');
 try {
 setPeriodSummary(await api<PeriodAdminSummary>(`/api/backend/maintenance/admin-period-summary?date=${encodeURIComponent(date)}`));
-} finally { setPeriodSummaryLoading(false); }
+} catch (cause) { setPeriodSummaryError(cause instanceof Error ? cause.message : String(cause)); }
+finally { setPeriodSummaryLoading(false); }
 }
 async function loadTechnicianDailySummary(technicianId = technicianDailySummaryTechnicianId, date = technicianDailySummaryDate) {
 if (!technicianId || !date) { setTechnicianDailySummary(null); return; }
 setTechnicianDailySummary(null);
 setTechnicianDailySummaryLoading(true);
+setTechnicianDailySummaryError('');
 try {
 setTechnicianDailySummary(await api<TechnicianDailySummary>(`/api/backend/maintenance/admin-technician-daily-summary?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`));
-} finally { setTechnicianDailySummaryLoading(false); }
+} catch (cause) { setTechnicianDailySummaryError(cause instanceof Error ? cause.message : String(cause)); }
+finally { setTechnicianDailySummaryLoading(false); }
 }
 async function load() {
 const generation = ++loadGeneration.current;
 setLoading(true);
+setLoadError('');
 try {
 const [regionList, pointList, setupQueue, attemptReview, reviewHistory] = await Promise.all([
 api<Region[]>('/api/backend/regions'),
@@ -197,7 +208,7 @@ setAttemptHistory(reviewHistory.items);
 setPointForm((current) => ({ ...current, regionId: current.regionId || regionList[0]?.id || '' }));
 setBulkRegionId((current) => current || regionList[0]?.id || '');
 } catch (e) {
-if (generation === loadGeneration.current) setError(e instanceof Error ? e.message : String(e));
+if (generation === loadGeneration.current) setLoadError(e instanceof Error ? e.message : String(e));
 } finally { if (generation === loadGeneration.current) setLoading(false); }
 }
 useEffect(() => {
@@ -205,15 +216,15 @@ void load();
 }, []);
 useEffect(() => {
 if (activeSection !== 'dashboard') return;
-void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+void loadDailySummary();
 }, [dailySummaryDate, activeSection]);
 useEffect(() => {
 if (activeSection !== 'dashboard') return;
-void loadPeriodSummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+void loadPeriodSummary();
 }, [periodSummaryDate, activeSection]);
 useEffect(() => {
 if (activeSection !== 'dashboard' || !technicianDailySummaryTechnicianId) return;
-void loadTechnicianDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+void loadTechnicianDailySummary();
 }, [technicianDailySummaryTechnicianId, technicianDailySummaryDate, activeSection]);
 async function createRegion(event: FormEvent) {
 event.preventDefault();
@@ -345,17 +356,18 @@ return <button className="small" onClick={() => onNavigate('point-detail', { poi
 }
 return (
 <>
-{error ? <div className="error banner">{error}</div> : null}
+{error ? <div className="error banner" role="alert">{error}</div> : null}
+{loadError ? <div className="error banner" role="alert">{loadError}<button className="ghost" onClick={() => void load()} disabled={loading}>Kuyrukları tekrar yükle</button></div> : null}
 {activeSection === 'dashboard' ? <>
 <section className="metricGrid dashboardQueueMetrics" aria-label="Operasyon kuyrukları">
-<MetricCard label="Ayar bekleyen" value={setupPending.length} description="Eksik ayarları tamamla" section="setup-pending" onNavigate={onNavigate} />
-<MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı kayıtlarını incele" section="approvals" onNavigate={onNavigate} />
-<MetricCard label="Noktalar" value={points.length} description="Nokta listesini yönet" section="points" onNavigate={onNavigate} />
-<MetricCard label="Bölgeler" value={regions.length} description="Bölge ve sorumluları yönet" section="regions" onNavigate={onNavigate} />
+<MetricCard label="Ayar bekleyen" value={loading || loadError ? '—' : setupPending.length} description="Eksik ayarları tamamla" section="setup-pending" onNavigate={onNavigate} />
+<MetricCard label="Bekleyen onay" value={loading || loadError ? '—' : attemptQueue.length} description="Yapılamadı kayıtlarını incele" section="approvals" onNavigate={onNavigate} />
+<MetricCard label="Geciken açık iş" value={dailySummary?.metrics.overdueOpen ?? '—'} description="Geciken yükümlülükleri incele" section="maintenance-calendar" onNavigate={onNavigate} />
 </section>
+<details className="panel dashboardReports"><summary>Raporlar ve ayrıntılar</summary>
 <section className="panel">
-<div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
-{dailySummary ? <>
+<div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary()} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
+{dailySummaryError ? <div className="error banner" role="alert">{dailySummaryError}</div> : dailySummary ? <>
 <section className="dashboardGrid">
 <div className="dashboardCard"><span>Tamamlanan bakım</span><strong>{dailySummary.metrics.completedMaintenance}</strong><small>{dailySummary.date}</small></div>
 <div className="dashboardCard"><span>Sahada çalışan teknisyen</span><strong>{dailySummary.metrics.fieldTechnicianCount}</strong><small>En az bir saha işlemi</small></div>
@@ -375,8 +387,8 @@ return (
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Günlük özet hazırlanıyor</strong><span>Seçili günün operasyon verileri yükleniyor.</span></div>}
 </section>
 <section className="panel">
-<div className="panelHeader"><div><h2>Haftalık / Dönem Sonu Özeti</h2><p>Seçilen tarihin ait olduğu Pazartesi–Pazar İstanbul haftasının operasyon görünümü.</p></div><div className="rowActions"><button className="ghost small" onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, -7))}>ÖNCEKİ HAFTA</button><input type="date" value={periodSummaryDate} onChange={(e) => setPeriodSummaryDate(e.target.value)} aria-label="Haftalık özet tarihi" /><button className="ghost small" disabled={shiftDateKey(periodSummaryDate, 7) > istanbulDateKey()} onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, 7))}>SONRAKİ HAFTA</button><button className="ghost iconAction" onClick={() => void loadPeriodSummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={periodSummaryLoading}><AdminIcon name="refresh" size={17} /><span>{periodSummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
-{periodSummary ? <>
+<div className="panelHeader"><div><h2>Haftalık / Dönem Sonu Özeti</h2><p>Seçilen tarihin ait olduğu Pazartesi–Pazar İstanbul haftasının operasyon görünümü.</p></div><div className="rowActions"><button className="ghost small" onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, -7))}>ÖNCEKİ HAFTA</button><input type="date" value={periodSummaryDate} onChange={(e) => setPeriodSummaryDate(e.target.value)} aria-label="Haftalık özet tarihi" /><button className="ghost small" disabled={shiftDateKey(periodSummaryDate, 7) > istanbulDateKey()} onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, 7))}>SONRAKİ HAFTA</button><button className="ghost iconAction" onClick={() => void loadPeriodSummary()} disabled={periodSummaryLoading}><AdminIcon name="refresh" size={17} /><span>{periodSummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
+{periodSummaryError ? <div className="error banner" role="alert">{periodSummaryError}</div> : periodSummary ? <>
 <p className="muted"><strong>{periodSummary.weekStart}</strong> – <strong>{periodSummary.weekEnd}</strong></p>
 <section className="dashboardGrid">
 <div className="dashboardCard"><span>Tamamlanan bakım</span><strong>{periodSummary.metrics.completedMaintenance}</strong><small>Haftalık toplam</small></div>
@@ -395,8 +407,8 @@ return (
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Haftalık özet hazırlanıyor</strong><span>Seçili haftanın operasyon verileri yükleniyor.</span></div>}
 </section>
 <section className="panel">
-<div className="panelHeader"><div><h2>Teknisyen Günlük Özeti</h2><p>Seçilen teknisyenin İstanbul iş günündeki kendi işi, yardım hareketleri, açık görevleri ve evrak durumu.</p></div><div className="rowActions"><select value={technicianDailySummaryTechnicianId} onChange={(e) => setTechnicianDailySummaryTechnicianId(e.target.value)} aria-label="Teknisyen seç"><option value="">Teknisyen seç</option>{technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select><input type="date" value={technicianDailySummaryDate} onChange={(e) => setTechnicianDailySummaryDate(e.target.value)} aria-label="Teknisyen özet tarihi" /><button className="ghost iconAction" onClick={() => void loadTechnicianDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={technicianDailySummaryLoading || !technicianDailySummaryTechnicianId}><AdminIcon name="refresh" size={17} /><span>{technicianDailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
-{technicianDailySummary ? <>
+<div className="panelHeader"><div><h2>Teknisyen Günlük Özeti</h2><p>Seçilen teknisyenin İstanbul iş günündeki kendi işi, yardım hareketleri, açık görevleri ve evrak durumu.</p></div><div className="rowActions"><select value={technicianDailySummaryTechnicianId} onChange={(e) => setTechnicianDailySummaryTechnicianId(e.target.value)} aria-label="Teknisyen seç"><option value="">Teknisyen seç</option>{technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select><input type="date" value={technicianDailySummaryDate} onChange={(e) => setTechnicianDailySummaryDate(e.target.value)} aria-label="Teknisyen özet tarihi" /><button className="ghost iconAction" onClick={() => void loadTechnicianDailySummary()} disabled={technicianDailySummaryLoading || !technicianDailySummaryTechnicianId}><AdminIcon name="refresh" size={17} /><span>{technicianDailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
+{technicianDailySummaryError ? <div className="error banner" role="alert">{technicianDailySummaryError}</div> : technicianDailySummary ? <>
 <p className="muted"><strong>{technicianDailySummary.technician.name}</strong> · {technicianDailySummary.date}</p>
 <section className="dashboardGrid">
 <div className="dashboardCard"><span>Kendi bakımı</span><strong>{technicianDailySummary.metrics.completedMaintenance}</strong><small>Başka teknisyen adına yapılanlar hariç</small></div>
@@ -415,6 +427,7 @@ return (
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Teknisyen özeti hazırlanıyor</strong><span>Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor.</span></div>}
 </section>
 <KpiReportingPanel technicians={technicians} />
+</details>
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">
 <div className="panelHeader">
