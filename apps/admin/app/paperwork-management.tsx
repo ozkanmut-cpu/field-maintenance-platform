@@ -62,6 +62,12 @@ export default function PaperworkManagement() {
   const [mutationBusy, setMutationBusy] = useState(false);
   const [visitsBusy, setVisitsBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [baseLoading, setBaseLoading] = useState(true);
+  const [baseError, setBaseError] = useState('');
+  const [visitsError, setVisitsError] = useState('');
+  const [visitsLoaded, setVisitsLoaded] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const [historyError, setHistoryError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const analyticsToday = istanbulDateKey();
@@ -75,7 +81,8 @@ export default function PaperworkManagement() {
   const historyRequests = useRef(new RequestActivity(setHistoryBusy));
   const visitsDatasetKeyRef = useRef('');
   const busy = mutationBusy || visitsBusy || historyBusy;
-  const loading = visitsBusy;
+  const loading = baseLoading || visitsBusy;
+  const visitsReady = visitsLoaded && !baseLoading && !baseError && !visitsBusy && !visitsError;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
@@ -85,16 +92,21 @@ export default function PaperworkManagement() {
   }
 
   async function loadTechnicians() {
-    const users = await api<User[]>('/api/backend/users');
-    const techs = users.filter((u) => u.role === 'TECHNICIAN' && u.active);
-    setTechnicians(techs);
-    setTechnicianId((current) => current || techs[0]?.id || '');
+    setBaseLoading(true); setBaseError('');
+    try {
+      const users = await api<User[]>('/api/backend/users');
+      const techs = users.filter((u) => u.role === 'TECHNICIAN' && u.active);
+      setTechnicians(techs);
+      setTechnicianId((current) => current || techs[0]?.id || '');
+    } catch (cause) { setBaseError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBaseLoading(false); }
   }
 
   function invalidateVisitContext() {
     visitsRequests.current.invalidate();
     historyRequests.current.invalidate();
     visitsDatasetKeyRef.current = '';
+    setVisits([]); setVisitsLoaded(false); setVisitsError(''); setHistoryError('');
     setSelected([]);
     setHistoryVisitId('');
     setHistory([]);
@@ -102,12 +114,12 @@ export default function PaperworkManagement() {
 
   async function loadVisits() {
     const requestEpoch = visitsRequests.current.begin();
+    setVisitsError(''); setVisitsLoaded(false);
     if (!technicianId || !date) {
       if (visitsRequests.current.isCurrent(requestEpoch)) { setVisits([]); setSelected([]); visitsRequests.current.finish(requestEpoch); }
       return;
     }
     const datasetKey = `${technicianId}:${date}`;
-    setError('');
     try {
       const data = await api<TechnicianHistory>(`/api/backend/maintenance/technician-history?technicianId=${encodeURIComponent(technicianId)}&date=${encodeURIComponent(date)}`);
       if (!visitsRequests.current.isCurrent(requestEpoch)) return;
@@ -115,11 +127,12 @@ export default function PaperworkManagement() {
       const itemIds = new Set(items.map((item) => item.id));
       const sameDataset = visitsDatasetKeyRef.current === datasetKey;
       visitsDatasetKeyRef.current = datasetKey;
-      setVisits(items);
+      setVisits(items); setVisitsLoaded(true);
       setSelected((current) => sameDataset ? current.filter((id) => itemIds.has(id)) : []);
     } catch (e) {
       if (!visitsRequests.current.isCurrent(requestEpoch)) return;
-      setError(e instanceof Error ? e.message : String(e));
+      setVisitsError(e instanceof Error ? e.message : String(e));
+      setSelected([]);
     } finally {
       visitsRequests.current.finish(requestEpoch);
     }
@@ -129,7 +142,7 @@ export default function PaperworkManagement() {
     if (!analyticsFrom || !analyticsTo) return;
     const requestEpoch = analyticsRequests.current.next();
     setAnalytics(null);
-    setAnalyticsLoading(true); setError('');
+    setAnalyticsLoading(true); setAnalyticsError('');
     try {
       const params = new URLSearchParams({ from: analyticsFrom, to: analyticsTo });
       if (analyticsTechnicianId) params.set('technicianId', analyticsTechnicianId);
@@ -138,13 +151,13 @@ export default function PaperworkManagement() {
       setAnalytics(data);
     } catch (e) {
       if (!analyticsRequests.current.isCurrent(requestEpoch)) return;
-      setError(e instanceof Error ? e.message : String(e));
+      setAnalyticsError(e instanceof Error ? e.message : String(e));
     } finally {
       if (analyticsRequests.current.isCurrent(requestEpoch)) setAnalyticsLoading(false);
     }
   }
 
-  useEffect(() => { void loadTechnicians().catch((e) => setError(e instanceof Error ? e.message : String(e))); }, []);
+  useEffect(() => { void loadTechnicians(); }, []);
   useEffect(() => { void loadVisits(); }, [technicianId, date]);
   useEffect(() => { void loadAnalytics(); }, [analyticsTechnicianId, analyticsFrom, analyticsTo]);
 
@@ -153,7 +166,7 @@ export default function PaperworkManagement() {
     if (!q) return visits;
     return visits.filter((v) => `${v.point?.code ?? ''} ${v.point?.name ?? ''}`.toLocaleLowerCase('tr-TR').includes(q));
   }, [visits, search]);
-  const actionableSelected = selected.filter((id) => visible.some((visit) => visit.id === id));
+  const actionableSelected = visitsReady ? selected.filter((id) => visible.some((visit) => visit.id === id)) : [];
   const bulkStatusOptions = bulkPaperworkStatusOptions(
     bulkKind,
     actionableSelected.flatMap((id) => {
@@ -202,14 +215,14 @@ export default function PaperworkManagement() {
 
   async function openHistory(visitId: string) {
     const requestEpoch = historyRequests.current.begin();
-    setError('');
+    setHistoryVisitId(visitId); setHistory([]); setHistoryError('');
     try {
       const data = await api<PaperworkHistoryItem[]>(`/api/backend/maintenance/paperwork-history?visitId=${encodeURIComponent(visitId)}`);
       if (!historyRequests.current.isCurrent(requestEpoch)) return;
       setHistoryVisitId(visitId); setHistory(data);
     } catch (e) {
       if (!historyRequests.current.isCurrent(requestEpoch)) return;
-      setError(e instanceof Error ? e.message : String(e));
+      setHistoryError(e instanceof Error ? e.message : String(e));
     } finally {
       historyRequests.current.finish(requestEpoch);
     }
@@ -222,16 +235,18 @@ export default function PaperworkManagement() {
   const missingConfirmation = visits.filter((v) => v.confirmationStatus === 'MISSING').length;
 
   return <>
-    <section className="dashboardGrid">
+    {visitsReady ? <section className="dashboardGrid">
       <div className="dashboardCard"><span>Bakım</span><strong>{visits.length}</strong><small>{date}</small></div>
       <div className="dashboardCard"><span>Servis fişi bekleyen</span><strong>{pendingSlip}</strong><small>Eksik: {missingSlip} · İnceleme: {pendingReviewSlip}</small></div>
       <div className="dashboardCard"><span>Teyit bekleyen</span><strong>{pendingConfirmation}</strong><small>Eksik: {missingConfirmation}</small></div>
       <div className="dashboardCard"><span>Seçili</span><strong>{actionableSelected.length}</strong><small>Toplu işlem için</small></div>
-    </section>
+    </section> : null}
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Evrak Yönetimi</h2><p>Teknisyen ve güne göre bakım kayıtlarını getir; servis fişi ve teyit durumlarını yönet.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadVisits()}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
-      {error ? <div className="error banner">{error}</div> : null}
+      <div className="panelHeader"><div><h2>Evrak Yönetimi</h2><p>Teknisyen ve güne göre bakım kayıtlarını getir; servis fişi ve teyit durumlarını yönet.</p></div><button className="ghost iconAction" disabled={busy || baseLoading} onClick={() => baseError ? void loadTechnicians() : void loadVisits()}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
+      {baseLoading ? <p role="status">Teknisyenler yükleniyor…</p> : baseError ? <div className="error banner" role="alert">{baseError}<button className="ghost" onClick={() => void loadTechnicians()}>Teknisyenleri yeniden dene</button></div> : null}
+      {visitsError ? <div className="error banner" role="alert">{visitsError}<button className="ghost" disabled={visitsBusy} onClick={() => void loadVisits()}>Bakım kayıtlarını yeniden dene</button></div> : null}
+      {error ? <div className="error banner" role="alert">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
         <select aria-label="Evrak teknisyeni filtresi" value={technicianId} onChange={(e) => { invalidateVisitContext(); setTechnicianId(e.target.value); }}>{technicians.map((t) => <option key={t.id} value={t.id}>{t.name} (@{t.username})</option>)}</select>
@@ -247,6 +262,7 @@ export default function PaperworkManagement() {
         <input type="date" value={analyticsFrom} onChange={(e) => setAnalyticsFrom(e.target.value)} aria-label="Analitik başlangıç tarihi" />
         <input type="date" value={analyticsTo} onChange={(e) => setAnalyticsTo(e.target.value)} aria-label="Analitik bitiş tarihi" />
       </div>
+      {analyticsError ? <div className="error banner" role="alert">{analyticsError}<button className="ghost" disabled={analyticsLoading} onClick={() => void loadAnalytics()}>Analitiği yeniden dene</button></div> : null}
       {analytics ? <>
         <section className="dashboardGrid">
           <div className="dashboardCard"><span>Analiz edilen bakım</span><strong>{analytics.totalVisits}</strong><small>{analytics.from} → {analytics.to}</small></div>
@@ -261,7 +277,7 @@ export default function PaperworkManagement() {
           <tr><td><strong>Servis Fişi</strong></td><td>{analytics.serviceSlip.pendingAgeBuckets.under24h}</td><td>{analytics.serviceSlip.pendingAgeBuckets.h24to48}</td><td>{analytics.serviceSlip.pendingAgeBuckets.d2to7}</td><td>{analytics.serviceSlip.pendingAgeBuckets.d7plus}</td></tr>
           <tr><td><strong>Teyit</strong></td><td>{analytics.confirmation.pendingAgeBuckets.under24h}</td><td>{analytics.confirmation.pendingAgeBuckets.h24to48}</td><td>{analytics.confirmation.pendingAgeBuckets.d2to7}</td><td>{analytics.confirmation.pendingAgeBuckets.d7plus}</td></tr>
         </tbody></table></div>
-      </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Analitik hazırlanıyor</strong><span>Seçili dönem için evrak süreleri hesaplanıyor.</span></div>}
+      </> : analyticsLoading ? <div className="emptyState compact" role="status"><AdminIcon name="clock" /><strong>Analitik hazırlanıyor</strong><span>Seçili dönem için evrak süreleri hesaplanıyor.</span></div> : !analyticsError ? <p>Analitik için başlangıç ve bitiş tarihini seçin.</p> : null}
     </section>
 
     <section className="panel">
@@ -275,8 +291,8 @@ export default function PaperworkManagement() {
     </section>
 
     <section className="panel">
-      <AccessibleTable caption="Seçilebilir bakım evrak kayıtları"><thead><tr><th><input type="checkbox" checked={visible.length > 0 && visible.every((v) => selected.includes(v.id))} onChange={toggleAll} aria-label="Görünen bakım kayıtlarının tümünü seç" /></th><th>Saat</th><th>Nokta</th><th>Servis Fişi</th><th>Teyit</th><th></th></tr></thead><tbody>
-        {loading ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Bakım kayıtları yükleniyor</strong><span>Seçili teknisyen ve güne ait evraklar hazırlanıyor.</span></div></td></tr> : visible.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Bakım kaydı yok</strong><span>Seçili teknisyen, tarih veya arama için kayıt bulunamadı.</span></div></td></tr> : visible.map((visit) => <tr key={visit.id}>
+      <AccessibleTable caption="Seçilebilir bakım evrak kayıtları"><thead><tr><th><input type="checkbox" disabled={!visitsReady || busy} checked={visitsReady && visible.length > 0 && visible.every((v) => selected.includes(v.id))} onChange={toggleAll} aria-label="Görünen bakım kayıtlarının tümünü seç" /></th><th>Saat</th><th>Nokta</th><th>Servis Fişi</th><th>Teyit</th><th></th></tr></thead><tbody>
+        {baseError || visitsError ? <tr><td colSpan={6}>Bakım kayıtları alınamadı. Yukarıdaki yeniden deneme aksiyonunu kullanın.</td></tr> : loading ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Bakım kayıtları yükleniyor</strong><span>Seçili teknisyen ve güne ait evraklar hazırlanıyor.</span></div></td></tr> : !visitsLoaded ? <tr><td colSpan={6}>Bakım kayıtlarını görmek için teknisyen ve tarih seçin.</td></tr> : visible.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Bakım kaydı yok</strong><span>Seçili teknisyen, tarih veya arama için kayıt bulunamadı.</span></div></td></tr> : visible.map((visit) => <tr key={visit.id}>
           <td><input type="checkbox" checked={selected.includes(visit.id)} onChange={() => toggle(visit.id)} aria-label={`${visit.point?.code ?? 'Bilinmeyen'} kodlu bakım kaydını seç`} /></td>
           <td>{new Date(visit.performedAt || visit.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td>
           <td><strong>{visit.point?.name || '—'}</strong><div className="muted">{visit.point?.code || '—'}</div></td>
@@ -289,7 +305,7 @@ export default function PaperworkManagement() {
 
     {historyVisitId ? <section className="panel"><div className="panelHeader"><div><h2>Evrak Değişiklik Geçmişi</h2><p>Ziyaret: {historyVisitId}</p></div><button className="ghost" onClick={() => { historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Evrak</th><th>Önce</th><th>Sonra</th><th>Kullanıcı</th><th>Not</th></tr></thead><tbody>
-        {history.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Evrak değişikliği yok</strong><span>Bu ziyaret için evrak audit kaydı bulunmuyor.</span></div></td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy?.name ?? (h.provenance === 'SAP_RECONCILIATION' ? 'SAP (otomatik)' : 'Sistem')}</td><td>{h.note || '—'}</td></tr>)}
+        {historyBusy ? <tr><td colSpan={6} role="status">Evrak geçmişi yükleniyor…</td></tr> : historyError ? <tr><td colSpan={6}><div className="error banner" role="alert">{historyError}<button className="ghost" onClick={() => void openHistory(historyVisitId)}>Geçmişi yeniden dene</button></div></td></tr> : history.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="history" /><strong>Evrak değişikliği yok</strong><span>Bu ziyaret için evrak audit kaydı bulunmuyor.</span></div></td></tr> : history.map((h) => <tr key={h.id}><td>{new Date(h.changedAt).toLocaleString('tr-TR')}</td><td>{h.kind === 'SERVICE_SLIP' ? 'Servis Fişi' : 'Teyit'}</td><td>{statusLabel[h.previousStatus]}</td><td><strong>{statusLabel[h.newStatus]}</strong></td><td>{h.changedBy?.name ?? (h.provenance === 'SAP_RECONCILIATION' ? 'SAP (otomatik)' : 'Sistem')}</td><td>{h.note || '—'}</td></tr>)}
       </tbody></table></div>
     </section> : null}
   </>;

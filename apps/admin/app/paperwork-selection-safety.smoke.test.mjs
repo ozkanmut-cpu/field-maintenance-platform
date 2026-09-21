@@ -5,8 +5,8 @@ import { test } from 'node:test';
 const source = readFileSync(new URL('./paperwork-management.tsx', import.meta.url), 'utf8');
 
 test('bulk paperwork actions exclude selections hidden by search', () => {
-  assert.match(source, /const actionableSelected = selected\.filter\(\(id\) => visible\.some\(\(visit\) => visit\.id === id\)\)/,
-    'bulk actions must be derived from the current visible set');
+  // Visible-selection behavior and failed-refresh safety run against the real
+  // component in source-recovery-runtime.test.mjs; keep payload guards here.
   assert.match(source, /setSelected\(\[\]\); setSearch\(e\.target\.value\)/,
     'a search change must synchronously clear prior selections');
   assert.match(source, /onChange=\{\(e\) => \{ invalidateVisitContext\(\); setTechnicianId\(e\.target\.value\); \}\}/,
