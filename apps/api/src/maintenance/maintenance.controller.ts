@@ -71,7 +71,10 @@ export class MaintenanceController {
       ...item,
     }));
 
-    const items = [...maintenanceHistory.items, ...otherItems].sort(
+    const baseItems = maintenanceHistory.items.filter(
+      (item) => item.type !== 'NON_MAINTENANCE_VISIT',
+    );
+    const items = [...baseItems, ...otherItems].sort(
       (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
     );
 
