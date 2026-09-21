@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
   "source": {
-    "sha": "b7b2c0388c546a00523460bae2937e29e353a44a"
+    "sha": "b7b2c0388c546a00523460bae2937e29e353a44a",
+    "linkage": "See mobile-apk-evidence.json for the published-download and emulator validation chain; local rebuilds are not treated as bit-identical."
   },
   "apk": {
     "sha256": "c8b0439190e350968b7dedd22c4f013b111c5900dfd501865a1c7f14c2d8ef03",
