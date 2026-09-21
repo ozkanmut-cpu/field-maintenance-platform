@@ -114,6 +114,57 @@ test('real purge fails closed before every mutation when a named region contains
   assert.deepEqual(calls, { transaction: 0, deleteMany: 0, regionDelete: 0 });
 });
 
+test('purge removes only explicitly owned mockup audits sharing its fixture note', async () => {
+  const { purgeNamedMockupData: purge } = require('./mockup-data.repository') as {
+    purgeNamedMockupData: (store: any, note: string) => Promise<unknown>;
+  };
+  const note = 'mockup note';
+  let audits = [
+    { id: 'mockup-audit', entityType: 'MaintenanceVisit', entityId: 'mockup-visit', action: 'PARTIAL_MAINTENANCE', actorId: 'mockup-user', note },
+    { id: 'unrelated-audit', entityType: 'MaintenanceVisit', entityId: 'live-visit', action: 'OPERATIONAL_ACTION', actorId: 'operational-user', note },
+  ];
+  const calls: { auditFindWhere?: unknown; auditDeleteWhere?: unknown } = {};
+  const removeAudits = async ({ where }: { where: { id?: { in: string[] }; note?: string } }) => {
+    calls.auditDeleteWhere = where;
+    audits = audits.filter((audit) => where.id
+      ? !where.id.in.includes(audit.id)
+      : audit.note !== where.note);
+  };
+  const noop = async () => undefined;
+  const tx = {
+    paperworkStatusHistory: { deleteMany: noop }, maintenanceReviewResolution: { deleteMany: noop },
+    sapConfirmationReconciliation: { deleteMany: noop }, adminAuditLog: { deleteMany: removeAudits },
+    maintenanceVisit: { deleteMany: noop }, maintenanceAttempt: { deleteMany: noop },
+    nonMaintenanceVisit: { deleteMany: noop }, pointAssignment: { deleteMany: noop },
+    pointAlias: { deleteMany: noop }, maintenanceObligation: { deleteMany: noop },
+    point: { deleteMany: noop }, prospectVisit: { deleteMany: noop },
+    prospectCustomer: { deleteMany: noop }, technicianHelpPermission: { deleteMany: noop },
+    region: { delete: noop }, user: { deleteMany: noop },
+  };
+  const store = {
+    region: { findUnique: async () => ({ id: 'mockup-region' }), delete: noop },
+    point: { findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }], deleteMany: noop },
+    user: { findMany: async () => [{ id: 'mockup-user' }], deleteMany: noop },
+    maintenanceVisit: { findMany: async () => [{ id: 'mockup-visit' }], deleteMany: noop },
+    prospectCustomer: { findMany: async () => [], deleteMany: noop },
+    adminAuditLog: {
+      findMany: async ({ where }: { where: unknown }) => { calls.auditFindWhere = where; return audits.filter((audit) => audit.id === 'mockup-audit'); },
+      deleteMany: removeAudits,
+    },
+    $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  await purge(store, note);
+  assert.deepEqual(audits.map((audit) => audit.id), ['unrelated-audit']);
+  assert.deepEqual(calls.auditDeleteWhere, { id: { in: ['mockup-audit'] } });
+  assert.deepEqual(calls.auditFindWhere, {
+    note,
+    OR: [
+      { entityType: 'SHOWCASE_DATASET', entityId: 'mockup-region', action: 'SEED_CREATED', actorId: { in: ['mockup-user'] } },
+      { entityType: 'MaintenanceVisit', entityId: { in: ['mockup-visit'] }, action: 'PARTIAL_MAINTENANCE', actorId: { in: ['mockup-user'] } },
+    ],
+  });
+});
+
 test('mockup reset is idempotent and leaves non-mockup records untouched', async () => {
   const execute = Reflect.get(mockupPlan, 'resetMockupDataset');
   assert.equal(typeof execute, 'function');

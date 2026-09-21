@@ -65,6 +65,29 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
     })
     : [];
   const prospectIds = prospects.map((prospect) => prospect.id);
+  const auditLogs = region && userIds.length
+    ? await prisma.adminAuditLog.findMany({
+      where: {
+        note: datasetNote,
+        OR: [
+          {
+            entityType: 'SHOWCASE_DATASET',
+            entityId: region.id,
+            action: 'SEED_CREATED',
+            actorId: { in: userIds },
+          },
+          {
+            entityType: 'MaintenanceVisit',
+            entityId: { in: visitIds },
+            action: 'PARTIAL_MAINTENANCE',
+            actorId: { in: userIds },
+          },
+        ],
+      },
+      select: { id: true },
+    })
+    : [];
+  const auditIds = auditLogs.map((audit) => audit.id);
 
   await prisma.$transaction(async (tx) => {
     if (visitIds.length) {
@@ -73,7 +96,7 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
       await tx.sapConfirmationReconciliation.deleteMany({ where: { visitId: { in: visitIds } } });
     }
 
-    await tx.adminAuditLog.deleteMany({ where: { note: datasetNote } });
+    if (auditIds.length) await tx.adminAuditLog.deleteMany({ where: { id: { in: auditIds } } });
 
     if (pointIds.length) {
       await tx.maintenanceVisit.deleteMany({ where: { pointId: { in: pointIds } } });
