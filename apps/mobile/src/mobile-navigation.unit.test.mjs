@@ -45,7 +45,32 @@ test('back from missing paperwork returns to Jobs without adding a primary tab',
   assert.equal(primaryTabs.some((tab) => tab.screen === 'MISSING_ITEMS'), false);
 });
 
-test('back does not replace Android system behavior from the Jobs root', () => {
-  const { popScreen } = loadNavigation();
-  assert.equal(popScreen([], 'TASKS'), null);
+test('Android back dismisses the attempted-maintenance reason modal without selecting a reason', () => {
+  const { resolveHardwareBack } = loadNavigation();
+  assert.deepEqual(resolveHardwareBack('ATTEMPT_REASON', [], 'TASKS'), {
+    type: 'DISMISS_DIALOG',
+    dialog: 'ATTEMPT_REASON',
+  });
+});
+
+test('Android back dismisses the location confirmation modal without choosing a completion path', () => {
+  const { resolveHardwareBack } = loadNavigation();
+  assert.deepEqual(resolveHardwareBack('LOCATION_CONFIRMATION', ['TASKS'], 'EQUIPMENT_CONFIRM'), {
+    type: 'DISMISS_DIALOG',
+    dialog: 'LOCATION_CONFIRMATION',
+  });
+});
+
+test('Android back from the maintenance form returns directly to Jobs', () => {
+  const { resolveHardwareBack } = loadNavigation();
+  assert.deepEqual(resolveHardwareBack(null, ['TASKS', 'HELP'], 'EQUIPMENT_CONFIRM'), {
+    type: 'NAVIGATE',
+    screen: 'TASKS',
+    history: [],
+  });
+});
+
+test('Android back is consumed at the Jobs root instead of exiting the app', () => {
+  const { resolveHardwareBack } = loadNavigation();
+  assert.deepEqual(resolveHardwareBack(null, [], 'TASKS'), { type: 'STAY' });
 });

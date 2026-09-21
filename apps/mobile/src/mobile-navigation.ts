@@ -20,3 +20,21 @@ export function popScreen(history: MobileScreen[], current: MobileScreen): { scr
   if (current !== 'TASKS') return { screen: 'TASKS', history: [] };
   return null;
 }
+
+export type MobileDialog = 'ATTEMPT_REASON' | 'LOCATION_CONFIRMATION';
+
+export type HardwareBackAction =
+  | { type: 'DISMISS_DIALOG'; dialog: MobileDialog }
+  | { type: 'NAVIGATE'; screen: MobileScreen; history: MobileScreen[] }
+  | { type: 'STAY' };
+
+export function resolveHardwareBack(
+  dialog: MobileDialog | null,
+  history: MobileScreen[],
+  current: MobileScreen,
+): HardwareBackAction {
+  if (dialog) return { type: 'DISMISS_DIALOG', dialog };
+  if (current === 'EQUIPMENT_CONFIRM') return { type: 'NAVIGATE', screen: 'TASKS', history: [] };
+  const previous = popScreen(history, current);
+  return previous ? { type: 'NAVIGATE', ...previous } : { type: 'STAY' };
+}

@@ -17,7 +17,7 @@ import {
 import { matchesSearch } from './search';
 import { nearbyPoints, sortNearbyItems } from './nearby';
 import { NearbyScreen } from './NearbyScreen';
-import { type MobileScreen, popScreen, primaryTabs, pushScreen } from './mobile-navigation';
+import { type MobileDialog, type MobileScreen, popScreen, primaryTabs, pushScreen, resolveHardwareBack } from './mobile-navigation';
 import { equipmentCorrectionPayload, requiresEquipmentCorrection } from './equipment-correction';
 import { buildMaintenanceCalendarDays, maintenanceDateBounds } from './maintenance-date';
 
@@ -31,6 +31,12 @@ const FEATHER_ALIASES: Record<string, React.ComponentProps<typeof ExpoFeather>['
   smarttap: 'cpu',
   refresh: 'refresh-cw',
 };
+const ATTEMPT_REASON_CHOICES: ReadonlyArray<{ text: string; reason: AttemptReason }> = [
+  { text: 'İşletme kapalı', reason: 'BUSINESS_CLOSED' },
+  { text: 'Yetkili kişi yok', reason: 'AUTHORIZED_PERSON_UNAVAILABLE' },
+  { text: 'Erişim sağlanamadı', reason: 'ACCESS_FAILED' },
+  { text: 'Diğer', reason: 'OTHER' },
+];
 function Feather({name,size=18,color='#075A96'}:{name:string;size?:number;color?:string}) {
   const iconName = FEATHER_ALIASES[name] ?? name as React.ComponentProps<typeof ExpoFeather>['name'];
   return <ExpoFeather name={iconName} size={size} color={color} />;
@@ -66,6 +72,8 @@ export default function CorporateApp() {
   const [selectedCustomer, setSelectedCustomer] = useState<MyCustomer | null>(null);
   const [pendingTask, setPendingTask] = useState<DueTask | null>(null);
   const [pendingAssist, setPendingAssist] = useState<string | undefined>();
+  const [attemptDialog, setAttemptDialog] = useState<{ task: DueTask; assistedForTechnicianId?: string } | null>(null);
+  const [locationDialog, setLocationDialog] = useState<{ task: DueTask; assistedForTechnicianId?: string; loc: Location.LocationObject; detail: string } | null>(null);
   const [selectedDateKey, setSelectedDateKey] = useState(todayDateKey);
   const [lateEntryReason, setLateEntryReason] = useState('');
   const [equipment, setEquipment] = useState({ coolerCount:'', towerCount:'', tapCount:'', smarttapCount:'' });
@@ -115,12 +123,34 @@ export default function CorporateApp() {
     return true;
   }, []);
 
+  const closeAttemptDialog = useCallback(() => setAttemptDialog(null), []);
+  const closeLocationDialog = useCallback(() => setLocationDialog(null), []);
+  const handleHardwareBack = useCallback(() => {
+    const dialog: MobileDialog | null = attemptDialog ? 'ATTEMPT_REASON' : locationDialog ? 'LOCATION_CONFIRMATION' : null;
+    const action = resolveHardwareBack(dialog, screenHistoryRef.current, screenRef.current);
+    if (action.type === 'DISMISS_DIALOG') {
+      if (action.dialog === 'ATTEMPT_REASON') closeAttemptDialog();
+      else closeLocationDialog();
+      return true;
+    }
+    if (action.type === 'NAVIGATE') {
+      screenHistoryRef.current = action.history;
+      screenRef.current = action.screen;
+      setScreen(action.screen);
+      if (action.screen === 'TASKS') {
+        setPendingTask(null);
+        setPendingAssist(undefined);
+      }
+    }
+    return true;
+  }, [attemptDialog, closeAttemptDialog, closeLocationDialog, locationDialog]);
+
   useEffect(() => { void restore(); }, []);
   useEffect(() => { if (user) void loadTasks(); }, [user]);
   useEffect(() => {
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => goBack());
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
     return () => subscription.remove();
-  }, [goBack]);
+  }, [handleHardwareBack]);
 
   async function restore() {
     try {
@@ -332,11 +362,13 @@ export default function CorporateApp() {
   }
 
   function attemptReason(task: DueTask, assistedForTechnicianId?: string) {
-    const items: Array<{ text: string; reason: AttemptReason }> = [
-      { text: 'İşletme kapalı', reason: 'BUSINESS_CLOSED' }, { text: 'Yetkili kişi yok', reason: 'AUTHORIZED_PERSON_UNAVAILABLE' },
-      { text: 'Erişim sağlanamadı', reason: 'ACCESS_FAILED' }, { text: 'Diğer', reason: 'OTHER' },
-    ];
-    Alert.alert('Bakım yapılamadı', 'Nedeni seç. Kayıt admin onayına düşer ve görev şimdilik açık kalır.', [...items.map(i => ({ text: i.text, onPress: () => void saveAttempt(task, i.reason, assistedForTechnicianId) })), { text: 'Vazgeç', style: 'cancel' }]);
+    setAttemptDialog({ task, assistedForTechnicianId });
+  }
+
+  function chooseAttemptReason(reason: AttemptReason) {
+    const selected = attemptDialog;
+    closeAttemptDialog();
+    if (selected) void saveAttempt(selected.task, reason, selected.assistedForTechnicianId);
   }
 
   async function saveAttempt(task: DueTask, reason: AttemptReason, assistedForTechnicianId?: string) {
@@ -388,13 +420,16 @@ export default function CorporateApp() {
         return;
       }
       const detail = distance === null ? 'Bu noktanın kayıtlı konumu yok.' : `Kayıtlı noktadan yaklaşık ${Math.round(distance)} metre uzaktasınız.`;
-      Alert.alert('Noktada mısınız?', `${detail}\n\nYine de ${task.pointName} noktasında olduğunuzu onaylıyor musunuz?`, [
-        { text: 'İptal et', style: 'cancel' },
-        { text: 'Hayır, ama bakımı yaptım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, false).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },
-        { text: 'Evet, noktadayım', onPress: () => void saveCompletedTask(task, assistedForTechnicianId, loc, true).catch(e => Alert.alert('Bakım kaydedilemedi', message(e))) },
-      ]);
+      setLocationDialog({ task, assistedForTechnicianId, loc, detail });
     } catch (e) { Alert.alert('Bakım kaydedilemedi', message(e)); }
     finally { setBusy(false); }
+  }
+
+  function chooseLocationPresence(locationPresenceConfirmed: boolean) {
+    const selected = locationDialog;
+    closeLocationDialog();
+    if (selected) void saveCompletedTask(selected.task, selected.assistedForTechnicianId, selected.loc, locationPresenceConfirmed)
+      .catch(e => Alert.alert('Bakım kaydedilemedi', message(e)));
   }
 
   async function beginEfesim() {
@@ -472,7 +507,24 @@ export default function CorporateApp() {
       {busy && <ActivityIndicator size="large" style={styles.loader} />}
     </ScrollView>
     <View style={styles.nav} accessibilityRole="tablist">{primaryTabs.map((tab) => <Nav key={tab.screen} label={tab.label} icon={tab.icon} active={tab.screen === 'TASKS' ? screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM' || screen === 'HELP' || screen === 'MISSING_ITEMS' || screen.startsWith('NON_MAINTENANCE') : tab.screen === 'CUSTOMERS' ? screen === 'CUSTOMERS' || screen === 'CUSTOMER' : screen === 'HISTORY'} onPress={() => tab.screen === 'CUSTOMERS' ? void openCustomers() : tab.screen === 'HISTORY' ? void openHistory() : resetNavigation('TASKS')} />)}</View>
+    <DecisionModal open={Boolean(attemptDialog)} onRequestClose={closeAttemptDialog} title="Bakım yapılamadı" detail="Nedeni seç. Kayıt admin onayına düşer ve görev şimdilik açık kalır." options={ATTEMPT_REASON_CHOICES.map(item => ({ label: item.text, onPress: () => chooseAttemptReason(item.reason) }))} />
+    <DecisionModal open={Boolean(locationDialog)} onRequestClose={closeLocationDialog} title="Noktada mısınız?" detail={locationDialog ? `${locationDialog.detail}\n\nYine de ${locationDialog.task.pointName} noktasında olduğunuzu onaylıyor musunuz?` : ''} options={[{ label: 'Hayır, ama bakımı yaptım', onPress: () => chooseLocationPresence(false) }, { label: 'Evet, noktadayım', onPress: () => chooseLocationPresence(true) }]} />
   </View></SafeAreaView>;
+}
+
+function DecisionModal({open,onRequestClose,title,detail,options}:{open:boolean;onRequestClose:()=>void;title:string;detail:string;options:ReadonlyArray<{label:string;onPress:()=>void}>}) {
+  return <Modal transparent animationType="fade" visible={open} onRequestClose={onRequestClose}>
+    <View style={styles.dialogBackdrop}>
+      <SafeAreaView edges={['bottom']} style={styles.dialogSafe}>
+        <View style={styles.dialogSheet}>
+          <View style={styles.dialogHeader}><Text style={styles.dialogTitle}>{title}</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Dialogu kapat" onPress={onRequestClose}><Feather name="x" size={22} color={MUTED}/></TouchableOpacity></View>
+          <Text style={styles.help}>{detail}</Text>
+          {options.map(option => <TouchableOpacity key={option.label} accessibilityRole="button" style={styles.dialogOption} onPress={option.onPress}><Text style={styles.dialogOptionText}>{option.label}</Text></TouchableOpacity>)}
+          <SecondaryButton title="Vazgeç" icon="x" danger onPress={onRequestClose} />
+        </View>
+      </SafeAreaView>
+    </View>
+  </Modal>;
 }
 
 function SearchBox({value,onChange,placeholder}:{value:string;onChange:(v:string)=>void;placeholder:string}) { return <View style={styles.searchBox}><Feather name="search" size={18} color="#667989" /><TextInput style={styles.searchInput} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#8795A1" autoCorrect={false} returnKeyType="search" />{value?<TouchableOpacity onPress={()=>onChange('')}><Feather name="x" size={18} color="#8795A1" /></TouchableOpacity>:null}</View>; }
@@ -712,5 +764,6 @@ const styles=StyleSheet.create({
   newChoice:{borderWidth:1,borderColor:'#DCE5EC',borderRadius:12,padding:15,flexDirection:'row',alignItems:'center',gap:14}, infoBox:{backgroundColor:'#EAF4FC',borderRadius:10,padding:12,flexDirection:'row',gap:9,alignItems:'flex-start'}, infoText:{flex:1,fontSize:13,lineHeight:19,color:'#315A78'}, sectionLabel:{fontSize:10,fontWeight:'900',letterSpacing:.9,color:'#5C7080'}, input:{borderWidth:1,borderColor:'#D6E0E8',backgroundColor:'#F8FAFC',borderRadius:10,padding:12,fontSize:16,color:TEXT}, choiceRow:{flexDirection:'row',gap:8}, choice:{flex:1,borderWidth:1,borderColor:'#C7D3DD',borderRadius:10,padding:12,alignItems:'center'}, choiceSelected:{backgroundColor:BLUE,borderColor:BLUE}, choiceText:{fontSize:11,fontWeight:'900',color:'#415565'}, choiceTextSelected:{color:'#fff'}, locked:{fontSize:12,color:'#7D8A95',fontWeight:'700'},
   datePickerButton:{minHeight:48,borderWidth:1,borderColor:'#BCD0DF',backgroundColor:'#F8FBFD',borderRadius:10,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:9}, datePickerValue:{fontSize:15,fontWeight:'900',color:BLUE},
   calendarBackdrop:{flex:1,justifyContent:'flex-end',backgroundColor:'rgba(10,25,36,.45)'}, calendarSafe:{backgroundColor:'#fff'}, calendarSheet:{backgroundColor:'#fff',padding:18,gap:14,borderTopLeftRadius:20,borderTopRightRadius:20}, calendarHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}, calendarWeek:{flexDirection:'row'}, calendarWeekday:{width:'14.285%',textAlign:'center',fontSize:10,fontWeight:'900',color:MUTED}, calendarGrid:{flexDirection:'row',flexWrap:'wrap'}, calendarDay:{width:'14.285%',minHeight:44,alignItems:'center',justifyContent:'center',borderRadius:10}, calendarDayDisabled:{opacity:.32}, calendarDaySelected:{backgroundColor:BLUE}, calendarDayText:{fontSize:14,fontWeight:'800',color:TEXT}, calendarDayTextDisabled:{color:MUTED}, calendarDayTextSelected:{color:'#fff'},
+  dialogBackdrop:{flex:1,justifyContent:'flex-end',backgroundColor:'rgba(10,25,36,.45)'}, dialogSafe:{backgroundColor:'#fff'}, dialogSheet:{backgroundColor:'#fff',padding:18,gap:12,borderTopLeftRadius:20,borderTopRightRadius:20}, dialogHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12}, dialogTitle:{flex:1,fontSize:21,fontWeight:'900',color:TEXT}, dialogOption:{minHeight:48,borderWidth:1,borderColor:'#BCD0DF',backgroundColor:'#F8FBFD',borderRadius:10,paddingHorizontal:14,alignItems:'center',justifyContent:'center'}, dialogOptionText:{fontSize:13,fontWeight:'900',color:BLUE,textAlign:'center'},
   historicalBadge:{backgroundColor:'#FFF4E4',color:'#9A5C00',fontSize:10,fontWeight:'900',letterSpacing:.5,paddingHorizontal:10,paddingVertical:6,borderRadius:999},
 });
