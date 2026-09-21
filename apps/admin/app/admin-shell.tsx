@@ -40,7 +40,7 @@ export default function AdminShell({ me, location, onNavigate, onLogout, childre
   const drawerRef = useRef<HTMLElement>(null);
   const active = getNavigationItem(location.section);
   const groups = useMemo(() => Array.from(new Set(navigationItems.map((item) => item.group))), []);
-  const [openGroups, setOpenGroups] = useState<string[]>([active.group]);
+  const [openGroups, setOpenGroups] = useState<string[]>(groups);
   const sidebarIsCollapsed = collapsed && !isCompact;
 
   useEffect(() => { setOpenGroups((current) => current.includes(active.group) ? current : [...current, active.group]); }, [active.group]);

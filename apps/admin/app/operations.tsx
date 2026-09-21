@@ -348,11 +348,11 @@ return (
 {error ? <div className="error banner">{error}</div> : null}
 {activeSection === 'dashboard' ? <>
 <section className="metricGrid dashboardQueueMetrics" aria-label="Operasyon kuyrukları">
-<MetricCard label="Ayar bekleyen" value={setupPending.length} description="Eksik ayarları tamamla" section="setup-pending" onNavigate={onNavigate} />
-<MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı kayıtlarını incele" section="approvals" onNavigate={onNavigate} />
-<MetricCard label="Noktalar" value={points.length} description="Nokta listesini yönet" section="points" onNavigate={onNavigate} />
-<MetricCard label="Bölgeler" value={regions.length} description="Bölge ve sorumluları yönet" section="regions" onNavigate={onNavigate} />
+<MetricCard label="Ayar bekleyen" value={loading || error ? '—' : setupPending.length} description="Eksik ayarları tamamla" section="setup-pending" onNavigate={onNavigate} />
+<MetricCard label="Bekleyen onay" value={loading || error ? '—' : attemptQueue.length} description="Yapılamadı kayıtlarını incele" section="approvals" onNavigate={onNavigate} />
+<MetricCard label="Geciken açık iş" value={dailySummary?.metrics.overdueOpen ?? '—'} description="Geciken yükümlülükleri incele" section="maintenance-calendar" onNavigate={onNavigate} />
 </section>
+<details className="panel dashboardReports"><summary>Raporlar ve ayrıntılar</summary>
 <section className="panel">
 <div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary().catch((e) => setError(e instanceof Error ? e.message : String(e)))} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
 {dailySummary ? <>
@@ -415,6 +415,7 @@ return (
 </> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Teknisyen özeti hazırlanıyor</strong><span>Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor.</span></div>}
 </section>
 <KpiReportingPanel technicians={technicians} />
+</details>
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">
 <div className="panelHeader">
