@@ -28,7 +28,7 @@ jobs:
     env:
       CI: '1'
       NODE_PATH: ${{ github.workspace }}/node_modules
-      EXPO_PUBLIC_API_BASE_URL: ${{ inputs.api_base_url || 'https://api.field-maintenance-prod.com/api' }}
+      EXPO_PUBLIC_API_BASE_URL: ${{ inputs.api_base_url || (startsWith(github.head_ref, 'codex/test-apk-') && 'http://10.0.2.2:3100/api') || 'https://api.field-maintenance-prod.com/api' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
