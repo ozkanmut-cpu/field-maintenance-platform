@@ -11,8 +11,11 @@ test('technician history type and UI expose all partial-maintenance evidence', (
   assert.match(historyType, /maintainedCoolerCount\?:\s*number \| null/);
   assert.match(historyType, /missingMaintenanceCount\?:\s*number \| null/);
   assert.match(historyType, /missingMaintenanceExplanation\?:\s*string \| null/);
+  assert.match(historyType, /maintenanceSummary\?:\s*string \| null/);
 
   const historyView = app.slice(app.indexOf('function HistoryView'), app.indexOf('\nfunction NewPointView'));
+  assert.match(historyView, /i\.maintenanceSummary/);
+  assert.match(historyView, /soğutucu bakım/);
   assert.match(historyView, /i\.maintainedCoolerCount/);
   assert.match(historyView, /i\.totalCoolerCount/);
   assert.match(historyView, /i\.missingMaintenanceCount/);

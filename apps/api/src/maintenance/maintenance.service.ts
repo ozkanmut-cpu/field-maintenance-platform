@@ -239,6 +239,10 @@ export class MaintenanceService {
         at: visit.performedAt,
         revertEligible: this.isWithinRevertWindow(visit.recordedAtServer, now),
         ...visit,
+        maintenanceSummary:
+          visit.totalCoolerCount != null && visit.maintainedCoolerCount != null
+            ? `${visit.maintainedCoolerCount}/${visit.totalCoolerCount} soğutucu bakım${visit.missingMaintenanceCount ? ` · ${visit.missingMaintenanceCount} eksik` : ''}`
+            : null,
       })),
       ...attempts.map((attempt) => ({ type: 'ATTEMPT' as const, at: attempt.attemptedAt, ...attempt })),
       ...nonMaintenanceVisits.map((visit) => ({

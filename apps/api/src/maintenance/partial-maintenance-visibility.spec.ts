@@ -62,6 +62,7 @@ test('technician history selects and returns partial maintenance evidence', asyn
     confirmationStatus: 'PENDING',
     point: { id: 'point-1', code: 'P1', name: 'Nokta', maintenanceType: 'STANDARD' },
     ...partialCounts,
+    maintenanceSummary: '4/5 soğutucu bakım · 1 eksik',
   });
 });
 

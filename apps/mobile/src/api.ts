@@ -260,6 +260,7 @@ export type TechnicianHistoryItem = {
   maintainedCoolerCount?: number | null;
   missingMaintenanceCount?: number | null;
   missingMaintenanceExplanation?: string | null;
+  maintenanceSummary?: string | null;
   reason?: AttemptReason;
   purpose?: string;
   /** Server-authorized: only maintenance entered today or yesterday can be reverted. */
