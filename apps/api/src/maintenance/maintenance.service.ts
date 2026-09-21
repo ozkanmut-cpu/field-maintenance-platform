@@ -519,7 +519,9 @@ export class MaintenanceService {
         return { visit: created, missedPeriods: backlogToMiss.length };
       });
 
-      if (dateDecision.locationRequired) await this.runPostProcessing(dto.technicianId, point.id);
+      if (dateDecision.locationRequired) {
+        await this.runPostProcessing(dto.technicianId, point.id, locationPresenceConfirmed);
+      }
 
       const visit =
         (await this.prisma.maintenanceVisit.findUnique({ where: { id: result.visit.id } })) ?? result.visit;
@@ -1442,11 +1444,17 @@ export class MaintenanceService {
     );
   }
 
-  private async runPostProcessing(technicianId: string, pointId: string) {
+  private async runPostProcessing(
+    technicianId: string,
+    pointId: string,
+    locationPresenceConfirmed: boolean,
+  ) {
     try {
       await this.anomaly.scanTechnician(technicianId, 24);
-      await this.locationLearning.refreshPoint(pointId);
-      await this.googlePlaces.matchPoint(pointId);
+      if (locationPresenceConfirmed) {
+        await this.locationLearning.refreshPoint(pointId);
+        await this.googlePlaces.matchPoint(pointId);
+      }
     } catch (error) {
       this.logger.warn(
         `Maintenance post-processing failed for point ${pointId}: ${error instanceof Error ? error.message : String(error)}`,

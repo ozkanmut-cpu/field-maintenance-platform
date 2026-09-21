@@ -20,6 +20,7 @@ import { NearbyScreen } from './NearbyScreen';
 import { type MobileDialog, type MobileScreen, popScreen, primaryTabs, pushScreen, resolveHardwareBack } from './mobile-navigation';
 import { equipmentCorrectionPayload, requiresEquipmentCorrection } from './equipment-correction';
 import { buildMaintenanceCalendarDays, maintenanceDateBounds } from './maintenance-date';
+import { applyMaintenanceLocationChoice, planMaintenanceLocation, type MaintenanceLocationChoice } from './maintenance-location-flow';
 
 const APP_ICON = require('../assets/fici-bakim-icon.png');
 const FEATHER_ALIASES: Record<string, React.ComponentProps<typeof ExpoFeather>['name']> = {
@@ -381,14 +382,6 @@ export default function CorporateApp() {
     finally { setBusy(false); }
   }
 
-  function distanceMeters(lat1:number, lon1:number, lat2:number, lon2:number) {
-    const r=6371000;
-    const p1=lat1*Math.PI/180, p2=lat2*Math.PI/180;
-    const dp=(lat2-lat1)*Math.PI/180, dl=(lon2-lon1)*Math.PI/180;
-    const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
-    return r*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-  }
-
   async function saveCompletedTask(task: DueTask, assistedForTechnicianId: string | undefined, loc: Awaited<ReturnType<typeof currentLocation>>, locationPresenceConfirmed = true) {
     const equipmentValues = parsedEquipment();
     const partialMaintenanceValues = parsedPartialMaintenance(task, equipmentValues);
@@ -410,26 +403,43 @@ export default function CorporateApp() {
     setBusy(true);
     try {
       if (isPastMaintenanceDate(selectedDateKey)) {
-        await savePastCompletedTask(task, assistedForTechnicianId);
-        return;
+        const plan = planMaintenanceLocation({ pastDated: true });
+        if (plan.kind === 'PAST_DATE') {
+          await savePastCompletedTask(task, assistedForTechnicianId);
+          return;
+        }
       }
       const loc = await currentLocation();
-      const distance = task.latitude != null && task.longitude != null ? distanceMeters(loc.coords.latitude, loc.coords.longitude, task.latitude, task.longitude) : null;
-      if (distance !== null && distance <= 250) {
+      const plan = planMaintenanceLocation({
+        pastDated: false,
+        currentLocation: {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          accuracyMeters: loc.coords.accuracy,
+        },
+        pointLocation: task.latitude != null && task.longitude != null
+          ? { latitude: task.latitude, longitude: task.longitude }
+          : undefined,
+      });
+      if (plan.kind === 'SAVE_CURRENT') {
         await saveCompletedTask(task, assistedForTechnicianId, loc);
         return;
       }
-      const detail = distance === null ? 'Bu noktanın kayıtlı konumu yok.' : `Kayıtlı noktadan yaklaşık ${Math.round(distance)} metre uzaktasınız.`;
-      setLocationDialog({ task, assistedForTechnicianId, loc, detail });
+      if (plan.kind !== 'PROMPT') throw new Error('Konum kararı oluşturulamadı.');
+      setLocationDialog({ task, assistedForTechnicianId, loc, detail: plan.detail });
     } catch (e) { Alert.alert('Bakım kaydedilemedi', message(e)); }
     finally { setBusy(false); }
   }
 
-  function chooseLocationPresence(locationPresenceConfirmed: boolean) {
+  function chooseLocationPresence(choice: MaintenanceLocationChoice) {
     const selected = locationDialog;
     closeLocationDialog();
-    if (selected) void saveCompletedTask(selected.task, selected.assistedForTechnicianId, selected.loc, locationPresenceConfirmed)
-      .catch(e => Alert.alert('Bakım kaydedilemedi', message(e)));
+    if (selected) void applyMaintenanceLocationChoice(
+      choice,
+      locationPresenceConfirmed => saveCompletedTask(
+        selected.task, selected.assistedForTechnicianId, selected.loc, locationPresenceConfirmed,
+      ),
+    ).catch(e => Alert.alert('Bakım kaydedilemedi', message(e)));
   }
 
   async function beginEfesim() {
@@ -508,7 +518,7 @@ export default function CorporateApp() {
     </ScrollView>
     <View style={styles.nav} accessibilityRole="tablist">{primaryTabs.map((tab) => <Nav key={tab.screen} label={tab.label} icon={tab.icon} active={tab.screen === 'TASKS' ? screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM' || screen === 'HELP' || screen === 'MISSING_ITEMS' || screen.startsWith('NON_MAINTENANCE') : tab.screen === 'CUSTOMERS' ? screen === 'CUSTOMERS' || screen === 'CUSTOMER' : screen === 'HISTORY'} onPress={() => tab.screen === 'CUSTOMERS' ? void openCustomers() : tab.screen === 'HISTORY' ? void openHistory() : resetNavigation('TASKS')} />)}</View>
     <DecisionModal open={Boolean(attemptDialog)} onRequestClose={closeAttemptDialog} title="Bakım yapılamadı" detail="Nedeni seç. Kayıt admin onayına düşer ve görev şimdilik açık kalır." options={ATTEMPT_REASON_CHOICES.map(item => ({ label: item.text, onPress: () => chooseAttemptReason(item.reason) }))} />
-    <DecisionModal open={Boolean(locationDialog)} onRequestClose={closeLocationDialog} cancelLabel="İptal et" title="Noktada mısınız?" detail={locationDialog ? `${locationDialog.detail}\n\nYine de ${locationDialog.task.pointName} noktasında olduğunuzu onaylıyor musunuz?` : ''} options={[{ label: 'Hayır, ama bakımı yaptım', onPress: () => chooseLocationPresence(false) }, { label: 'Evet, noktadayım', onPress: () => chooseLocationPresence(true) }]} />
+    <DecisionModal open={Boolean(locationDialog)} onRequestClose={closeLocationDialog} cancelLabel="İptal et" title="Noktada mısınız?" detail={locationDialog ? `${locationDialog.detail}\n\nYine de ${locationDialog.task.pointName} noktasında olduğunuzu onaylıyor musunuz?` : ''} options={[{ label: 'Evet, noktadayım', onPress: () => chooseLocationPresence('HERE') }, { label: 'Hayır, ama bakımı yaptım', onPress: () => chooseLocationPresence('COMPLETED_ELSEWHERE') }]} />
   </View></SafeAreaView>;
 }
 
