@@ -305,7 +305,7 @@ export class MaintenanceService {
     }
 
     const enteredLate = dateDecision.enteredLate;
-    if (enteredLate && !dto.lateEntryReason) {
+    if (enteredLate && !dto.lateEntryReason?.trim()) {
       throw new BadRequestException('Geriye dönük bakım girişinde neden zorunludur');
     }
     if (dateDecision.locationRequired && (dto.latitude === undefined || dto.longitude === undefined || !locationCapturedAt)) {
@@ -417,7 +417,7 @@ export class MaintenanceService {
             deviceRecordedAt,
             enteredLate,
             lateEntryMinutes,
-            lateEntryReason: enteredLate ? dto.lateEntryReason ?? null : null,
+            lateEntryReason: enteredLate ? dto.lateEntryReason!.trim() : null,
             latitude: dateDecision.locationRequired ? new Prisma.Decimal(dto.latitude!) : null,
             longitude: dateDecision.locationRequired ? new Prisma.Decimal(dto.longitude!) : null,
             accuracyMeters:
@@ -465,7 +465,7 @@ export class MaintenanceService {
               entityId: created.id,
               action: 'MAINTENANCE_ENTERED_LATE',
               oldValue: Prisma.JsonNull,
-              newValue: { performedAt: performedAt.toISOString(), lateEntryMinutes, lateEntryReason: dto.lateEntryReason, locationCaptured: false },
+              newValue: { pastDated: true, performedAt: performedAt.toISOString(), lateEntryMinutes, lateEntryReason: dto.lateEntryReason!.trim(), locationCaptured: false },
               note: 'Geriye dönük bakım girişi; konum değerlendirmesi uygulanmadı',
             },
           });
@@ -523,7 +523,7 @@ export class MaintenanceService {
 
       const visit =
         (await this.prisma.maintenanceVisit.findUnique({ where: { id: result.visit.id } })) ?? result.visit;
-      return { ...visit, resolvedBacklogPeriods: result.missedPeriods };
+      return { ...visit, pastDated: enteredLate, resolvedBacklogPeriods: result.missedPeriods };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Bu bakım kaydı zaten işlendi');

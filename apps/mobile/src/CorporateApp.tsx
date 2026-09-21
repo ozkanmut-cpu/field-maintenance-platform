@@ -4,7 +4,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Feather as ExpoFeather } from '@expo/vector-icons';
-import { ActivityIndicator, Alert, BackHandler, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Image, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
@@ -19,6 +19,7 @@ import { nearbyPoints, sortNearbyItems } from './nearby';
 import { NearbyScreen } from './NearbyScreen';
 import { type MobileScreen, popScreen, primaryTabs, pushScreen } from './mobile-navigation';
 import { equipmentCorrectionPayload, requiresEquipmentCorrection } from './equipment-correction';
+import { buildMaintenanceCalendarDays, maintenanceDateBounds } from './maintenance-date';
 
 const APP_ICON = require('../assets/fici-bakim-icon.png');
 const FEATHER_ALIASES: Record<string, React.ComponentProps<typeof ExpoFeather>['name']> = {
@@ -53,6 +54,7 @@ export default function CorporateApp() {
   const [historyItems, setHistoryItems] = useState<TechnicianHistoryItem[]>([]);
   const [successPoint, setSuccessPoint] = useState('');
   const [successAssist, setSuccessAssist] = useState('');
+  const [successPastDated, setSuccessPastDated] = useState(false);
   const [efesim, setEfesim] = useState<EfesimExtractResult | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [sapNo, setSapNo] = useState('');
@@ -360,7 +362,7 @@ export default function CorporateApp() {
     const partialMaintenanceValues = parsedPartialMaintenance(task, equipmentValues);
     const equipmentCorrection = parsedEquipmentCorrection(task, equipmentValues);
     await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, performedAt: maintenanceTimestamp(selectedDateKey), latitude: loc.coords.latitude, longitude: loc.coords.longitude, accuracyMeters: loc.coords.accuracy ?? undefined, locationPresenceConfirmed, locationCapturedAt: new Date(loc.timestamp).toISOString(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, ...partialMaintenanceValues, ...equipmentCorrection, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
-    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setSuccessPastDated(false); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
   }
 
   async function savePastCompletedTask(task: DueTask, assistedForTechnicianId?: string) {
@@ -369,7 +371,7 @@ export default function CorporateApp() {
     const partialMaintenanceValues = parsedPartialMaintenance(task, equipmentValues);
     const equipmentCorrection = parsedEquipmentCorrection(task, equipmentValues);
     await completeMaintenance({ pointId: task.pointId, assistedForTechnicianId, performedAt: maintenanceTimestamp(selectedDateKey), lateEntryReason: lateEntryReason.trim(), deviceRecordedAt: new Date().toISOString(), ...equipmentValues, ...partialMaintenanceValues, ...equipmentCorrection, equipmentConfirmed: true, idempotencyKey: `maintenance-${user?.id}-${task.pointId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
-    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
+    setSuccessPoint(task.pointName); setSuccessAssist(helpDashboard?.technician.name ?? ''); setSuccessPastDated(true); navigate('SUCCESS', true); setHelpDashboard(null); await loadTasks();
   }
 
   async function completeTask(task: DueTask, assistedForTechnicianId?: string) {
@@ -462,7 +464,7 @@ export default function CorporateApp() {
       {screen === 'NON_MAINTENANCE_VISIT' && <NonMaintenanceCustomerView customers={nonMaintenanceCustomers} search={nonMaintenanceSearch} setSearch={setNonMaintenanceSearch} origin={deviceLocation} choose={chooseNonMaintenanceCustomer} />}
       {screen === 'NON_MAINTENANCE_FORM' && <NonMaintenanceForm customer={nonMaintenanceCustomer} noCustomer={nonMaintenanceNoCustomer} customerName={nonMaintenanceCustomerName} setCustomerName={setNonMaintenanceCustomerName} purpose={nonMaintenanceType} setPurpose={setNonMaintenanceType} note={nonMaintenanceNote} setNote={setNonMaintenanceNote} efesimImageBase64={efesimImageBase64} visualExplanation={visualExplanation} setVisualExplanation={setVisualExplanation} chooseVisual={() => void chooseNonMaintenanceEfesim()} save={() => void saveNonMaintenanceVisit()} busy={busy} />}
       {screen === 'NON_MAINTENANCE_VISIT_SAVED' && <NonMaintenanceSuccessView point={nonMaintenanceSuccessName} done={resetNavigation} />}
-      {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); resetNavigation(); }} />}
+      {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} pastDated={successPastDated} done={() => { setSuccessAssist(''); setSuccessPastDated(false); resetNavigation(); }} />}
       {screen === 'NEW' && <NewPointView begin={() => void beginEfesim()} busy={busy} />}
       {screen === 'EFESIM_RESULT' && efesim && <EfesimView result={efesim} sapNo={sapNo} setSapNo={setSapNo} customerName={customerName} setCustomerName={setCustomerName} strong={strongGoogleMatch} google={google} useGoogle={useGoogle} setUseGoogle={setUseGoogle} addressText={addressText} save={() => void saveProspect()} busy={busy} />}
       {screen === 'PROSPECT' && prospect && <ProspectView prospect={prospect} purpose={visitPurpose} setPurpose={setVisitPurpose} save={() => void saveVisit()} busy={busy} />}
@@ -626,10 +628,35 @@ function EquipmentConfirmView({task,equipment,setEquipment,selectedDateKey,setSe
 }
 
 function MaintenanceDatePicker({value,onChange}:{value:string;onChange:(value:string)=>void}) {
+  const [open, setOpen] = useState(false);
   const today = todayDateKey();
-  const earliest = previousWeekMonday(today);
-  const dates = dateRange(earliest, today).reverse();
-  return <View style={styles.card}><Text style={styles.sectionLabel}>BAKIM TARİHİ</Text><Text style={styles.help}>Bugün varsayılan seçilidir. En eski seçilebilir tarih geçen haftanın pazartesidir.</Text><View style={styles.dateGrid}>{dates.map(date => <TouchableOpacity key={date} accessibilityRole="button" accessibilityState={{selected:value===date}} style={[styles.dateChoice,value===date&&styles.dateChoiceSelected]} onPress={()=>onChange(date)}><Text style={[styles.dateChoiceText,value===date&&styles.dateChoiceTextSelected]}>{formatMaintenanceDate(date)}</Text></TouchableOpacity>)}</View></View>;
+  const bounds = maintenanceDateBounds(today);
+  const days = buildMaintenanceCalendarDays(today);
+  const closeCalendar = () => setOpen(false);
+  const selectDate = (dateKey:string, disabled:boolean) => {
+    if (disabled) return;
+    onChange(dateKey);
+    closeCalendar();
+  };
+  return <View style={styles.card}>
+    <Text style={styles.sectionLabel}>BAKIM TARİHİ</Text>
+    <Text style={styles.help}>Bugün varsayılan seçilidir. En eski seçilebilir tarih geçen haftanın pazartesidir.</Text>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Bakım tarihi seç" style={styles.datePickerButton} onPress={()=>setOpen(true)}>
+      <Feather name="calendar" size={18} color={BLUE}/><Text style={styles.datePickerValue}>{formatMaintenanceDate(value)}</Text>
+    </TouchableOpacity>
+    <Modal transparent animationType="slide" visible={open} onRequestClose={closeCalendar}>
+      <View style={styles.calendarBackdrop}>
+        <SafeAreaView edges={['bottom']} style={styles.calendarSafe}>
+          <View style={styles.calendarSheet}>
+            <View style={styles.calendarHeader}><View><Text style={styles.cardTitle}>Bakım tarihi</Text><Text style={styles.personMeta}>{formatMaintenanceDate(bounds.minimumDateKey)} – {formatMaintenanceDate(bounds.maximumDateKey)}</Text></View><TouchableOpacity accessibilityRole="button" accessibilityLabel="Takvimi kapat" onPress={closeCalendar}><Feather name="x" size={24} color={TEXT}/></TouchableOpacity></View>
+            <View style={styles.calendarWeek}>{['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(label=><Text key={label} style={styles.calendarWeekday}>{label}</Text>)}</View>
+            <View style={styles.calendarGrid}>{days.map(day=><TouchableOpacity key={day.dateKey} accessibilityRole="button" accessibilityLabel={formatMaintenanceDate(day.dateKey)} accessibilityState={{disabled:day.disabled,selected:value===day.dateKey}} disabled={day.disabled} style={[styles.calendarDay,day.disabled&&styles.calendarDayDisabled,value===day.dateKey&&styles.calendarDaySelected]} onPress={()=>selectDate(day.dateKey,day.disabled)}><Text style={[styles.calendarDayText,day.disabled&&styles.calendarDayTextDisabled,value===day.dateKey&&styles.calendarDayTextSelected]}>{day.dayOfMonth}</Text></TouchableOpacity>)}</View>
+            <SecondaryButton title="VAZGEÇ" icon="x" onPress={closeCalendar}/>
+          </View>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  </View>;
 }
 
 function HistoryView({items,busy,onRevert}:{items:TechnicianHistoryItem[];busy:boolean;onRevert:(i:TechnicianHistoryItem)=>void}) {
@@ -640,8 +667,8 @@ function NewPointView({begin,busy}:{begin:()=>void;busy:boolean}) { return <View
 function EfesimView(p:any) { return <><View style={styles.card}><Text style={styles.sectionLabel}>EFESİM</Text><TextInput style={styles.input} value={p.sapNo} onChangeText={p.setSapNo} keyboardType="number-pad" placeholder="SAP No"/><TextInput style={styles.input} value={p.customerName} onChangeText={p.setCustomerName} placeholder="Müşteri adı"/></View>{p.strong?<View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS EŞLEŞMESİ</Text><Text style={styles.taskName}>{p.google?.name}</Text><Text style={styles.help}>{p.google?.address||'Adres bilgisi yok'}</Text><View style={styles.choiceRow}><Choice title="BU İŞLETME" selected={p.useGoogle} onPress={()=>p.setUseGoogle(true)}/><Choice title="EŞLEŞMEDİ" selected={!p.useGoogle} onPress={()=>p.setUseGoogle(false)}/></View></View>:<View style={styles.card}><Text style={styles.sectionLabel}>GOOGLE MAPS</Text><Text style={styles.help}>Güvenilir eşleşme bulunamadı. İsim ile devam edebilirsin.</Text></View>}<View style={styles.card}><Text style={styles.sectionLabel}>ADRES</Text><Text style={styles.help}>{p.addressText}</Text><Text style={styles.locked}>Adres düzenlenemez.</Text><PrimaryButton title="ADAY MÜŞTERİYİ OLUŞTUR" icon="user-plus" onPress={p.save} disabled={p.busy}/></View></>; }
 function ProspectView(p:{prospect:ProspectRecord;purpose:ProspectVisitPurpose;setPurpose:(v:ProspectVisitPurpose)=>void;save:()=>void;busy:boolean}) { return <View style={styles.card}><View style={styles.cardIcon}><Feather name="check" size={20} color={GREEN}/></View><Text style={styles.okText}>Aday müşteri hazır</Text><Text style={styles.taskName}>{p.prospect.name}</Text>{p.prospect.sapNo?<Text style={styles.help}>SAP No: {p.prospect.sapNo}</Text>:null}<Text style={styles.sectionLabel}>ZİYARET AMACI</Text><View style={styles.choiceRow}><Choice title="KEŞİF" selected={p.purpose==='SURVEY'} onPress={()=>p.setPurpose('SURVEY')}/><Choice title="KURMA" selected={p.purpose==='INSTALLATION'} onPress={()=>p.setPurpose('INSTALLATION')}/></View><PrimaryButton title={p.purpose==='SURVEY'?'KEŞİF ZİYARETİNİ KAYDET':'KURMA ZİYARETİNİ KAYDET'} icon="check-circle" onPress={p.save} disabled={p.busy}/></View>; }
 
-function SuccessView({point,assisted,title='Bakım kaydedildi',done}:{point:string;assisted:string;title?:string;done:()=>void}) {
-  return <View style={styles.successCard}><View style={styles.successCircle}><Feather name="check" size={38} color="#fff"/></View><Text style={styles.successEyebrow}>İŞLEM TAMAMLANDI</Text><Text style={styles.successTitle}>{title}</Text><Text style={styles.successPoint}>{point}</Text>{assisted?<Text style={styles.help}>{assisted} için yardım olarak kaydedildi.</Text>:null}<View style={styles.successMetaRow}><Feather name="map-pin" size={15} color="#6E7D89"/><Text style={styles.successMeta}>İşlem zamanı ve saha konumu kaydedildi.</Text></View><PrimaryButton title="TAMAM" icon="arrow-right" onPress={done}/></View>;
+function SuccessView({point,assisted,pastDated=false,title='Bakım kaydedildi',done}:{point:string;assisted:string;pastDated?:boolean;title?:string;done:()=>void}) {
+  return <View style={styles.successCard}><View style={styles.successCircle}><Feather name="check" size={38} color="#fff"/></View><Text style={styles.successEyebrow}>İŞLEM TAMAMLANDI</Text><Text style={styles.successTitle}>{title}</Text><Text style={styles.successPoint}>{point}</Text>{assisted?<Text style={styles.help}>{assisted} için yardım olarak kaydedildi.</Text>:null}{pastDated?<Text style={styles.historicalBadge}>GEÇMİŞ TARİHLİ KAYIT</Text>:null}<View style={styles.successMetaRow}><Feather name={pastDated?'calendar':'map-pin'} size={15} color="#6E7D89"/><Text style={styles.successMeta}>{pastDated?'Geçmiş tarihli kayıt olarak kaydedildi; konum alınmadı.':'İşlem zamanı ve saha konumu kaydedildi.'}</Text></View><PrimaryButton title="TAMAM" icon="arrow-right" onPress={done}/></View>;
 }
 
 function Empty({icon='inbox',title='Açık görev yok',text}:{icon?:React.ComponentProps<typeof Feather>['name'];title?:string;text?:string}) { return <View style={styles.empty}><View style={styles.emptyIcon}><Feather name={icon} size={25} color="#718493"/></View><Text style={styles.emptyTitle}>{title}</Text>{text?<Text style={styles.emptyText}>{text}</Text>:null}</View>; }
@@ -659,19 +686,6 @@ function dateKeyInIstanbul(date = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 function todayDateKey() { return dateKeyInIstanbul(); }
-function previousWeekMonday(dateKey: string) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) - 7);
-  return date.toISOString().slice(0, 10);
-}
-function dateRange(from: string, to: string) {
-  const dates: string[] = [];
-  const cursor = new Date(`${from}T12:00:00.000Z`);
-  const end = new Date(`${to}T12:00:00.000Z`);
-  while (cursor <= end) { dates.push(cursor.toISOString().slice(0, 10)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
-  return dates;
-}
 function isPastMaintenanceDate(dateKey: string) { return dateKey < todayDateKey(); }
 function maintenanceTimestamp(dateKey: string) { return `${dateKey}T12:00:00.000Z`; }
 function formatMaintenanceDate(dateKey: string) { return new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(`${dateKey}T12:00:00.000Z`)); }
@@ -696,5 +710,7 @@ const styles=StyleSheet.create({
   successCard:{backgroundColor:'#fff',borderRadius:17,padding:26,gap:10,alignItems:'center',borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.035,shadowRadius:10,elevation:1}, successCircle:{width:76,height:76,borderRadius:24,backgroundColor:GREEN,alignItems:'center',justifyContent:'center',marginBottom:6}, successEyebrow:{fontSize:9,fontWeight:'900',letterSpacing:1,color:GREEN}, successTitle:{fontSize:23,fontWeight:'900',color:TEXT,textAlign:'center'}, successPoint:{fontSize:18,fontWeight:'900',color:BLUE,textAlign:'center'}, successMetaRow:{flexDirection:'row',alignItems:'center',gap:6,marginBottom:8}, successMeta:{fontSize:12,color:'#6E7D89',textAlign:'center'},
   empty:{backgroundColor:'#fff',borderRadius:14,padding:24,alignItems:'center',borderWidth:1,borderColor:LINE,gap:7}, emptyIcon:{width:50,height:50,borderRadius:15,backgroundColor:'#F0F4F7',alignItems:'center',justifyContent:'center',marginBottom:3}, emptyTitle:{fontSize:16,fontWeight:'900',color:'#4F6271',textAlign:'center'}, emptyText:{fontSize:12,lineHeight:18,color:'#7B8A97',textAlign:'center',maxWidth:280}, loader:{marginVertical:16},
   newChoice:{borderWidth:1,borderColor:'#DCE5EC',borderRadius:12,padding:15,flexDirection:'row',alignItems:'center',gap:14}, infoBox:{backgroundColor:'#EAF4FC',borderRadius:10,padding:12,flexDirection:'row',gap:9,alignItems:'flex-start'}, infoText:{flex:1,fontSize:13,lineHeight:19,color:'#315A78'}, sectionLabel:{fontSize:10,fontWeight:'900',letterSpacing:.9,color:'#5C7080'}, input:{borderWidth:1,borderColor:'#D6E0E8',backgroundColor:'#F8FAFC',borderRadius:10,padding:12,fontSize:16,color:TEXT}, choiceRow:{flexDirection:'row',gap:8}, choice:{flex:1,borderWidth:1,borderColor:'#C7D3DD',borderRadius:10,padding:12,alignItems:'center'}, choiceSelected:{backgroundColor:BLUE,borderColor:BLUE}, choiceText:{fontSize:11,fontWeight:'900',color:'#415565'}, choiceTextSelected:{color:'#fff'}, locked:{fontSize:12,color:'#7D8A95',fontWeight:'700'},
-  dateGrid:{flexDirection:'row',flexWrap:'wrap',gap:8}, dateChoice:{borderWidth:1,borderColor:'#C7D3DD',borderRadius:9,paddingHorizontal:10,paddingVertical:9,minWidth:88,alignItems:'center'}, dateChoiceSelected:{backgroundColor:BLUE,borderColor:BLUE}, dateChoiceText:{fontSize:11,fontWeight:'900',color:'#415565'}, dateChoiceTextSelected:{color:'#fff'},
+  datePickerButton:{minHeight:48,borderWidth:1,borderColor:'#BCD0DF',backgroundColor:'#F8FBFD',borderRadius:10,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:9}, datePickerValue:{fontSize:15,fontWeight:'900',color:BLUE},
+  calendarBackdrop:{flex:1,justifyContent:'flex-end',backgroundColor:'rgba(10,25,36,.45)'}, calendarSafe:{backgroundColor:'#fff'}, calendarSheet:{backgroundColor:'#fff',padding:18,gap:14,borderTopLeftRadius:20,borderTopRightRadius:20}, calendarHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}, calendarWeek:{flexDirection:'row'}, calendarWeekday:{width:'14.285%',textAlign:'center',fontSize:10,fontWeight:'900',color:MUTED}, calendarGrid:{flexDirection:'row',flexWrap:'wrap'}, calendarDay:{width:'14.285%',minHeight:44,alignItems:'center',justifyContent:'center',borderRadius:10}, calendarDayDisabled:{opacity:.32}, calendarDaySelected:{backgroundColor:BLUE}, calendarDayText:{fontSize:14,fontWeight:'800',color:TEXT}, calendarDayTextDisabled:{color:MUTED}, calendarDayTextSelected:{color:'#fff'},
+  historicalBadge:{backgroundColor:'#FFF4E4',color:'#9A5C00',fontSize:10,fontWeight:'900',letterSpacing:.5,paddingHorizontal:10,paddingVertical:6,borderRadius:999},
 });
