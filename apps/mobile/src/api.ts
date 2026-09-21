@@ -229,12 +229,38 @@ export function completeMaintenance(input: {
   lateEntryReason?: string;
   equipmentCorrectionRequested?: boolean;
   maintainedCoolerCount?: number;
-  partialMaintenanceConfirmed?: boolean;
   missingMaintenanceExplanation?: string;
   coolerCount: number; towerCount: number; tapCount: number; smarttapCount: number; equipmentConfirmed: true;
   idempotencyKey: string;
 }) {
   return jsonRequest<Record<string, unknown>>('/maintenance/complete', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export type NonMaintenanceVisitType =
+  | 'BREAKDOWN'
+  | 'FAULTY_KEG'
+  | 'FACILITY_INSTALLATION'
+  | 'FACILITY_REMOVAL'
+  | 'MOBILE_INSTALLATION'
+  | 'MOBILE_REMOVAL'
+  | 'SMART_TAP_INSTALLATION'
+  | 'SMART_TAP_BREAKDOWN'
+  | 'SMART_TAP_REMOVAL'
+  | 'SURVEY';
+
+export function recordNonMaintenanceVisit(input: {
+  pointId?: string;
+  purpose: NonMaintenanceVisitType;
+  customerName?: string;
+  note?: string;
+  efesimImageBase64?: string;
+  visualExplanation?: string;
+  idempotencyKey: string;
+}) {
+  return jsonRequest<Record<string, unknown>>('/maintenance/non-maintenance-visit', {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -260,8 +286,12 @@ export type TechnicianHistoryItem = {
   maintainedCoolerCount?: number | null;
   missingMaintenanceCount?: number | null;
   missingMaintenanceExplanation?: string | null;
+  maintenanceSummary?: string | null;
   reason?: AttemptReason;
   purpose?: string;
+  purposeLabel?: string;
+  customerName?: string | null;
+  historyLabel?: string;
   /** Server-authorized: only maintenance entered today or yesterday can be reverted. */
   revertEligible?: boolean;
 };

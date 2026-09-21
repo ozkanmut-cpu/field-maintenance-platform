@@ -1,13 +1,15 @@
 import * as assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { DEMO_DATASET, demoUsername, isDemoEntityName, purgeOrder, showcaseCoverage } from './demo-data-plan';
+import * as mockupPlan from './demo-data-plan';
 
 test('showcase dataset has a believable visible identity and enough screen coverage', () => {
   assert.equal(DEMO_DATASET.regionName, 'Kordon Operasyon Bölgesi');
-  assert.equal(demoUsername('technician'), 'ozge.kaya');
-  assert.equal(demoUsername('helper'), 'can.durmaz');
+  assert.equal(demoUsername('technician'), 'mockup.ozge.kaya');
+  assert.equal(demoUsername('helper'), 'mockup.can.durmaz');
   assert.equal(isDemoEntityName('Kordon Operasyon Bölgesi'), true);
   assert.equal(isDemoEntityName('Gerçek Müşteri'), false);
   assert.ok(showcaseCoverage.pointCount >= 10);
@@ -25,8 +27,261 @@ test('purge removes dependent records before demo users and region', () => {
   assert.ok(purgeOrder.indexOf('region') < purgeOrder.indexOf('user'));
 });
 
-test('demo commands use the API ts-node runner instead of Node direct TypeScript execution', () => {
+test('mockup commands use the API ts-node runner without loading ambient runtime configuration', () => {
   const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8')) as { scripts: Record<string, string> };
-  assert.match(pkg.scripts['demo:seed'], /^set -a; \. \.\.\/\.\.\/\.env; set \+a; ts-node --compiler-options /);
-  assert.match(pkg.scripts['demo:purge'], /^set -a; \. \.\.\/\.\.\/\.env; set \+a; ts-node --compiler-options /);
+  assert.match(pkg.scripts['mockup:reset'], /^ts-node --compiler-options .+ src\/demo-data\/demo-data\.cli\.ts reset$/);
+  assert.match(pkg.scripts['mockup:purge'], /^ts-node --compiler-options .+ src\/demo-data\/demo-data\.cli\.ts purge$/);
+  assert.equal(pkg.scripts['mockup:reset'].includes('.env'), false);
+  assert.equal(pkg.scripts['mockup:purge'].includes('.env'), false);
+});
+
+test('mockup CLI rejects a production runtime before database work begins', () => {
+  const result = spawnSync('npm', ['run', 'mockup:reset'], {
+    cwd: resolve(__dirname, '../..'), encoding: 'utf8',
+    env: { PATH: process.env.PATH, MOCKUP_DATASET: 'mobile-evidence', NODE_ENV: 'production', DATABASE_URL: 'postgresql://mock:mock@127.0.0.1:5432/field_maintenance_mockup' },
+  });
+  assert.equal(result.status, 1);
+  assert.match(`${result.stdout}\n${result.stderr}`, /production/i);
+});
+
+test('mockup reset requires an explicit local non-production database and returns only named scope', () => {
+  const build = Reflect.get(mockupPlan, 'buildMockupResetPlan');
+  assert.equal(typeof build, 'function');
+  const reset = (build as (environment: Record<string, string>) => { action: string; databaseName: string; scope: { usernames: readonly string[]; regionName: string } })({
+    MOCKUP_DATASET: 'mobile-evidence', NODE_ENV: 'test', DATABASE_URL: 'postgresql://mock:mock@127.0.0.1:5432/field_maintenance_mockup',
+  });
+  assert.deepEqual(reset, {
+    action: 'reset', databaseName: 'field_maintenance_mockup',
+    scope: { regionName: 'Kordon Operasyon Bölgesi', usernames: ['mockup.ozge.kaya', 'mockup.can.durmaz'] },
+  });
+  assert.throws(() => (build as (environment: Record<string, string>) => unknown)({
+    MOCKUP_DATASET: 'mobile-evidence', NODE_ENV: 'production', DATABASE_URL: 'postgresql://mock:mock@127.0.0.1:5432/field_maintenance_mockup',
+  }), /production/i);
+  assert.throws(() => (build as (environment: Record<string, string>) => unknown)({
+    MOCKUP_DATASET: 'mobile-evidence', NODE_ENV: 'test', DATABASE_URL: 'postgresql://mock:mock@srv.field-maintenance-prod.com:5432/field_maintenance_mockup',
+  }), /local/i);
+});
+
+test('named mockup point scope excludes KOR-external records in the same region', () => {
+  const buildWhere = Reflect.get(mockupPlan, 'buildNamedMockupPointWhere');
+  assert.equal(typeof buildWhere, 'function');
+  const where = (buildWhere as (regionId: string) => unknown)('mockup-region');
+  assert.deepEqual(where, {
+    regionId: 'mockup-region',
+    AND: [{ code: { startsWith: 'KOR-' } }, { code: { in: ['KOR-1001', 'KOR-1002', 'KOR-1003', 'KOR-1004', 'KOR-1005', 'KOR-1006', 'KOR-1007', 'KOR-1008', 'KOR-1009', 'KOR-1010', 'KOR-1011'] } }],
+  });
+  const matches = Reflect.get(mockupPlan, 'isNamedMockupPoint');
+  assert.equal(typeof matches, 'function');
+  const isInScope = matches as (point: { regionId: string; code: string }, regionId: string) => boolean;
+  assert.equal(isInScope({ regionId: 'mockup-region', code: 'KOR-1001' }, 'mockup-region'), true);
+  assert.equal(isInScope({ regionId: 'mockup-region', code: 'LIVE-5001' }, 'mockup-region'), false);
+  assert.equal(isInScope({ regionId: 'operational-region', code: 'KOR-1001' }, 'mockup-region'), false);
+  const assertExclusive = Reflect.get(mockupPlan, 'assertNamedMockupRegion');
+  assert.equal(typeof assertExclusive, 'function');
+  assert.throws(() => (assertExclusive as (points: Array<{ regionId: string; code: string }>, regionId: string) => void)([
+    { regionId: 'mockup-region', code: 'KOR-1001' }, { regionId: 'mockup-region', code: 'LIVE-5001' },
+  ], 'mockup-region'), /outside the named mockup scope/i);
+});
+
+test('real purge fails closed before every mutation when a named region contains LIVE-5001', async () => {
+  const { purgeNamedMockupData: purge } = require('./mockup-data.repository') as {
+    purgeNamedMockupData: (store: any, note: string) => Promise<unknown>;
+  };
+  const calls = { transaction: 0, deleteMany: 0, regionDelete: 0 };
+  const store = {
+    region: { findUnique: async () => ({ id: 'mockup-region' }), delete: async () => { calls.regionDelete++; } },
+    point: {
+      findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }, { id: 'live-point', regionId: 'mockup-region', code: 'LIVE-5001' }],
+      deleteMany: async () => { calls.deleteMany++; },
+    },
+    user: { findMany: async () => { throw new Error('must not query users after the fail-closed point guard'); }, deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceVisit: { findMany: async () => [], deleteMany: async () => { calls.deleteMany++; } },
+    prospectCustomer: { findMany: async () => [], deleteMany: async () => { calls.deleteMany++; } },
+    paperworkStatusHistory: { deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceReviewResolution: { deleteMany: async () => { calls.deleteMany++; } },
+    sapConfirmationReconciliation: { deleteMany: async () => { calls.deleteMany++; } },
+    adminAuditLog: { deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceAttempt: { deleteMany: async () => { calls.deleteMany++; } },
+    nonMaintenanceVisit: { deleteMany: async () => { calls.deleteMany++; } },
+    pointAssignment: { deleteMany: async () => { calls.deleteMany++; } },
+    pointAlias: { deleteMany: async () => { calls.deleteMany++; } },
+    maintenanceObligation: { deleteMany: async () => { calls.deleteMany++; } },
+    prospectVisit: { deleteMany: async () => { calls.deleteMany++; } },
+    technicianHelpPermission: { deleteMany: async () => { calls.deleteMany++; } },
+    $transaction: async () => { calls.transaction++; },
+  };
+  await assert.rejects(() => purge!(store, 'mockup note'), /outside the named mockup scope/i);
+  assert.deepEqual(calls, { transaction: 0, deleteMany: 0, regionDelete: 0 });
+});
+
+test('purge removes only explicitly owned mockup audits sharing its fixture note', async () => {
+  const { purgeNamedMockupData: purge } = require('./mockup-data.repository') as {
+    purgeNamedMockupData: (store: any, note: string) => Promise<unknown>;
+  };
+  const note = 'mockup note';
+  let audits = [
+    { id: 'mockup-audit', entityType: 'MaintenanceVisit', entityId: 'mockup-visit', action: 'PARTIAL_MAINTENANCE', actorId: 'mockup-user', note },
+    { id: 'unrelated-audit', entityType: 'MaintenanceVisit', entityId: 'live-visit', action: 'OPERATIONAL_ACTION', actorId: 'operational-user', note },
+  ];
+  const calls: { auditFindWhere?: unknown; auditDeleteWhere?: unknown } = {};
+  const removeAudits = async ({ where }: { where: { id?: { in: string[] }; note?: string } }) => {
+    calls.auditDeleteWhere = where;
+    audits = audits.filter((audit) => where.id
+      ? !where.id.in.includes(audit.id)
+      : audit.note !== where.note);
+  };
+  const noop = async () => undefined;
+  const tx = {
+    paperworkStatusHistory: { deleteMany: noop }, maintenanceReviewResolution: { deleteMany: noop },
+    sapConfirmationReconciliation: { deleteMany: noop }, adminAuditLog: { deleteMany: removeAudits },
+    maintenanceVisit: { deleteMany: noop }, maintenanceAttempt: { deleteMany: noop },
+    nonMaintenanceVisit: { deleteMany: noop }, pointAssignment: { deleteMany: noop },
+    pointAlias: { deleteMany: noop }, maintenanceObligation: { deleteMany: noop },
+    point: { deleteMany: noop }, prospectVisit: { deleteMany: noop },
+    prospectCustomer: { deleteMany: noop }, technicianHelpPermission: { deleteMany: noop },
+    region: { delete: noop }, user: { deleteMany: noop },
+  };
+  const store = {
+    region: { findUnique: async () => ({ id: 'mockup-region' }), delete: noop },
+    point: { findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }], deleteMany: noop },
+    user: { findMany: async () => [{ id: 'mockup-user' }], deleteMany: noop },
+    maintenanceVisit: { findMany: async () => [{ id: 'mockup-visit' }], deleteMany: noop },
+    nonMaintenanceVisit: { findMany: async () => [], deleteMany: noop },
+    prospectCustomer: { findMany: async () => [], deleteMany: noop },
+    adminAuditLog: {
+      findMany: async ({ where }: { where: unknown }) => { calls.auditFindWhere = where; return audits.filter((audit) => audit.id === 'mockup-audit'); },
+      deleteMany: removeAudits,
+    },
+    $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  await purge(store, note);
+  assert.deepEqual(audits.map((audit) => audit.id), ['unrelated-audit']);
+  assert.deepEqual(calls.auditDeleteWhere, { id: { in: ['mockup-audit'] } });
+  assert.deepEqual(calls.auditFindWhere, {
+    OR: [
+      { note, entityType: 'SHOWCASE_DATASET', entityId: 'mockup-region', action: 'SEED_CREATED', actorId: { in: ['mockup-user'] } },
+      {
+        note,
+        entityType: 'MaintenanceVisit',
+        entityId: { in: ['mockup-visit'] },
+        action: 'PARTIAL_MAINTENANCE',
+        actorId: { in: ['mockup-user'] },
+      },
+      {
+        entityType: 'MAINTENANCE_VISIT',
+        entityId: { in: ['mockup-visit'] },
+        action: {
+          in: [
+            'MAINTENANCE_COOLER_COUNT_RECORDED',
+            'MAINTENANCE_PARTIAL_COOLER_COUNT_RECORDED',
+            'MAINTENANCE_ENTERED_LATE',
+          ],
+        },
+        actorId: { in: ['mockup-user'] },
+      },
+      {
+        entityType: 'POINT_EQUIPMENT',
+        entityId: { in: ['mockup-point'] },
+        action: 'MAINTENANCE_VERIFIED_CHANGED',
+        actorId: { in: ['mockup-user'] },
+      },
+      {
+        entityType: 'NON_MAINTENANCE_VISIT',
+        entityId: { in: [] },
+        action: 'NON_MAINTENANCE_VISIT_RECORDED',
+        actorId: { in: ['mockup-user'] },
+      },
+    ],
+  });
+});
+
+test('purge removes owned runtime audits before mockup users while keeping unrelated audit rows', async () => {
+  const { purgeNamedMockupData: purge } = require('./mockup-data.repository') as {
+    purgeNamedMockupData: (store: any, note: string) => Promise<unknown>;
+  };
+  const note = 'mockup note';
+  let audits = [
+    { id: 'coolers', entityType: 'MAINTENANCE_VISIT', entityId: 'mockup-visit', action: 'MAINTENANCE_COOLER_COUNT_RECORDED', actorId: 'mockup-user', note },
+    { id: 'past-date', entityType: 'MAINTENANCE_VISIT', entityId: 'mockup-visit', action: 'MAINTENANCE_ENTERED_LATE', actorId: 'mockup-user', note },
+    { id: 'non-maintenance', entityType: 'NON_MAINTENANCE_VISIT', entityId: 'mockup-non-maintenance', action: 'NON_MAINTENANCE_VISIT_RECORDED', actorId: 'mockup-user', note },
+    { id: 'live-audit', entityType: 'MAINTENANCE_VISIT', entityId: 'live-visit', action: 'MAINTENANCE_COOLER_COUNT_RECORDED', actorId: 'operational-user', note },
+  ];
+  const deletedAuditIds: string[] = [];
+  const noop = async () => undefined;
+  const matchesWhere = (audit: typeof audits[number], where: any) => (where.note === undefined || where.note === audit.note) && where.OR.some((rule: any) =>
+    (rule.note === undefined || rule.note === audit.note) && rule.entityType === audit.entityType
+      && (rule.entityId === audit.entityId || rule.entityId?.in?.includes(audit.entityId))
+      && (rule.action === audit.action || rule.action?.in?.includes(audit.action))
+      && rule.actorId?.in?.includes(audit.actorId));
+  const tx = {
+    paperworkStatusHistory: { deleteMany: noop }, maintenanceReviewResolution: { deleteMany: noop },
+    sapConfirmationReconciliation: { deleteMany: noop },
+    adminAuditLog: { deleteMany: async ({ where }: any) => {
+      deletedAuditIds.push(...(where.id?.in ?? []));
+      audits = audits.filter((audit) => !where.id?.in?.includes(audit.id));
+    } },
+    maintenanceVisit: { deleteMany: noop }, maintenanceAttempt: { deleteMany: noop },
+    nonMaintenanceVisit: { deleteMany: noop }, pointAssignment: { deleteMany: noop },
+    pointAlias: { deleteMany: noop }, maintenanceObligation: { deleteMany: noop },
+    point: { deleteMany: noop }, prospectVisit: { deleteMany: noop },
+    prospectCustomer: { deleteMany: noop }, technicianHelpPermission: { deleteMany: noop },
+    region: { delete: noop },
+    user: { deleteMany: async () => {
+      if (audits.some((audit) => audit.actorId === 'mockup-user')) throw new Error('FK restrict: audit actor remains');
+    } },
+  };
+  const store = {
+    region: { findUnique: async () => ({ id: 'mockup-region' }), delete: noop },
+    point: { findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }], deleteMany: noop },
+    user: { findMany: async () => [{ id: 'mockup-user' }], deleteMany: noop },
+    maintenanceVisit: { findMany: async () => [{ id: 'mockup-visit' }], deleteMany: noop },
+    nonMaintenanceVisit: { findMany: async () => [{ id: 'mockup-non-maintenance' }], deleteMany: noop },
+    prospectCustomer: { findMany: async () => [], deleteMany: noop },
+    adminAuditLog: { findMany: async ({ where }: any) => audits.filter((audit) => matchesWhere(audit, where)), deleteMany: noop },
+    $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  await purge(store, note);
+  assert.deepEqual(deletedAuditIds.sort(), ['coolers', 'non-maintenance', 'past-date']);
+  assert.deepEqual(audits.map((audit) => audit.id), ['live-audit']);
+
+  await purge(store, note);
+  assert.deepEqual(deletedAuditIds.sort(), ['coolers', 'non-maintenance', 'past-date']);
+  assert.deepEqual(audits.map((audit) => audit.id), ['live-audit']);
+});
+
+test('mockup reset is idempotent and leaves non-mockup records untouched', async () => {
+  const execute = Reflect.get(mockupPlan, 'resetMockupDataset');
+  assert.equal(typeof execute, 'function');
+  const records = new Set(['operational-point']);
+  const operations = {
+    purge: async () => { records.delete('mockup-region'); records.delete('mockup-help'); return { removed: 2 }; },
+    seed: async () => { records.add('mockup-region'); records.add('mockup-help'); return { created: 2 }; },
+  };
+  const reset = execute as (handlers: typeof operations) => Promise<{ purged: { removed: number }; seeded: { created: number } }>;
+  const first = await reset(operations);
+  const firstSnapshot = [...records].sort();
+  const second = await reset(operations);
+  assert.deepEqual(first, { purged: { removed: 2 }, seeded: { created: 2 } });
+  assert.deepEqual(second, first);
+  assert.deepEqual([...records].sort(), firstSnapshot);
+  assert.deepEqual(firstSnapshot, ['mockup-help', 'mockup-region', 'operational-point']);
+});
+
+test('mockup labels, help authority, and evidence fixture states are natural and complete', () => {
+  const profile = Reflect.get(mockupPlan, 'mockupEvidenceProfile') as {
+    visibleLabels: readonly string[];
+    help: { helperName: string; targetName: string };
+    flows: Readonly<Record<string, { pointCode?: string; userVisibleOutcome: string }>>;
+  } | undefined;
+  assert.ok(profile);
+  assert.equal(profile.help.helperName, 'Can Durmaz');
+  assert.equal(profile.help.targetName, 'Özge Kaya');
+  assert.ok(profile.visibleLabels.every((label) => !/demo/i.test(label)));
+  assert.deepEqual(Object.keys(profile.flows).sort(), [
+    'failedMaintenance', 'help', 'locationDecision', 'nonMaintenanceCustomer', 'nonMaintenanceNoCustomerFallback',
+    'paperworkReview', 'partialMaintenance', 'pastDatedMaintenance',
+  ]);
+  assert.equal(profile.flows.partialMaintenance.userVisibleOutcome, '4/5 soğutucu bakım · 1 eksik');
+  assert.equal((profile.flows.partialMaintenance as { obligationStatus?: string }).obligationStatus, 'COMPLETED');
+  assert.equal(profile.flows.nonMaintenanceNoCustomerFallback.userVisibleOutcome, 'Açıklama ile ziyaret kaydedildi');
 });

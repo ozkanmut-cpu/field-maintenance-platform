@@ -5,12 +5,12 @@ import test from 'node:test';
 const app = fs.readFileSync(new URL('./CorporateApp.tsx', import.meta.url), 'utf8');
 const api = fs.readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 
-test('maintenance completion sends a separately recorded maintained cooler count', () => {
+test('maintenance completion transports counts and explanation without the obsolete confirmation field', () => {
   assert.match(api, /maintainedCoolerCount\??:\s*number/);
-  assert.match(api, /partialMaintenanceConfirmed\??:\s*boolean/);
   assert.match(api, /missingMaintenanceExplanation\??:\s*string/);
+  assert.doesNotMatch(api, /partialMaintenanceConfirmed/);
   assert.match(app, /maintainedCoolerCount/);
-  assert.match(app, /partialMaintenanceConfirmed:\s*true/);
+  assert.doesNotMatch(app, /partialMaintenanceConfirmed/);
   assert.match(app, /missingMaintenanceExplanation/);
   assert.match(app, /\.\.\.partialMaintenanceValues/);
 });

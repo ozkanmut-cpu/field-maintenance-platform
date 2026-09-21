@@ -239,6 +239,10 @@ export class MaintenanceService {
         at: visit.performedAt,
         revertEligible: this.isWithinRevertWindow(visit.recordedAtServer, now),
         ...visit,
+        maintenanceSummary:
+          visit.totalCoolerCount != null && visit.maintainedCoolerCount != null
+            ? `${visit.maintainedCoolerCount}/${visit.totalCoolerCount} soğutucu bakım${visit.missingMaintenanceCount ? ` · ${visit.missingMaintenanceCount} eksik` : ''}`
+            : null,
       })),
       ...attempts.map((attempt) => ({ type: 'ATTEMPT' as const, at: attempt.attemptedAt, ...attempt })),
       ...nonMaintenanceVisits.map((visit) => ({
@@ -264,7 +268,7 @@ export class MaintenanceService {
     const existingByKey = await this.prisma.maintenanceVisit.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
     });
-    if (existingByKey) return existingByKey;
+    if (existingByKey) return { ...existingByKey, pastDated: existingByKey.enteredLate };
 
     const point = await this.prisma.point.findFirst({
       where: { id: dto.pointId, deletedAt: null },
@@ -301,7 +305,7 @@ export class MaintenanceService {
     }
 
     const enteredLate = dateDecision.enteredLate;
-    if (enteredLate && !dto.lateEntryReason) {
+    if (enteredLate && !dto.lateEntryReason?.trim()) {
       throw new BadRequestException('Geriye dönük bakım girişinde neden zorunludur');
     }
     if (dateDecision.locationRequired && (dto.latitude === undefined || dto.longitude === undefined || !locationCapturedAt)) {
@@ -380,9 +384,6 @@ export class MaintenanceService {
       throw new BadRequestException('Bakımı yapılan soğutucu adedi toplam soğutucu adedinden büyük olamaz');
     }
     const missingMaintenanceCount = totalCoolerCount - maintainedCoolerCount;
-    if (missingMaintenanceCount > 0 && dto.partialMaintenanceConfirmed !== true) {
-      throw new BadRequestException('Eksik bakım için “Eksik bakım yapıldı” seçeneğini onayla');
-    }
     const missingMaintenanceExplanation = missingMaintenanceCount > 0
       ? dto.missingMaintenanceExplanation?.trim() || null
       : null;
@@ -413,7 +414,7 @@ export class MaintenanceService {
             deviceRecordedAt,
             enteredLate,
             lateEntryMinutes,
-            lateEntryReason: enteredLate ? dto.lateEntryReason ?? null : null,
+            lateEntryReason: enteredLate ? dto.lateEntryReason!.trim() : null,
             latitude: dateDecision.locationRequired ? new Prisma.Decimal(dto.latitude!) : null,
             longitude: dateDecision.locationRequired ? new Prisma.Decimal(dto.longitude!) : null,
             accuracyMeters:
@@ -461,7 +462,7 @@ export class MaintenanceService {
               entityId: created.id,
               action: 'MAINTENANCE_ENTERED_LATE',
               oldValue: Prisma.JsonNull,
-              newValue: { performedAt: performedAt.toISOString(), lateEntryMinutes, lateEntryReason: dto.lateEntryReason, locationCaptured: false },
+              newValue: { pastDated: true, performedAt: performedAt.toISOString(), lateEntryMinutes, lateEntryReason: dto.lateEntryReason!.trim(), locationCaptured: false },
               note: 'Geriye dönük bakım girişi; konum değerlendirmesi uygulanmadı',
             },
           });
@@ -515,11 +516,13 @@ export class MaintenanceService {
         return { visit: created, missedPeriods: backlogToMiss.length };
       });
 
-      if (dateDecision.locationRequired) await this.runPostProcessing(dto.technicianId, point.id);
+      if (dateDecision.locationRequired) {
+        await this.runPostProcessing(dto.technicianId, point.id, locationPresenceConfirmed);
+      }
 
       const visit =
         (await this.prisma.maintenanceVisit.findUnique({ where: { id: result.visit.id } })) ?? result.visit;
-      return { ...visit, resolvedBacklogPeriods: result.missedPeriods };
+      return { ...visit, pastDated: enteredLate, resolvedBacklogPeriods: result.missedPeriods };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Bu bakım kaydı zaten işlendi');
@@ -1438,11 +1441,17 @@ export class MaintenanceService {
     );
   }
 
-  private async runPostProcessing(technicianId: string, pointId: string) {
+  private async runPostProcessing(
+    technicianId: string,
+    pointId: string,
+    locationPresenceConfirmed: boolean,
+  ) {
     try {
       await this.anomaly.scanTechnician(technicianId, 24);
-      await this.locationLearning.refreshPoint(pointId);
-      await this.googlePlaces.matchPoint(pointId);
+      if (locationPresenceConfirmed) {
+        await this.locationLearning.refreshPoint(pointId);
+        await this.googlePlaces.matchPoint(pointId);
+      }
     } catch (error) {
       this.logger.warn(
         `Maintenance post-processing failed for point ${pointId}: ${error instanceof Error ? error.message : String(error)}`,

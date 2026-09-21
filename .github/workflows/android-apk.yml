@@ -7,11 +7,13 @@ on:
       - 'apps/mobile/**'
       - 'package.json'
       - '.github/workflows/android-apk.yml'
+      - 'ops/release/mobile-apk-manifest.json'
   pull_request:
     paths:
       - 'apps/mobile/**'
       - 'package.json'
       - '.github/workflows/android-apk.yml'
+      - 'ops/release/mobile-apk-manifest.json'
   workflow_dispatch:
 
 jobs:
@@ -24,6 +26,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The baseline smoke test verifies an immutable historical source commit.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -45,6 +50,9 @@ jobs:
 
       - name: Mobile unit and smoke tests
         run: node --test apps/mobile/src/*.test.mjs
+
+      - name: Verify released APK baseline manifest
+        run: node --test apps/mobile/src/mobile-release-baseline.smoke.test.mjs
 
       - name: Apply mobile build patches
         run: |

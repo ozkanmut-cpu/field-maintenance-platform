@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "commit": "b7b2c0388c546a00523460bae2937e29e353a44a",
+    "linkage": "The published download page labels this commit as the released build; its displayed SHA-256 was matched to the downloaded APK. Rebuilds are checked only for installable package and version compatibility, not bit-identical output."
+  },
+  "apk": {
+    "sha256": "c8b0439190e350968b7dedd22c4f013b111c5900dfd501865a1c7f14c2d8ef03",
+    "certificateSha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "packageName": "com.fmp.mobile",
+    "versionCode": 1,
+    "versionName": "0.1.0"
+  },
+  "capture": {
+    "kind": "validated-published-apk-baseline",
+    "checks": [
+      "SHA-256 matched the published download page",
+      "aapt reported package and versions",
+      "apksigner reported the certificate digest",
+      "APK installed in the Android emulator"
+    ]
+  }
+}

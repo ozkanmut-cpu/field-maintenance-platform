@@ -34,7 +34,7 @@ function completedVisit() {
   };
 }
 
-function assertCompletionPreserved(updated: Record<string, unknown>, visit: ReturnType<typeof completedVisit>) {
+function assertCompletionPreserved(updated: Record<string, unknown>, visit: Record<string, unknown>) {
   for (const key of [
     'status', 'obligationId', 'serviceSlipStatus', 'confirmationStatus',
     'performedAt', 'recordedAtServer', 'deviceRecordedAt', 'coolerCount',
@@ -172,29 +172,59 @@ for (const decision of [ReviewDecision.NO_ISSUE, ReviewDecision.KEEP_LOCATION_EX
   });
 }
 
-test('location approval and each closing review resolution reject a reversed visit', async () => {
+test('location approval rejects a reversed visit while every anomaly review decision audits without changing completion', async () => {
   const reversed = { ...completedVisit(), status: VisitStatus.REVERSED };
   const approvalPrisma: any = {
     maintenanceVisit: { findUnique: async () => reversed },
     user: { findFirst: async () => ({ id: 'admin-1', role: 'ADMIN', active: true }) },
     $transaction: async () => assert.fail('reversed location approval must not start a transaction'),
   };
-  const reviewPrisma: any = {
-    maintenanceVisit: { findUnique: async () => reversed },
-    user: { findFirst: async () => ({ id: 'admin-1', role: 'ADMIN', active: true }) },
-    $transaction: async () => assert.fail('reversed review resolution must not start a transaction'),
-  };
   const approval = new MaintenanceService(approvalPrisma, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
-  const review = new MaintenanceAnomalyService(reviewPrisma, {} as never);
 
   await assert.rejects(
     () => approval.approveVisitLocation('admin-1', { visitId: reversed.id }),
     BadRequestException,
   );
-  for (const decision of [ReviewDecision.NO_ISSUE, ReviewDecision.KEEP_LOCATION_EXCLUDED]) {
-    await assert.rejects(
-      () => review.resolveReview({ visitId: reversed.id, adminUserId: 'admin-1', decision }),
-      BadRequestException,
-    );
+
+  for (const decision of [
+    ReviewDecision.NO_ISSUE,
+    ReviewDecision.KEEP_LOCATION_EXCLUDED,
+    ReviewDecision.NEEDS_FOLLOWUP,
+  ]) {
+    const visitUpdates: any[] = [];
+    const resolutions: any[] = [];
+    const reviewPrisma: any = {
+      maintenanceVisit: { findUnique: async () => reversed },
+      user: { findFirst: async () => ({ id: 'admin-1', role: 'ADMIN', active: true }) },
+      $transaction: async (fn: any) => fn({
+        maintenanceVisit: {
+          update: async (args: any) => {
+            visitUpdates.push(args);
+            return { ...reversed, ...args.data };
+          },
+        },
+        maintenanceObligation: { update: async () => assert.fail('review resolution must not alter reversed obligation completion') },
+        maintenanceReviewResolution: {
+          create: async (args: any) => {
+            resolutions.push(args);
+            return args.data;
+          },
+        },
+      }),
+    };
+    const review = new MaintenanceAnomalyService(reviewPrisma, {} as never);
+
+    const result = await review.resolveReview({
+      visitId: reversed.id,
+      adminUserId: 'admin-1',
+      decision,
+    });
+
+    assertCompletionPreserved(result.visit, reversed);
+    assert.equal(visitUpdates[0].data.status, undefined);
+    assert.equal(visitUpdates[0].data.obligationId, undefined);
+    assert.equal(resolutions[0].data.visitId, reversed.id);
+    assert.equal(resolutions[0].data.decision, decision);
+    assert.equal(resolutions[0].data.resolvedById, 'admin-1');
   }
 });

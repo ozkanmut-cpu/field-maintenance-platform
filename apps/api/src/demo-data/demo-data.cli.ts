@@ -1,6 +1,7 @@
 import { MaintenanceType, PrismaClient, PaperworkKind, PaperworkStatus, PointAssignmentKind, PointStatus, UserRole } from '@prisma/client';
 import { hashPassword } from '../auth/password';
-import { DEMO_DATASET } from './demo-data-plan';
+import { MOCKUP_DATASET, buildMockupResetPlan, resetMockupDataset } from './demo-data-plan';
+import { purgeNamedMockupData } from './mockup-data.repository';
 
 const prisma = new PrismaClient();
 const now = new Date();
@@ -10,56 +11,19 @@ const datasetNote = 'Silinebilir önizleme veri paketi — gerçek operasyon ver
 type DemoUsers = { technician: { id: string }, helper: { id: string } };
 
 async function purge() {
-  const region = await prisma.region.findUnique({ where: { name: DEMO_DATASET.regionName }, select: { id: true } });
-  const points = region ? await prisma.point.findMany({ where: { regionId: region.id }, select: { id: true } }) : [];
-  const pointIds = points.map((point) => point.id);
-  const users = await prisma.user.findMany({ where: { username: { in: [DEMO_DATASET.technicianUsername, DEMO_DATASET.helperUsername] } }, select: { id: true } });
-  const userIds = users.map((user) => user.id);
-  const visits = pointIds.length ? await prisma.maintenanceVisit.findMany({ where: { pointId: { in: pointIds } }, select: { id: true } }) : [];
-  const visitIds = visits.map((visit) => visit.id);
-  const prospects = userIds.length ? await prisma.prospectCustomer.findMany({ where: { createdById: { in: userIds } }, select: { id: true } }) : [];
-  const prospectIds = prospects.map((prospect) => prospect.id);
-
-  await prisma.$transaction(async (tx) => {
-    if (visitIds.length) {
-      await tx.paperworkStatusHistory.deleteMany({ where: { visitId: { in: visitIds } } });
-      await tx.maintenanceReviewResolution.deleteMany({ where: { visitId: { in: visitIds } } });
-      await tx.sapConfirmationReconciliation.deleteMany({ where: { visitId: { in: visitIds } } });
-    }
-    await tx.adminAuditLog.deleteMany({ where: { OR: [{ actorId: { in: userIds } }, { note: datasetNote }] } });
-    if (pointIds.length) {
-      await tx.maintenanceVisit.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.maintenanceAttempt.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.nonMaintenanceVisit.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.pointAssignment.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.pointAlias.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.maintenanceObligation.deleteMany({ where: { pointId: { in: pointIds } } });
-      await tx.point.deleteMany({ where: { id: { in: pointIds } } });
-    }
-    if (prospectIds.length) {
-      await tx.prospectVisit.deleteMany({ where: { prospectId: { in: prospectIds } } });
-      await tx.prospectCustomer.deleteMany({ where: { id: { in: prospectIds } } });
-    }
-    if (userIds.length) {
-      await tx.technicianHelpPermission.deleteMany({ where: { OR: [{ helperId: { in: userIds } }, { targetId: { in: userIds } }] } });
-    }
-    if (region) await tx.region.delete({ where: { id: region.id } });
-    if (userIds.length) await tx.user.deleteMany({ where: { id: { in: userIds } } });
-  });
-  return { points: pointIds.length, users: userIds.length, region: Boolean(region) };
+  return purgeNamedMockupData(prisma, datasetNote);
 }
 
 async function seed(password: string) {
-  if (password.length < 16) throw new Error('DEMO_TECHNICIAN_PASSWORD en az 16 karakter olmalı');
-  await purge();
+  if (password.length < 16) throw new Error('MOCKUP_TECHNICIAN_PASSWORD en az 16 karakter olmalı');
   const users: DemoUsers = await prisma.$transaction(async (tx) => {
     const passwordHash = hashPassword(password);
-    const technician = await tx.user.create({ data: { name: 'Özge Kaya', username: DEMO_DATASET.technicianUsername, role: UserRole.TECHNICIAN, active: true, passwordHash } });
-    const helper = await tx.user.create({ data: { name: 'Can Durmaz', username: DEMO_DATASET.helperUsername, role: UserRole.TECHNICIAN, active: true, passwordHash } });
+    const technician = await tx.user.create({ data: { name: 'Özge Kaya', username: MOCKUP_DATASET.technicianUsername, role: UserRole.TECHNICIAN, active: true, passwordHash } });
+    const helper = await tx.user.create({ data: { name: 'Can Durmaz', username: MOCKUP_DATASET.helperUsername, role: UserRole.TECHNICIAN, active: true, passwordHash } });
     return { technician, helper };
   });
 
-  const region = await prisma.region.create({ data: { name: DEMO_DATASET.regionName, technicianId: users.technician.id } });
+  const region = await prisma.region.create({ data: { name: MOCKUP_DATASET.regionName, technicianId: users.technician.id } });
   const pointInput = [
     { code: 'KOR-1001', name: 'Mavi Köşe Birahanesi', status: PointStatus.ACTIVE, coolers: 5, type: MaintenanceType.STANDARD },
     { code: 'KOR-1002', name: 'Ege Sofrası', status: PointStatus.ACTIVE, coolers: 4, type: MaintenanceType.STANDARD },
@@ -97,6 +61,10 @@ async function seed(password: string) {
     coolerCount: 5, towerCount: 1, tapCount: 5, smarttapCount: 1, equipmentConfirmed: true, serviceSlipStatus: PaperworkStatus.PENDING,
     confirmationStatus: PaperworkStatus.PENDING, idempotencyKey: 'showcase-partial-maintenance-v1',
   } });
+  await prisma.maintenanceObligation.update({
+    where: { pointId_cycleKey: { pointId: active.id, cycleKey: 'KOR-OPEN-1' } },
+    data: { status: 'COMPLETED', completedAt: partial.performedAt, resolvedAt: now, resolvedByVisitId: partial.id },
+  });
   const missing = await prisma.maintenanceVisit.create({ data: {
     pointId: paperwork.id, technicianId: users.technician.id, performedAt: new Date(now.getTime() - 86400000), deviceRecordedAt: now,
     latitude: paperwork.canonicalLatitude, longitude: paperwork.canonicalLongitude, accuracyMeters: 18, locationCapturedAt: now,
@@ -125,17 +93,17 @@ async function seed(password: string) {
       { entityType: 'MaintenanceVisit', entityId: partial.id, action: 'PARTIAL_MAINTENANCE', actorId: users.technician.id, newValue: { totalCoolers: 5, maintainedCoolers: 4 }, note: datasetNote },
     ] });
   });
-  return { region: region.name, username: DEMO_DATASET.technicianUsername, points: points.length, visits: [partial, missing, review, approved, present, pending, past].length };
+  return { region: region.name, username: MOCKUP_DATASET.technicianUsername, points: points.length, visits: [partial, missing, review, approved, present, pending, past].length };
 }
 
 async function main() {
   const action = process.argv[2];
+  if (action !== 'reset' && action !== 'purge') throw new Error('Kullanım: demo-data.cli.ts reset | purge');
+  buildMockupResetPlan(process.env);
   if (action === 'purge') { console.log(JSON.stringify({ action, ...(await purge()) })); return; }
-  if (action === 'seed') {
-    const password = process.env.DEMO_TECHNICIAN_PASSWORD ?? '';
-    console.log(JSON.stringify({ action, ...(await seed(password)) })); return;
-  }
-  throw new Error('Kullanım: demo-data.cli.ts seed | purge');
+  const password = process.env.MOCKUP_TECHNICIAN_PASSWORD ?? '';
+  const result = await resetMockupDataset({ purge, seed: () => seed(password) });
+  console.log(JSON.stringify({ action, ...result }));
 }
 
 main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; }).finally(async () => prisma.$disconnect());

@@ -57,6 +57,24 @@ test('operational area rejects distant Hatay province and HATAY searches İzmir 
   assert.ok(queries.some((q: string) => q.includes('Karabağlar')));
 });
 
+test('address searches use mapped provinces outside İzmir and fall back for unknown regions', () => {
+  const expectedProvinceByRegion = {
+    DENİZLİ: 'Denizli',
+    AKHİSAR: 'Manisa',
+    KUŞADASI: 'Aydın',
+  };
+
+  for (const [region, province] of Object.entries(expectedProvinceByRegion)) {
+    const queries = service.buildQueries('ÖRNEK NOKTA', region);
+    assert.ok(queries.length > 0);
+    assert.ok(queries.every((query: string) => query.includes(province)));
+    assert.ok(queries.every((query: string) => !query.includes('İzmir')));
+  }
+
+  const fallbackQueries = service.buildQueries('ÖRNEK NOKTA', 'BİLİNMEYEN');
+  assert.ok(fallbackQueries.every((query: string) => query.includes('İzmir')));
+});
+
 test('generic type or numeric overlap cannot substitute for venue identity', () => {
   const arena = candidate('ARENA NIGHT CLUB', 'Gökkaya, Ahmetli/Manisa', 38.52, 27.94);
   const noter = candidate('Tire 1. Noter', 'Yeni, Tire/İzmir', 38.09, 27.73);

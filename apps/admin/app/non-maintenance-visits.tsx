@@ -4,17 +4,24 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
 
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
-type Purpose = 'BREAKDOWN' | 'SURVEY' | 'INSTALLATION' | 'REMOVAL';
+type Purpose = 'BREAKDOWN' | 'FAULTY_KEG' | 'FACILITY_INSTALLATION' | 'FACILITY_REMOVAL'
+  | 'MOBILE_INSTALLATION' | 'MOBILE_REMOVAL' | 'SMART_TAP_INSTALLATION' | 'SMART_TAP_BREAKDOWN'
+  | 'SMART_TAP_REMOVAL' | 'SURVEY' | 'INSTALLATION' | 'REMOVAL';
 type Visit = {
-  id: string; purpose: Purpose; note?: string | null; visitedAt: string; locationCapturedAt: string;
-  latitude: string | number; longitude: string | number; accuracyMeters?: string | number | null;
-  point: { id: string; code: string; name: string; status: string };
+  id: string; purpose: Purpose; note?: string | null; visitedAt: string; locationCapturedAt: string | null;
+  latitude: string | number | null; longitude: string | number | null; accuracyMeters?: string | number | null;
+  customerName?: string | null; visualExplanation?: string | null;
+  point: { id: string; code: string; name: string; status: string } | null;
   technician: { id: string; name: string };
 };
 type HistoryResponse = { date: string; technician: { id: string; name: string }; count: number; items: Omit<Visit, 'technician'>[] };
 
 const purposeLabels: Record<Purpose, string> = {
-  BREAKDOWN: 'Arıza', SURVEY: 'Keşif', INSTALLATION: 'Kurulum', REMOVAL: 'Söküm',
+  BREAKDOWN: 'Arıza', FAULTY_KEG: 'Arızalı Fıçı',
+  FACILITY_INSTALLATION: 'Tesis Kurulum', FACILITY_REMOVAL: 'Tesis Sökme',
+  MOBILE_INSTALLATION: 'Seyyar Kurulum', MOBILE_REMOVAL: 'Seyyar Sökme',
+  SMART_TAP_INSTALLATION: 'Smart Tap Kurulum', SMART_TAP_BREAKDOWN: 'Smart Tap Arıza', SMART_TAP_REMOVAL: 'Smart Tap Sökme',
+  SURVEY: 'Keşif', INSTALLATION: 'Tesis Kurulum (eski kayıt)', REMOVAL: 'Tesis Sökme (eski kayıt)',
 };
 
 function todayLocal() {
@@ -81,19 +88,22 @@ export default function NonMaintenanceVisits() {
     return visits.filter((item) => {
       if (purpose !== 'ALL' && item.purpose !== purpose) return false;
       if (!q) return true;
-      return `${item.point.code} ${item.point.name} ${item.technician.name} ${item.note ?? ''}`.toLocaleLowerCase('tr-TR').includes(q);
+      return `${item.point?.code ?? 'Müşteri kaydı yok'} ${item.point?.name ?? item.customerName ?? ''} ${item.technician.name} ${item.note ?? ''} ${item.visualExplanation ?? ''}`.toLocaleLowerCase('tr-TR').includes(q);
     });
   }, [visits, purpose, query]);
 
   const purposeCounts = useMemo(() => Object.fromEntries(Object.keys(purposeLabels).map((key) => [key, visits.filter((v) => v.purpose === key).length])) as Record<Purpose, number>, [visits]);
+  const breakdownCount = purposeCounts.BREAKDOWN + purposeCounts.FAULTY_KEG + purposeCounts.SMART_TAP_BREAKDOWN;
+  const installationCount = purposeCounts.INSTALLATION + purposeCounts.FACILITY_INSTALLATION + purposeCounts.MOBILE_INSTALLATION + purposeCounts.SMART_TAP_INSTALLATION;
+  const removalCount = purposeCounts.REMOVAL + purposeCounts.FACILITY_REMOVAL + purposeCounts.MOBILE_REMOVAL + purposeCounts.SMART_TAP_REMOVAL;
   const technicianCounts = useMemo(() => technicians.map((t) => ({ ...t, count: visits.filter((v) => v.technician.id === t.id).length })).filter((t) => t.count > 0).sort((a, b) => b.count - a.count), [technicians, visits]);
 
   return <>
     <section className="dashboardGrid">
       <div className="dashboardCard"><span>Toplam ziyaret</span><strong>{visits.length}</strong><small>{date}</small></div>
-      <div className="dashboardCard"><span>Arıza</span><strong>{purposeCounts.BREAKDOWN}</strong><small>Bakım dışı</small></div>
+      <div className="dashboardCard"><span>Arıza</span><strong>{breakdownCount}</strong><small>Bakım dışı</small></div>
       <div className="dashboardCard"><span>Keşif</span><strong>{purposeCounts.SURVEY}</strong><small>Bakım dışı</small></div>
-      <div className="dashboardCard"><span>Kurulum / Söküm</span><strong>{purposeCounts.INSTALLATION + purposeCounts.REMOVAL}</strong><small>{purposeCounts.INSTALLATION} / {purposeCounts.REMOVAL}</small></div>
+      <div className="dashboardCard"><span>Kurulum / Söküm</span><strong>{installationCount + removalCount}</strong><small>{installationCount} / {removalCount}</small></div>
     </section>
 
     <section className="panel">
@@ -115,7 +125,7 @@ export default function NonMaintenanceVisits() {
     <section className="panel">
       <div className="panelHeader"><div><h2>Ziyaret Kayıtları</h2><p>{filtered.length} kayıt gösteriliyor.</p></div></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Teknisyen</th><th>Nokta</th><th>Amaç</th><th>Not</th><th>Konum</th></tr></thead><tbody>
-        {busy && visits.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Ziyaret kayıtları yükleniyor</strong><span>Seçili tarih ve teknisyen kayıtları getiriliyor.</span></div></td></tr> : filtered.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Kayıt bulunamadı</strong><span>Arama, amaç veya teknisyen filtresini değiştir.</span></div></td></tr> : filtered.map((item) => <tr key={item.id}><td>{new Date(item.visitedAt).toLocaleString('tr-TR')}</td><td><strong>{item.technician.name}</strong></td><td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.status}</div></td><td><span className="pill">{purposeLabels[item.purpose]}</span></td><td>{item.note || '—'}</td><td>{Number(item.latitude).toFixed(5)}, {Number(item.longitude).toFixed(5)}<div className="muted">{item.accuracyMeters == null ? 'Hassasiyet yok' : `±${Math.round(Number(item.accuracyMeters))} m`}</div></td></tr>)}
+        {busy && visits.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Ziyaret kayıtları yükleniyor</strong><span>Seçili tarih ve teknisyen kayıtları getiriliyor.</span></div></td></tr> : filtered.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Kayıt bulunamadı</strong><span>Arama, amaç veya teknisyen filtresini değiştir.</span></div></td></tr> : filtered.map((item) => <tr key={item.id}><td>{new Date(item.visitedAt).toLocaleString('tr-TR')}</td><td><strong>{item.technician.name}</strong></td><td><strong>{item.point?.name ?? item.customerName ?? 'Müşteri kaydı yok'}</strong><div className="muted">{item.point ? `${item.point.code} · ${item.point.status}` : 'Müşteri kaydı yok'}</div></td><td><span className="pill">{purposeLabels[item.purpose]}</span></td><td>{item.note || item.visualExplanation || '—'}</td><td>{item.latitude == null || item.longitude == null ? 'Konum alınmadı' : <>{Number(item.latitude).toFixed(5)}, {Number(item.longitude).toFixed(5)}<div className="muted">{item.accuracyMeters == null ? 'Hassasiyet yok' : `±${Math.round(Number(item.accuracyMeters))} m`}</div></>}</td></tr>)}
       </tbody></table></div>
     </section>
   </>;
