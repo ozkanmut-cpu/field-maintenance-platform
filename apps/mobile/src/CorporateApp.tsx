@@ -508,11 +508,11 @@ export default function CorporateApp() {
     </ScrollView>
     <View style={styles.nav} accessibilityRole="tablist">{primaryTabs.map((tab) => <Nav key={tab.screen} label={tab.label} icon={tab.icon} active={tab.screen === 'TASKS' ? screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM' || screen === 'HELP' || screen === 'MISSING_ITEMS' || screen.startsWith('NON_MAINTENANCE') : tab.screen === 'CUSTOMERS' ? screen === 'CUSTOMERS' || screen === 'CUSTOMER' : screen === 'HISTORY'} onPress={() => tab.screen === 'CUSTOMERS' ? void openCustomers() : tab.screen === 'HISTORY' ? void openHistory() : resetNavigation('TASKS')} />)}</View>
     <DecisionModal open={Boolean(attemptDialog)} onRequestClose={closeAttemptDialog} title="Bakım yapılamadı" detail="Nedeni seç. Kayıt admin onayına düşer ve görev şimdilik açık kalır." options={ATTEMPT_REASON_CHOICES.map(item => ({ label: item.text, onPress: () => chooseAttemptReason(item.reason) }))} />
-    <DecisionModal open={Boolean(locationDialog)} onRequestClose={closeLocationDialog} title="Noktada mısınız?" detail={locationDialog ? `${locationDialog.detail}\n\nYine de ${locationDialog.task.pointName} noktasında olduğunuzu onaylıyor musunuz?` : ''} options={[{ label: 'Hayır, ama bakımı yaptım', onPress: () => chooseLocationPresence(false) }, { label: 'Evet, noktadayım', onPress: () => chooseLocationPresence(true) }]} />
+    <DecisionModal open={Boolean(locationDialog)} onRequestClose={closeLocationDialog} cancelLabel="İptal et" title="Noktada mısınız?" detail={locationDialog ? `${locationDialog.detail}\n\nYine de ${locationDialog.task.pointName} noktasında olduğunuzu onaylıyor musunuz?` : ''} options={[{ label: 'Hayır, ama bakımı yaptım', onPress: () => chooseLocationPresence(false) }, { label: 'Evet, noktadayım', onPress: () => chooseLocationPresence(true) }]} />
   </View></SafeAreaView>;
 }
 
-function DecisionModal({open,onRequestClose,title,detail,options}:{open:boolean;onRequestClose:()=>void;title:string;detail:string;options:ReadonlyArray<{label:string;onPress:()=>void}>}) {
+function DecisionModal({open,onRequestClose,title,detail,options,cancelLabel='Vazgeç'}:{open:boolean;onRequestClose:()=>void;title:string;detail:string;options:ReadonlyArray<{label:string;onPress:()=>void}>;cancelLabel?:string}) {
   return <Modal transparent animationType="fade" visible={open} onRequestClose={onRequestClose}>
     <View style={styles.dialogBackdrop}>
       <SafeAreaView edges={['bottom']} style={styles.dialogSafe}>
@@ -520,7 +520,7 @@ function DecisionModal({open,onRequestClose,title,detail,options}:{open:boolean;
           <View style={styles.dialogHeader}><Text style={styles.dialogTitle}>{title}</Text><TouchableOpacity accessibilityRole="button" accessibilityLabel="Dialogu kapat" onPress={onRequestClose}><Feather name="x" size={22} color={MUTED}/></TouchableOpacity></View>
           <Text style={styles.help}>{detail}</Text>
           {options.map(option => <TouchableOpacity key={option.label} accessibilityRole="button" style={styles.dialogOption} onPress={option.onPress}><Text style={styles.dialogOptionText}>{option.label}</Text></TouchableOpacity>)}
-          <SecondaryButton title="Vazgeç" icon="x" danger onPress={onRequestClose} />
+          <SecondaryButton title={cancelLabel} icon="x" danger onPress={onRequestClose} />
         </View>
       </SafeAreaView>
     </View>

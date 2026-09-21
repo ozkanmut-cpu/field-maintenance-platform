@@ -88,3 +88,33 @@ No remaining Critical, Important, or Minor findings were identified.
 `adb` is not installed on the remote device (`command -v adb` returned no
 path), so emulator interaction evidence could not be gathered and none was
 fabricated.
+
+## Fix round 1/5 — exact location cancel copy
+
+Reviewer finding: the >250 m dialog requires the three exact choices
+“Evet, noktadayım”, “Hayır, ama bakımı yaptım”, and “İptal et”, while the
+shared dialog hard-coded “Vazgeç”.
+
+RED:
+
+```text
+node --test apps/mobile/src/mobile-navigation.smoke.test.mjs
+tests 6, pass 5, fail 1
+missing cancelLabel="İptal et" on the location dialog
+```
+
+Minimum fix:
+
+- `DecisionModal` accepts an optional `cancelLabel`, defaulting to
+  “Vazgeç” for attempted maintenance and any existing/default use.
+- Only the location dialog passes `cancelLabel="İptal et"`.
+- The label still invokes `onRequestClose`; Back/cancel cannot write.
+
+GREEN and regressions:
+
+```text
+focused navigation/modal: tests 14, pass 14, fail 0
+all mobile: tests 54, pass 54, fail 0
+mobile TypeScript: pass
+Expo Android export: pass
+```

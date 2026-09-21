@@ -29,6 +29,15 @@ test('location decision is a dismissible modal and calendar dismissal remains in
   assert.match(app, /<Modal transparent animationType="slide" visible=\{open\} onRequestClose=\{closeCalendar\}>/);
 });
 
+test('location decision uses İptal et while attempted maintenance keeps the default Vazgeç dismissal', () => {
+  const attemptCall = app.slice(app.indexOf('<DecisionModal open={Boolean(attemptDialog)}'), app.indexOf('<DecisionModal open={Boolean(locationDialog)}'));
+  const locationCall = app.slice(app.indexOf('<DecisionModal open={Boolean(locationDialog)}'), app.indexOf('</View></SafeAreaView>'));
+  assert.doesNotMatch(attemptCall, /cancelLabel=/);
+  assert.match(locationCall, /cancelLabel="İptal et"/);
+  assert.match(app, /cancelLabel='Vazgeç'/);
+  assert.match(app, /<SecondaryButton title=\{cancelLabel\} icon="x" danger onPress=\{onRequestClose\} \/>/);
+});
+
 test('hardware back applies modal-first navigation and always consumes the event', () => {
   const handler = app.slice(app.indexOf('const handleHardwareBack'), app.indexOf('async function restore'));
   assert.match(handler, /resolveHardwareBack/);
