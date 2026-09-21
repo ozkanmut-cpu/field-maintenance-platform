@@ -10,9 +10,9 @@ import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
   completeMissingServiceSlip,
   DueTask, EfesimExtractResult, extractEfesim, HelpTarget, helpTargets, login, me, MissingPaperworkItem, ProspectRecord,
-  ProspectVisitPurpose, recordMaintenanceAttempt, restoreSessionToken, revertMaintenance, technicianDashboard,
+  ProspectVisitPurpose, recordMaintenanceAttempt, recordNonMaintenanceVisit, restoreSessionToken, revertMaintenance, technicianDashboard,
   TechnicianDashboard, technicianHistory, TechnicianHistoryItem, myCustomers, updateCustomerEquipment, MyCustomer,
-  NearbyPoint,
+  NearbyPoint, NonMaintenanceVisitType,
 } from './api';
 import { matchesSearch } from './search';
 import { nearbyPoints, sortNearbyItems } from './nearby';
@@ -73,6 +73,16 @@ export default function CorporateApp() {
   const [equipmentCorrectionRequested, setEquipmentCorrectionRequested] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
+  const [nonMaintenanceCustomers, setNonMaintenanceCustomers] = useState<MyCustomer[]>([]);
+  const [nonMaintenanceSearch, setNonMaintenanceSearch] = useState('');
+  const [nonMaintenanceCustomer, setNonMaintenanceCustomer] = useState<MyCustomer | null>(null);
+  const [nonMaintenanceNoCustomer, setNonMaintenanceNoCustomer] = useState(false);
+  const [nonMaintenanceType, setNonMaintenanceType] = useState<NonMaintenanceVisitType>('BREAKDOWN');
+  const [nonMaintenanceNote, setNonMaintenanceNote] = useState('');
+  const [nonMaintenanceCustomerName, setNonMaintenanceCustomerName] = useState('');
+  const [efesimImageBase64, setEfesimImageBase64] = useState('');
+  const [visualExplanation, setVisualExplanation] = useState('');
+  const [nonMaintenanceSuccessName, setNonMaintenanceSuccessName] = useState('');
   const [deviceLocation, setDeviceLocation] = useState<{ latitude:number; longitude:number } | null>(null);
   const [nearbyItems, setNearbyItems] = useState<NearbyPoint[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
@@ -223,6 +233,66 @@ export default function CorporateApp() {
   function parsedEquipmentCorrection(task: DueTask, equipmentValues: { coolerCount:number;towerCount:number;tapCount:number;smarttapCount:number }) {
     return equipmentCorrectionPayload(task, equipmentValues, equipmentCorrectionRequested);
   }
+  async function openNonMaintenanceVisit() {
+    setBusy(true);
+    try {
+      setNonMaintenanceCustomers(await myCustomers());
+      setNonMaintenanceSearch('');
+      setNonMaintenanceCustomer(null);
+      setNonMaintenanceNoCustomer(false);
+      setNonMaintenanceType('BREAKDOWN');
+      setNonMaintenanceNote('');
+      setNonMaintenanceCustomerName('');
+      setEfesimImageBase64('');
+      setVisualExplanation('');
+      navigate('NON_MAINTENANCE_VISIT');
+    } catch (e) { Alert.alert('Müşteriler alınamadı', message(e)); }
+    finally { setBusy(false); }
+  }
+  function chooseNonMaintenanceCustomer(customer: MyCustomer | null) {
+    setNonMaintenanceCustomer(customer);
+    setNonMaintenanceNoCustomer(customer === null);
+    setNonMaintenanceCustomerName(customer?.name ?? '');
+    setEfesimImageBase64('');
+    setVisualExplanation('');
+    navigate('NON_MAINTENANCE_FORM');
+  }
+  async function chooseNonMaintenanceEfesim() {
+    try {
+      const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!media.granted) return Alert.alert('Görsel seçilemedi', 'Açıklamayla devam edebilirsin.');
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.7, base64: false });
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      const resized = await ImageManipulator.manipulateAsync(asset.uri, asset.width > 1440 ? [{ resize: { width: 1440 } }] : [], { compress: 0.68, format: ImageManipulator.SaveFormat.JPEG, base64: true });
+      if (!resized.base64) throw new Error('Ekran görüntüsü okunamadı.');
+      setEfesimImageBase64(`data:image/jpeg;base64,${resized.base64}`);
+      setVisualExplanation('');
+    } catch (e) { Alert.alert('Görsel seçilemedi', `${message(e)} Açıklamayla devam edebilirsin.`); }
+  }
+  async function saveNonMaintenanceVisit() {
+    if (nonMaintenanceNoCustomer && nonMaintenanceCustomerName.trim().length < 2) {
+      return Alert.alert('Müşteri adı gerekli', 'Müşteri kaydı yok ziyaretinde müşteri adını gir.');
+    }
+    if (nonMaintenanceNoCustomer && !efesimImageBase64 && !visualExplanation.trim()) {
+      return Alert.alert('Ziyaret kanıtı gerekli', 'EFESİM ekran görüntüsü seç veya görsel yoksa açıklama gir.');
+    }
+    setBusy(true);
+    try {
+      await recordNonMaintenanceVisit({
+        ...(nonMaintenanceCustomer ? { pointId: nonMaintenanceCustomer.id } : {}),
+        purpose: nonMaintenanceType,
+        ...(nonMaintenanceNoCustomer ? { customerName: nonMaintenanceCustomerName.trim() } : {}),
+        ...(nonMaintenanceNote.trim() ? { note: nonMaintenanceNote.trim() } : {}),
+        ...(efesimImageBase64 ? { efesimImageBase64 } : {}),
+        ...(visualExplanation.trim() ? { visualExplanation: visualExplanation.trim() } : {}),
+        idempotencyKey: `non-maintenance-${user!.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      });
+      setNonMaintenanceSuccessName(nonMaintenanceCustomer?.name ?? nonMaintenanceCustomerName.trim());
+      navigate('NON_MAINTENANCE_VISIT_SAVED', true);
+    } catch (e) { Alert.alert('Ziyaret kaydedilemedi', message(e)); }
+    finally { setBusy(false); }
+  }
   async function openCustomers() { setBusy(true); try { setCustomers(await myCustomers()); navigate('CUSTOMERS'); } catch(e){ Alert.alert('Müşteriler alınamadı',message(e)); } finally{ setBusy(false); } }
   async function loadNearby() {
     setNearbyLoading(true); setNearbyError(null);
@@ -369,7 +439,7 @@ export default function CorporateApp() {
   if (sessionLoading) return <SafeAreaView edges={['top','bottom']} style={styles.center}><ActivityIndicator size="large" /><Text>Oturum kontrol ediliyor...</Text></SafeAreaView>;
   if (!user) return <Login username={username} password={password} setUsername={setUsername} setPassword={setPassword} busy={busy} signIn={signIn} />;
 
-  const title = screen === 'CUSTOMERS' || screen === 'CUSTOMER' ? 'Müşterilerim' : screen === 'NEARBY' ? 'Yakınımdakiler' : screen === 'EQUIPMENT_CONFIRM' ? 'Ekipman Kontrolü' : screen === 'HELP' ? 'Yardım Et' : screen === 'MISSING_ITEMS' ? 'Eksikler' : screen === 'NEW' || screen === 'EFESIM_RESULT' || screen === 'PROSPECT' || screen === 'VISIT_SAVED' ? 'Yeni Nokta' : screen === 'HISTORY' ? 'Geçmiş' : 'İşler';
+  const title = screen === 'CUSTOMERS' || screen === 'CUSTOMER' ? 'Müşterilerim' : screen === 'NEARBY' ? 'Yakınımdakiler' : screen === 'EQUIPMENT_CONFIRM' ? 'Ekipman Kontrolü' : screen === 'HELP' ? 'Yardım Et' : screen === 'MISSING_ITEMS' ? 'Eksikler' : screen === 'NEW' || screen === 'EFESIM_RESULT' || screen === 'PROSPECT' || screen === 'VISIT_SAVED' ? 'Yeni Nokta' : screen === 'HISTORY' ? 'Geçmiş' : screen.startsWith('NON_MAINTENANCE') ? 'Bakım Dışı Ziyaret' : 'İşler';
   return <SafeAreaView edges={['top','bottom']} style={styles.safe}><StatusBar style="light" /><View style={styles.shell}>
     <View style={styles.header}>
       <View style={styles.headerIdentity}>
@@ -381,7 +451,7 @@ export default function CorporateApp() {
       </TouchableOpacity>
     </View>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} search={taskSearch} setSearch={setTaskSearch} deviceLocation={deviceLocation} onHelp={() => void openHelp()} onOpenMissingItems={() => navigate('MISSING_ITEMS')} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
+      {screen === 'TASKS' && <TaskList dashboard={dashboard} busy={busy} refresh={() => void loadTasks()} search={taskSearch} setSearch={setTaskSearch} deviceLocation={deviceLocation} onNonMaintenance={() => void openNonMaintenanceVisit()} onHelp={() => void openHelp()} onOpenMissingItems={() => navigate('MISSING_ITEMS')} onDirections={openDirections} onAttempt={task => attemptReason(task)} onComplete={task => prepareComplete(task)} />}
       {screen === 'MISSING_ITEMS' && <MissingItemsView dashboard={dashboard} busy={busy} loading={tasksLoading} error={tasksError} refresh={loadTasks} onCompleteServiceSlip={completeServiceSlipReview} back={goBack} />}
       {screen === 'NEARBY' && (nearbyError ? <Empty icon="alert-circle" title="Yakındaki noktalar alınamadı" text={nearbyError} /> : <NearbyScreen items={nearbyItems} origin={deviceLocation} loading={nearbyLoading} refresh={() => void loadNearby()} directions={openNearbyDirections} />)}
       {screen === 'HELP' && <HelpView people={helpPeople} dashboard={helpDashboard} busy={busy} select={selectHelper} change={() => setHelpDashboard(null)} onDirections={openDirections} onAttempt={task => attemptReason(task, helpDashboard?.technician.id)} onComplete={task => prepareComplete(task, helpDashboard?.technician.id)} />}
@@ -389,6 +459,9 @@ export default function CorporateApp() {
       {screen === 'CUSTOMER' && selectedCustomer && <CustomerView customer={selectedCustomer} equipment={equipment} setEquipment={setEquipment} save={() => void saveCustomerEquipment()} back={goBack} busy={busy} />}
       {screen === 'EQUIPMENT_CONFIRM' && pendingTask && <EquipmentConfirmView task={pendingTask} equipment={equipment} setEquipment={setEquipment} selectedDateKey={selectedDateKey} setSelectedDateKey={setSelectedDateKey} lateEntryReason={lateEntryReason} setLateEntryReason={setLateEntryReason} maintainedCoolerCount={maintainedCoolerCount} setMaintainedCoolerCount={setMaintainedCoolerCount} partialMaintenanceMode={partialMaintenanceMode} setPartialMaintenanceMode={setPartialMaintenanceMode} missingMaintenanceExplanation={missingMaintenanceExplanation} setMissingMaintenanceExplanation={setMissingMaintenanceExplanation} equipmentCorrectionRequested={equipmentCorrectionRequested} setEquipmentCorrectionRequested={setEquipmentCorrectionRequested} confirm={() => void completeTask(pendingTask,pendingAssist)} cancel={() => { setPendingTask(null); setPendingAssist(undefined); goBack(); }} busy={busy} />}
       {screen === 'HISTORY' && <HistoryView items={historyItems} busy={busy} onRevert={confirmRevert} />}
+      {screen === 'NON_MAINTENANCE_VISIT' && <NonMaintenanceCustomerView customers={nonMaintenanceCustomers} search={nonMaintenanceSearch} setSearch={setNonMaintenanceSearch} origin={deviceLocation} choose={chooseNonMaintenanceCustomer} />}
+      {screen === 'NON_MAINTENANCE_FORM' && <NonMaintenanceForm customer={nonMaintenanceCustomer} noCustomer={nonMaintenanceNoCustomer} customerName={nonMaintenanceCustomerName} setCustomerName={setNonMaintenanceCustomerName} purpose={nonMaintenanceType} setPurpose={setNonMaintenanceType} note={nonMaintenanceNote} setNote={setNonMaintenanceNote} efesimImageBase64={efesimImageBase64} visualExplanation={visualExplanation} setVisualExplanation={setVisualExplanation} chooseVisual={() => void chooseNonMaintenanceEfesim()} save={() => void saveNonMaintenanceVisit()} busy={busy} />}
+      {screen === 'NON_MAINTENANCE_VISIT_SAVED' && <NonMaintenanceSuccessView point={nonMaintenanceSuccessName} done={resetNavigation} />}
       {screen === 'SUCCESS' && <SuccessView point={successPoint} assisted={successAssist} done={() => { setSuccessAssist(''); resetNavigation(); }} />}
       {screen === 'NEW' && <NewPointView begin={() => void beginEfesim()} busy={busy} />}
       {screen === 'EFESIM_RESULT' && efesim && <EfesimView result={efesim} sapNo={sapNo} setSapNo={setSapNo} customerName={customerName} setCustomerName={setCustomerName} strong={strongGoogleMatch} google={google} useGoogle={useGoogle} setUseGoogle={setUseGoogle} addressText={addressText} save={() => void saveProspect()} busy={busy} />}
@@ -396,7 +469,7 @@ export default function CorporateApp() {
       {screen === 'VISIT_SAVED' && prospect && <SuccessView point={prospect.name} assisted="" title={visitPurpose === 'SURVEY' ? 'Keşif kaydedildi' : 'Kurma kaydedildi'} done={resetNavigation} />}
       {busy && <ActivityIndicator size="large" style={styles.loader} />}
     </ScrollView>
-    <View style={styles.nav} accessibilityRole="tablist">{primaryTabs.map((tab) => <Nav key={tab.screen} label={tab.label} icon={tab.icon} active={tab.screen === 'TASKS' ? screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM' || screen === 'HELP' || screen === 'MISSING_ITEMS' : tab.screen === 'CUSTOMERS' ? screen === 'CUSTOMERS' || screen === 'CUSTOMER' : screen === 'HISTORY'} onPress={() => tab.screen === 'CUSTOMERS' ? void openCustomers() : tab.screen === 'HISTORY' ? void openHistory() : resetNavigation('TASKS')} />)}</View>
+    <View style={styles.nav} accessibilityRole="tablist">{primaryTabs.map((tab) => <Nav key={tab.screen} label={tab.label} icon={tab.icon} active={tab.screen === 'TASKS' ? screen === 'TASKS' || screen === 'SUCCESS' || screen === 'EQUIPMENT_CONFIRM' || screen === 'HELP' || screen === 'MISSING_ITEMS' || screen.startsWith('NON_MAINTENANCE') : tab.screen === 'CUSTOMERS' ? screen === 'CUSTOMERS' || screen === 'CUSTOMER' : screen === 'HISTORY'} onPress={() => tab.screen === 'CUSTOMERS' ? void openCustomers() : tab.screen === 'HISTORY' ? void openHistory() : resetNavigation('TASKS')} />)}</View>
   </View></SafeAreaView>;
 }
 
@@ -418,7 +491,7 @@ function Login(p: { username:string; password:string; setUsername:(v:string)=>vo
   </SafeAreaView>;
 }
 
-function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=>void;search:string;setSearch:(v:string)=>void;deviceLocation:{latitude:number;longitude:number}|null;onHelp:()=>void;onOpenMissingItems:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
+function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=>void;search:string;setSearch:(v:string)=>void;deviceLocation:{latitude:number;longitude:number}|null;onNonMaintenance:()=>void;onHelp:()=>void;onOpenMissingItems:()=>void;onDirections:(t:DueTask)=>void;onAttempt:(t:DueTask)=>void;onComplete:(t:DueTask)=>void}) {
   const tasks = useMemo(() => {
     const filtered = (p.dashboard?.due ?? []).filter(t => matchesSearch(p.search, [t.pointName, t.pointCode, t.regionName, t.address ?? '', ...(t.aliases ?? [])]));
     return filtered.slice().sort((a,b) => {
@@ -430,7 +503,7 @@ function TaskList(p:{dashboard:TechnicianDashboard|null;busy:boolean;refresh:()=
       return da-db;
     });
   }, [p.dashboard,p.search,p.deviceLocation]);
-  return <><Summary dashboard={p.dashboard} />{(p.dashboard?.missingPaperwork ?? 0) > 0 ? <TouchableOpacity accessibilityRole="button" style={styles.missingBanner} onPress={p.onOpenMissingItems}><View style={styles.missingBannerIcon}><Feather name="file-text" size={19} color="#B7372F" /></View><View style={styles.missingBannerCopy}><Text style={styles.missingBannerTitle}>Eksik servis fişiniz veya teyidiniz var</Text><Text style={styles.missingBannerText}>{p.dashboard?.missingPaperwork} bakım kaydında eksik evrak bulunuyor. İncelemek için dokunun.</Text></View><Feather name="chevron-right" size={20} color="#B7372F" /></TouchableOpacity>:null}<View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><View style={styles.sectionActions}><TouchableOpacity onPress={p.onHelp} accessibilityRole="button" accessibilityLabel="Yardım Et"><Text style={styles.refresh}>YARDIM ET</Text></TouchableOpacity><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
+  return <><Summary dashboard={p.dashboard} /><TouchableOpacity accessibilityRole="button" accessibilityLabel="Bakım Dışı Ziyaret" style={styles.nonMaintenanceEntry} onPress={p.onNonMaintenance}><View><Text style={styles.nonMaintenanceEntryTitle}>Bakım Dışı Ziyaret</Text><Text style={styles.personMeta}>Arıza, kurulum, sökme veya keşif kaydet</Text></View><Feather name="chevron-right" size={20} color={BLUE}/></TouchableOpacity>{(p.dashboard?.missingPaperwork ?? 0) > 0 ? <TouchableOpacity accessibilityRole="button" style={styles.missingBanner} onPress={p.onOpenMissingItems}><View style={styles.missingBannerIcon}><Feather name="file-text" size={19} color="#B7372F" /></View><View style={styles.missingBannerCopy}><Text style={styles.missingBannerTitle}>Eksik servis fişiniz veya teyidiniz var</Text><Text style={styles.missingBannerText}>{p.dashboard?.missingPaperwork} bakım kaydında eksik evrak bulunuyor. İncelemek için dokunun.</Text></View><Feather name="chevron-right" size={20} color="#B7372F" /></TouchableOpacity>:null}<View style={styles.sectionHead}><Text style={styles.sectionTitle}>Görev Listesi</Text><View style={styles.sectionActions}><TouchableOpacity onPress={p.onHelp} accessibilityRole="button" accessibilityLabel="Yardım Et"><Text style={styles.refresh}>YARDIM ET</Text></TouchableOpacity><TouchableOpacity onPress={p.refresh}><Text style={styles.refresh}>YENİLE</Text></TouchableOpacity></View></View><SearchBox value={p.search} onChange={p.setSearch} placeholder="İşletme adı, kod, bölge, adres veya eski ad ara" />{!p.dashboard ? <ActivityIndicator /> : tasks.length === 0 ? <Empty icon={p.search.trim()?'search':'inbox'} title={p.search.trim()?'Sonuç bulunamadı':'Açık görev yok'} text={p.search.trim()?'Arama ifadesini değiştirip tekrar dene.':undefined} /> : tasks.map(t => <Task key={t.pointId} task={t} busy={p.busy} deviceLocation={p.deviceLocation} onDirections={p.onDirections} onAttempt={p.onAttempt} onComplete={p.onComplete} />)}</>;
 }
 function MissingItemsView({dashboard,busy,loading,error,refresh,onCompleteServiceSlip,back}:{dashboard:TechnicianDashboard|null;busy:boolean;loading:boolean;error:string|null;refresh:()=>void|Promise<boolean>;onCompleteServiceSlip:(visitId:string)=>Promise<void>;back:()=>void}) {
   const items = dashboard?.missingItems ?? [];
@@ -487,6 +560,39 @@ function EquipmentFields({equipment,setEquipment}:{equipment:{coolerCount:string
   return <View style={styles.card}>{row('coolerCount','Soğutucu','snowflake')}{row('towerCount','Kule','tower')}{row('tapCount','Musluk','tap')}{row('smarttapCount','SmartTap','smarttap')}</View>;
 }
 
+const NON_MAINTENANCE_TYPES: ReadonlyArray<{ value: NonMaintenanceVisitType; label: string }> = [
+  { value: 'BREAKDOWN', label: 'Arıza' },
+  { value: 'FAULTY_KEG', label: 'Arızalı Fıçı' },
+  { value: 'FACILITY_INSTALLATION', label: 'Tesis Kurulum' },
+  { value: 'FACILITY_REMOVAL', label: 'Tesis Sökme' },
+  { value: 'MOBILE_INSTALLATION', label: 'Seyyar Kurulum' },
+  { value: 'MOBILE_REMOVAL', label: 'Seyyar Sökme' },
+  { value: 'SMART_TAP_INSTALLATION', label: 'Smart Tap Kurulum' },
+  { value: 'SMART_TAP_BREAKDOWN', label: 'Smart Tap Arıza' },
+  { value: 'SMART_TAP_REMOVAL', label: 'Smart Tap Sökme' },
+  { value: 'SURVEY', label: 'Keşif' },
+];
+
+function sortNonMaintenanceCustomers(customers: MyCustomer[], origin: { latitude:number; longitude:number } | null) {
+  if (!origin) return customers.slice();
+  return customers.slice().sort((a, b) => {
+    const aDistance = a.canonicalLatitude != null && a.canonicalLongitude != null
+      ? distanceMetersStatic(origin.latitude, origin.longitude, a.canonicalLatitude, a.canonicalLongitude)
+      : Number.POSITIVE_INFINITY;
+    const bDistance = b.canonicalLatitude != null && b.canonicalLongitude != null
+      ? distanceMetersStatic(origin.latitude, origin.longitude, b.canonicalLatitude, b.canonicalLongitude)
+      : Number.POSITIVE_INFINITY;
+    return aDistance - bDistance;
+  });
+}
+
+function NonMaintenanceCustomerView({customers,search,setSearch,origin,choose}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;origin:{latitude:number;longitude:number}|null;choose:(customer:MyCustomer|null)=>void}) {
+  const nonMaintenanceSearch = search;
+  const visible = sortNonMaintenanceCustomers(customers, origin).filter(customer =>
+    matchesSearch(nonMaintenanceSearch, [customer.name, customer.code, customer.region?.name ?? '', customer.address ?? '', ...(customer.aliases ?? [])]));
+  return <><SectionHeader title="Müşteri seç" subtitle="Yakındaki müşteriler önce gösterilir"/><SearchBox value={search} onChange={setSearch} placeholder="Müşteri adı, kod, bölge veya adres ara"/><TouchableOpacity accessibilityRole="button" style={styles.noCustomerChoice} onPress={()=>choose(null)}><Feather name="user-x" size={19} color={ORANGE}/><View style={styles.personText}><Text style={styles.personName}>Müşteri kaydı yok</Text><Text style={styles.personMeta}>EFESİM ekran görüntüsü veya açıklama ile devam et</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>{visible.length===0?<Empty icon="search" title="Müşteri bulunamadı" text="Aramayı değiştir veya müşteri kaydı yok seçeneğini kullan."/>:<View style={styles.listCard}>{visible.map(customer=><TouchableOpacity key={customer.id} style={styles.customerRow} onPress={()=>choose(customer)}><Feather name="map-pin" size={18} color={BLUE}/><View style={styles.personText}><Text style={styles.personName}>{customer.name}</Text><Text style={styles.personMeta}>{customer.code}{customer.address?` · ${customer.address}`:''}</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>)}</View>}</>;
+}
+
 function CustomersView({customers,search,setSearch,open}:{customers:MyCustomer[];search:string;setSearch:(v:string)=>void;open:(c:MyCustomer)=>void}) {
   const visible=customers.filter(c=>matchesSearch(search, [c.name, c.code, c.region?.name ?? '', c.address ?? '', ...(c.aliases ?? [])]));
   return <><SectionHeader title="Müşterilerim" subtitle="Ekipman bilgilerini bakım zamanı gelmeden tamamlayabilirsin"/><SearchBox value={search} onChange={setSearch} placeholder="Müşteri adı, kod, bölge, adres veya eski ad ara" />{customers.length===0?<Empty icon="users" title="Atanmış müşteri yok" text="Aktif müşterilerin burada listelenecek."/>:visible.length===0?<Empty icon="search" title="Sonuç bulunamadı" text="Arama ifadesini değiştirip tekrar dene."/>:<View style={styles.listCard}>{visible.map(c=><TouchableOpacity key={c.id} style={styles.customerRow} onPress={()=>open(c)}><View style={[styles.customerIcon,c.equipmentComplete&&styles.customerIconComplete]}><Feather name={c.equipmentComplete?'check':'tool'} size={18} color={c.equipmentComplete?GREEN:ORANGE}/></View><View style={styles.personText}><Text style={styles.personName}>{c.name}</Text><Text style={styles.personMeta}>{c.code}{c.region?.name?` · ${c.region.name}`:''}</Text><Text style={c.equipmentComplete?styles.okText:styles.warningText}>{c.equipmentComplete?'Ekipman bilgisi tamam':'Ekipman bilgisi eksik'}</Text></View><Feather name="chevron-right" size={20} color="#8A99A6"/></TouchableOpacity>)}</View>}</>;
@@ -494,6 +600,14 @@ function CustomersView({customers,search,setSearch,open}:{customers:MyCustomer[]
 function CustomerView({customer,equipment,setEquipment,save,back,busy}:{customer:MyCustomer;equipment:any;setEquipment:(v:any)=>void;save:()=>void;back:()=>void;busy:boolean}) {
   const hasLocation=customer.canonicalLatitude!=null&&customer.canonicalLongitude!=null;
   return <><TouchableOpacity style={styles.backLink} onPress={back}><Feather name="arrow-left" size={17} color={BLUE}/><Text style={styles.backText}>MÜŞTERİLERİM</Text></TouchableOpacity><View style={styles.card}><View style={styles.cardIcon}><Feather name="map-pin" size={20} color={BLUE}/></View><Text style={styles.taskName}>{customer.name}</Text><Text style={styles.taskMeta}>{customer.code}{customer.region?.name?` · ${customer.region.name}`:''}</Text>{customer.address?<Text style={styles.help}>{customer.address}</Text>:null}{hasLocation?<View style={styles.locationChip}><Feather name="crosshair" size={14} color={BLUE}/><Text style={styles.locationText}>{customer.canonicalLatitude?.toFixed(5)}, {customer.canonicalLongitude?.toFixed(5)} · güven {customer.locationConfidence ?? 0}%</Text></View>:<Text style={styles.personMeta}>Konum bilgisi henüz yok</Text>}</View><SectionHeader title="Ekipman" subtitle="Kayıtlı adetleri kontrol et ve gerekirse güncelle"/><EquipmentFields equipment={equipment} setEquipment={setEquipment}/><PrimaryButton title="EKİPMAN BİLGİLERİNİ KAYDET" icon="save" onPress={save} disabled={busy}/></>;
+}
+
+function NonMaintenanceForm({customer,noCustomer,customerName,setCustomerName,purpose,setPurpose,note,setNote,efesimImageBase64,visualExplanation,setVisualExplanation,chooseVisual,save,busy}:{customer:MyCustomer|null;noCustomer:boolean;customerName:string;setCustomerName:(value:string)=>void;purpose:NonMaintenanceVisitType;setPurpose:(value:NonMaintenanceVisitType)=>void;note:string;setNote:(value:string)=>void;efesimImageBase64:string;visualExplanation:string;setVisualExplanation:(value:string)=>void;chooseVisual:()=>void;save:()=>void;busy:boolean}) {
+  return <><View style={styles.card}><Text style={styles.sectionLabel}>MÜŞTERİ</Text>{customer?<><Text style={styles.taskName}>{customer.name}</Text><Text style={styles.personMeta}>{customer.code}</Text></>:<TextInput accessibilityLabel="Müşteri adı" style={styles.input} value={customerName} onChangeText={setCustomerName} placeholder="Müşteri adı" maxLength={160}/>}</View><View style={styles.card}><Text style={styles.sectionLabel}>ZİYARET TÜRÜ</Text><View style={styles.visitTypeGrid}>{NON_MAINTENANCE_TYPES.map(item=><Choice key={item.value} title={item.label} selected={purpose===item.value} onPress={()=>setPurpose(item.value)}/>)}</View></View>{noCustomer?<View style={styles.card}><Text style={styles.sectionLabel}>EFESİM KANITI</Text><Text style={styles.help}>EFESİM ekran görüntüsü ekleyebilirsin. Görsel mevcut değilse açıklama ile kayıt engellenmeden devam eder.</Text><SecondaryButton title={efesimImageBase64?'EFESİM ekran görüntüsü seçildi':'EFESİM ekran görüntüsü seç'} icon="image" onPress={chooseVisual} disabled={busy}/><SecondaryButton title="Görsel yok, açıklamayla devam et" icon="edit-3" onPress={()=>setVisualExplanation(visualExplanation || 'EFESİM görseli mevcut değildi')} disabled={busy}/><TextInput accessibilityLabel="Görsel yok açıklaması" style={styles.input} value={visualExplanation} onChangeText={setVisualExplanation} placeholder="Görsel yoksa açıklama" multiline maxLength={500}/></View>:null}<View style={styles.card}><Text style={styles.sectionLabel}>NOT</Text><TextInput accessibilityLabel="Bakım dışı ziyaret notu" style={styles.input} value={note} onChangeText={setNote} placeholder="Ziyaret notu (isteğe bağlı)" multiline maxLength={300}/></View><PrimaryButton title="BAKIM DIŞI ZİYARETİ KAYDET" icon="check-circle" onPress={save} disabled={busy}/></>;
+}
+
+function NonMaintenanceSuccessView({point,done}:{point:string;done:()=>void}) {
+  return <View style={styles.successCard}><View style={styles.successCircle}><Feather name="check" size={38} color="#fff"/></View><Text style={styles.successEyebrow}>İŞLEM TAMAMLANDI</Text><Text style={styles.successTitle}>Bakım dışı ziyaret kaydedildi</Text><Text style={styles.successPoint}>{point}</Text><Text style={styles.successMeta}>Bu kayıt bakım yükümlülüğünü veya bakım durumunu değiştirmez.</Text><PrimaryButton title="İŞLERE DÖN" icon="arrow-right" onPress={done}/></View>;
 }
 
 function EquipmentConfirmView({task,equipment,setEquipment,selectedDateKey,setSelectedDateKey,lateEntryReason,setLateEntryReason,maintainedCoolerCount,setMaintainedCoolerCount,partialMaintenanceMode,setPartialMaintenanceMode,missingMaintenanceExplanation,setMissingMaintenanceExplanation,equipmentCorrectionRequested,setEquipmentCorrectionRequested,confirm,cancel,busy}:{task:DueTask;equipment:any;setEquipment:(v:any)=>void;selectedDateKey:string;setSelectedDateKey:(v:string)=>void;lateEntryReason:string;setLateEntryReason:(v:string)=>void;maintainedCoolerCount:string;setMaintainedCoolerCount:(v:string)=>void;partialMaintenanceMode:'COMPLETE'|'INCOMPLETE';setPartialMaintenanceMode:(v:'COMPLETE'|'INCOMPLETE')=>void;missingMaintenanceExplanation:string;setMissingMaintenanceExplanation:(v:string)=>void;equipmentCorrectionRequested:boolean;setEquipmentCorrectionRequested:(v:boolean)=>void;confirm:()=>void;cancel:()=>void;busy:boolean}) {
@@ -519,7 +633,7 @@ function MaintenanceDatePicker({value,onChange}:{value:string;onChange:(value:st
 }
 
 function HistoryView({items,busy,onRevert}:{items:TechnicianHistoryItem[];busy:boolean;onRevert:(i:TechnicianHistoryItem)=>void}) {
-  return <><SectionHeader title="Son İşlemler" subtitle="Bugün ve dün girilen bakım kayıtlarını kontrol edebilir, uygunsa geri alabilirsin"/>{items.length===0?<Empty icon="clock" title="İşlem yok" text="Bugün yaptığın saha işlemleri burada görünecek."/>:<View style={styles.listCard}>{items.map((i,n)=>{const attempt=i.type==='ATTEMPT';const name=i.point?.name||i.prospect?.name||'İşlem';const label=i.type==='MAINTENANCE'?(i.assistedForTechnician?`${i.assistedForTechnician.name} için bakım`:'Bakım yapıldı'):attempt?'Bakım yapılamadı':i.type==='PROSPECT_VISIT'?(i.purpose==='INSTALLATION'?'Kurma':'Keşif'):'Bakım dışı ziyaret';const countSummary=i.type==='MAINTENANCE'&&i.totalCoolerCount!=null&&i.maintainedCoolerCount!=null?(i.maintenanceSummary??`${i.maintainedCoolerCount}/${i.totalCoolerCount} soğutucu bakım${i.missingMaintenanceCount?` · ${i.missingMaintenanceCount} eksik`:''}`):'';const partialSummary=countSummary&&i.missingMaintenanceExplanation?`${countSummary} (${i.missingMaintenanceExplanation})`:countSummary;return <View key={`${i.at}-${n}`} style={styles.historyRow}><View style={[styles.historyDot,attempt&&styles.historyWarn]}><Feather name={attempt?'alert-triangle':'check'} size={17} color="#fff"/></View><View style={styles.historyContent}><Text style={styles.historyTime}>{new Date(i.at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.personName}>{name}</Text><Text style={attempt?styles.warningText:styles.okText}>{label}</Text>{partialSummary?<Text style={styles.personMeta}>{partialSummary}</Text>:null}{i.type==='MAINTENANCE'&&i.revertEligible?<TouchableOpacity disabled={busy} onPress={()=>onRevert(i)} style={styles.revertButton}><Feather name="rotate-ccw" size={14} color="#B7372F"/><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity>:null}</View></View>})}</View>}</>;
+  return <><SectionHeader title="Son İşlemler" subtitle="Bugün ve dün girilen bakım kayıtlarını kontrol edebilir, uygunsa geri alabilirsin"/>{items.length===0?<Empty icon="clock" title="İşlem yok" text="Bugün yaptığın saha işlemleri burada görünecek."/>:<View style={styles.listCard}>{items.map((i,n)=>{const attempt=i.type==='ATTEMPT';const name=i.point?.name||i.prospect?.name||i.customerName||'Müşteri kaydı yok';const label=i.type==='MAINTENANCE'?(i.assistedForTechnician?`${i.assistedForTechnician.name} için bakım`:'Bakım yapıldı'):attempt?'Bakım yapılamadı':i.type==='PROSPECT_VISIT'?(i.purpose==='INSTALLATION'?'Kurma':'Keşif'):i.type==='NON_MAINTENANCE_VISIT'?(i.purposeLabel??'Bakım dışı ziyaret'):'Bakım dışı ziyaret';const countSummary=i.type==='MAINTENANCE'&&i.totalCoolerCount!=null&&i.maintainedCoolerCount!=null?(i.maintenanceSummary??`${i.maintainedCoolerCount}/${i.totalCoolerCount} soğutucu bakım${i.missingMaintenanceCount?` · ${i.missingMaintenanceCount} eksik`:''}`):'';const partialSummary=countSummary&&i.missingMaintenanceExplanation?`${countSummary} (${i.missingMaintenanceExplanation})`:countSummary;return <View key={`${i.at}-${n}`} style={styles.historyRow}><View style={[styles.historyDot,attempt&&styles.historyWarn]}><Feather name={attempt?'alert-triangle':'check'} size={17} color="#fff"/></View><View style={styles.historyContent}><Text style={styles.historyTime}>{new Date(i.at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.personName}>{name}</Text><Text style={attempt?styles.warningText:styles.okText}>{label}</Text>{partialSummary?<Text style={styles.personMeta}>{partialSummary}</Text>:null}{i.type==='NON_MAINTENANCE_VISIT'&&i.historyLabel?<Text style={styles.personMeta}>{i.historyLabel}</Text>:null}{i.type==='MAINTENANCE'&&i.revertEligible?<TouchableOpacity disabled={busy} onPress={()=>onRevert(i)} style={styles.revertButton}><Feather name="rotate-ccw" size={14} color="#B7372F"/><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity>:null}</View></View>})}</View>}</>;
 }
 
 function NewPointView({begin,busy}:{begin:()=>void;busy:boolean}) { return <View style={styles.card}><Text style={styles.cardTitle}>Bu ziyaret ne için?</Text><View style={styles.newChoice}><Feather name="search" size={23} color={BLUE}/><View><Text style={styles.personName}>Keşif</Text><Text style={styles.personMeta}>Potansiyel müşteri</Text></View></View><View style={styles.newChoice}><Feather name="tool" size={23} color={BLUE}/><View><Text style={styles.personName}>Kurma</Text><Text style={styles.personMeta}>Yeni kurulacak nokta</Text></View></View><View style={styles.infoBox}><Feather name="info" size={17} color="#315A78"/><Text style={styles.infoText}>Devam etmek için önce EFESİM ekran görüntüsü alınır. Manuel adres girişi yoktur.</Text></View><PrimaryButton title="EFESİM EKRAN GÖRÜNTÜSÜ SEÇ" icon="image" onPress={begin} disabled={busy}/></View>; }
@@ -571,6 +685,7 @@ const styles=StyleSheet.create({
   missingBanner:{backgroundColor:'#FFF4F3',borderWidth:1,borderColor:'#F0C7C4',borderRadius:14,padding:13,flexDirection:'row',alignItems:'center',gap:10}, missingBannerIcon:{width:38,height:38,borderRadius:11,backgroundColor:'#FDE0DE',alignItems:'center',justifyContent:'center'}, missingBannerCopy:{flex:1}, missingBannerTitle:{fontSize:14,fontWeight:'900',color:'#A62F29'}, missingBannerText:{fontSize:12,lineHeight:17,color:'#8C504C',marginTop:2}, missingSummary:{flexDirection:'row',gap:12}, missingSummaryBox:{flex:1,backgroundColor:'#fff',borderRadius:14,padding:15,borderWidth:1,borderColor:LINE,gap:6}, missingSummaryValue:{fontSize:28,fontWeight:'900'}, missingSummaryLabel:{fontSize:12,fontWeight:'800',color:MUTED}, readOnlyNote:{fontSize:12,lineHeight:18,color:'#667989',backgroundColor:'#EAF4FC',borderRadius:10,padding:12}, missingRefresh:{alignSelf:'flex-start',flexDirection:'row',alignItems:'center',gap:6,paddingVertical:7,paddingHorizontal:2}, errorBox:{borderWidth:1,borderColor:'#F0C7C4',backgroundColor:'#FFF4F3',borderRadius:12,padding:14,gap:10}, errorText:{fontSize:13,lineHeight:19,color:'#8C504C'}, errorRetry:{alignSelf:'flex-start',paddingHorizontal:10,paddingVertical:8,borderRadius:8,backgroundColor:'#fff',borderWidth:1,borderColor:'#B9D5E8'}, errorRetryText:{fontSize:11,fontWeight:'900',color:BLUE}, missingItemRow:{flexDirection:'row',gap:11,paddingVertical:14,borderBottomWidth:1,borderBottomColor:'#EDF1F4'}, missingItemIcon:{width:36,height:36,borderRadius:11,backgroundColor:'#FDEDEC',alignItems:'center',justifyContent:'center'}, missingItemCopy:{flex:1}, missingStatusRow:{flexDirection:'row',flexWrap:'wrap',gap:6,marginTop:7}, missingConfirmation:{backgroundColor:'#FFF4E4',color:'#A96308',fontSize:10,fontWeight:'900',paddingHorizontal:8,paddingVertical:5,borderRadius:999}, missingSlip:{backgroundColor:'#FDEDEC',color:'#B6312A',fontSize:10,fontWeight:'900',paddingHorizontal:8,paddingVertical:5,borderRadius:999},
   sectionHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12,marginTop:3}, sectionHeadText:{flex:1,gap:3}, sectionTitle:{fontSize:19,fontWeight:'900',color:TEXT,letterSpacing:-.2}, sectionSubtitle:{fontSize:12,lineHeight:17,color:'#758594'}, sectionActions:{flexDirection:'row',alignItems:'center',gap:14}, sectionAction:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:10,paddingVertical:8,borderRadius:9,backgroundColor:'#EAF4FC'}, refresh:{fontSize:10,fontWeight:'900',color:BLUE,letterSpacing:.4},
   searchBox:{backgroundColor:'#fff',borderWidth:1,borderColor:'#D8E2E9',borderRadius:12,minHeight:46,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:9}, searchInput:{flex:1,fontSize:15,color:TEXT,paddingVertical:10},
+  nonMaintenanceEntry:{backgroundColor:'#EAF4FC',borderWidth:1,borderColor:'#B9D5E8',borderRadius:14,padding:15,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}, nonMaintenanceEntryTitle:{fontSize:15,fontWeight:'900',color:BLUE}, noCustomerChoice:{backgroundColor:'#FFF9EE',borderWidth:1,borderColor:'#F0D5AB',borderRadius:14,padding:14,flexDirection:'row',alignItems:'center'}, visitTypeGrid:{flexDirection:'row',flexWrap:'wrap',gap:8},
   card:{backgroundColor:'#fff',borderRadius:15,padding:17,gap:12,borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.025,shadowRadius:10,elevation:1}, cardIcon:{width:38,height:38,borderRadius:11,backgroundColor:'#EAF4FC',alignItems:'center',justifyContent:'center'}, cardTitle:{fontSize:20,fontWeight:'900',color:TEXT,letterSpacing:-.25}, help:{fontSize:14,lineHeight:21,color:'#637485'},
   task:{backgroundColor:'#fff',borderRadius:16,padding:17,gap:11,borderWidth:1,borderColor:LINE,shadowColor:'#173349',shadowOpacity:.035,shadowRadius:11,elevation:1}, taskTop:{flexDirection:'row',alignItems:'center'}, statusPill:{flexDirection:'row',alignItems:'center',gap:7,paddingHorizontal:9,paddingVertical:5,borderRadius:999}, statusLate:{backgroundColor:'#FDEDEC'}, statusCurrent:{backgroundColor:'#FFF4E4'}, statusDot:{width:7,height:7,borderRadius:4}, redDot:{backgroundColor:RED}, orangeDot:{backgroundColor:ORANGE}, lateText:{color:'#B6312A',fontSize:10,fontWeight:'900',letterSpacing:.55}, currentText:{color:'#A96308',fontSize:10,fontWeight:'900',letterSpacing:.55}, taskName:{fontSize:20,fontWeight:'900',color:TEXT,letterSpacing:-.25}, metaRow:{flexDirection:'row',alignItems:'center',gap:5,flexWrap:'wrap'}, metaDivider:{width:1,height:13,backgroundColor:'#D7E0E7',marginHorizontal:3}, taskMeta:{fontSize:12,color:'#667989'}, taskActions:{gap:9}, routeButton:{borderWidth:1,borderColor:'#BCD0DF',backgroundColor:'#F8FBFD',borderRadius:10,padding:12,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8}, routeText:{color:BLUE,fontSize:12,fontWeight:'900'}, primary:{backgroundColor:BRIGHT_BLUE,borderRadius:11,paddingVertical:14,paddingHorizontal:14,alignItems:'center',justifyContent:'center',minHeight:48,flexDirection:'row',gap:8,shadowColor:'#075A96',shadowOpacity:.13,shadowRadius:7,elevation:2}, primaryText:{color:'#fff',fontSize:13,fontWeight:'900',letterSpacing:.15}, failButton:{borderWidth:1,borderColor:'#E2B7B4',backgroundColor:'#FFFDFD',borderRadius:10,paddingVertical:12,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8}, failText:{color:'#B7372F',fontSize:13,fontWeight:'800'}, secondary:{borderWidth:1,borderColor:'#C8D8E4',backgroundColor:'#fff',borderRadius:10,paddingVertical:12,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:8,minHeight:46}, secondaryText:{color:BLUE,fontSize:13,fontWeight:'900'}, secondaryDanger:{borderColor:'#E2B7B4'}, secondaryDangerText:{color:'#B7372F'}, disabled:{opacity:.45},
   listCard:{backgroundColor:'#fff',borderRadius:15,borderWidth:1,borderColor:LINE,paddingHorizontal:16,shadowColor:'#173349',shadowOpacity:.025,shadowRadius:10,elevation:1}, personRow:{flexDirection:'row',alignItems:'center',paddingVertical:13,borderBottomWidth:1,borderBottomColor:'#EDF1F4'}, customerRow:{flexDirection:'row',alignItems:'center',paddingVertical:14,borderBottomWidth:1,borderBottomColor:'#EDF1F4'}, avatar:{width:42,height:42,borderRadius:12,backgroundColor:'#DDEEFF',alignItems:'center',justifyContent:'center'}, avatarText:{color:BLUE,fontWeight:'900'}, customerIcon:{width:40,height:40,borderRadius:12,backgroundColor:'#FFF4E4',alignItems:'center',justifyContent:'center'}, customerIconComplete:{backgroundColor:'#E8F7EF'}, personText:{flex:1,marginLeft:11}, personName:{fontSize:15,fontWeight:'900',color:TEXT}, personMeta:{fontSize:12,color:'#758594',marginTop:2},

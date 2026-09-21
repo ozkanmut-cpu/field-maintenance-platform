@@ -81,6 +81,14 @@ enum PointAssignmentKind {
 
 enum NonMaintenanceVisitPurpose {
   BREAKDOWN
+  FAULTY_KEG
+  FACILITY_INSTALLATION
+  FACILITY_REMOVAL
+  MOBILE_INSTALLATION
+  MOBILE_REMOVAL
+  SMART_TAP_INSTALLATION
+  SMART_TAP_BREAKDOWN
+  SMART_TAP_REMOVAL
   SURVEY
   INSTALLATION
   REMOVAL
@@ -430,16 +438,19 @@ model MaintenanceAttempt {
 
 model NonMaintenanceVisit {
   id                 String                     @id @default(uuid()) @db.Uuid
-  pointId            String                     @map("point_id") @db.Uuid
-  point              Point                      @relation(fields: [pointId], references: [id])
+  pointId            String?                    @map("point_id") @db.Uuid
+  point              Point?                     @relation(fields: [pointId], references: [id])
   technicianId       String                     @map("technician_id") @db.Uuid
   technician         User                       @relation(fields: [technicianId], references: [id])
   purpose            NonMaintenanceVisitPurpose
+  customerName       String?                    @map("customer_name")
   note               String?
-  latitude           Decimal                    @db.Decimal(9, 6)
-  longitude          Decimal                    @db.Decimal(9, 6)
+  efesimImageBase64  String?                    @map("efesim_image_base64")
+  visualExplanation  String?                    @map("visual_explanation")
+  latitude           Decimal?                   @db.Decimal(9, 6)
+  longitude          Decimal?                   @db.Decimal(9, 6)
   accuracyMeters     Decimal?                   @map("accuracy_meters") @db.Decimal(8, 2)
-  locationCapturedAt DateTime                   @map("location_captured_at")
+  locationCapturedAt DateTime?                  @map("location_captured_at")
   visitedAt          DateTime                   @default(now()) @map("visited_at")
   recordedAtServer   DateTime                   @default(now()) @map("recorded_at_server")
   idempotencyKey     String                     @unique @map("idempotency_key")
