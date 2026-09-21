@@ -25,6 +25,12 @@ export class PointAddressDiscoveryService {
   private readonly regionSearchAliases: Record<string, string[]> = {
     HATAY: ['Konak', 'Güzelyalı', 'Karabağlar'],
   };
+  private readonly regionProvinces: Record<string, string> = {
+    AKHİSAR: 'Manisa', AYDIN: 'Aydın', AYVALIK: 'Balıkesir', ÇEŞME: 'İzmir', DENİZLİ: 'Denizli',
+    DİNAR: 'Afyonkarahisar', GERMENCİK: 'Aydın', KUŞADASI: 'Aydın', MANİSA: 'Manisa', MENEMEN: 'İzmir',
+    MORDOĞAN: 'İzmir', NAZİLLİ: 'Aydın', SALİHLİ: 'Manisa', TİRE: 'İzmir', TORBALI: 'İzmir',
+    URLA: 'İzmir', UŞAK: 'Uşak',
+  };
   private readonly strictLocalRegions = new Set([
     'ALSANCAK', 'BALÇOVA', 'BAYRAKLI', 'BORNOVA', 'BOSTANLI', 'BUCA', 'ÇAMDİBİ', 'ÇANKAYA',
     'ÇİĞLİ', 'EŞREFPAŞA', 'GAZİEMİR', 'HATAY', 'İNCİRALTI', 'KARABAĞLAR', 'KARŞIYAKA',
@@ -166,8 +172,9 @@ export class PointAddressDiscoveryService {
     if (fallback) areas.add(fallback);
     for (const alias of (regionKey ? this.regionSearchAliases[regionKey] : undefined) ?? []) areas.add(alias);
     if (!areas.size) areas.add('İzmir');
+    const province = regionKey ? (this.regionProvinces[regionKey] ?? 'İzmir') : 'İzmir';
     const queries = new Set<string>();
-    for (const variant of variants) for (const area of areas) queries.add([variant, area, 'İzmir', 'Türkiye'].join(' '));
+    for (const variant of variants) for (const area of areas) queries.add([variant, area, province, 'Türkiye'].join(' '));
     return [...queries];
   }
 
