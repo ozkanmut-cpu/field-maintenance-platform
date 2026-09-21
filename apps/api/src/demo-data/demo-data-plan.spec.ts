@@ -62,6 +62,27 @@ test('mockup reset requires an explicit local non-production database and return
   }), /local/i);
 });
 
+test('named mockup point scope excludes KOR-external records in the same region', () => {
+  const buildWhere = Reflect.get(mockupPlan, 'buildNamedMockupPointWhere');
+  assert.equal(typeof buildWhere, 'function');
+  const where = (buildWhere as (regionId: string) => unknown)('mockup-region');
+  assert.deepEqual(where, {
+    regionId: 'mockup-region',
+    AND: [{ code: { startsWith: 'KOR-' } }, { code: { in: ['KOR-1001', 'KOR-1002', 'KOR-1003', 'KOR-1004', 'KOR-1005', 'KOR-1006', 'KOR-1007', 'KOR-1008', 'KOR-1009', 'KOR-1010', 'KOR-1011'] } }],
+  });
+  const matches = Reflect.get(mockupPlan, 'isNamedMockupPoint');
+  assert.equal(typeof matches, 'function');
+  const isInScope = matches as (point: { regionId: string; code: string }, regionId: string) => boolean;
+  assert.equal(isInScope({ regionId: 'mockup-region', code: 'KOR-1001' }, 'mockup-region'), true);
+  assert.equal(isInScope({ regionId: 'mockup-region', code: 'LIVE-5001' }, 'mockup-region'), false);
+  assert.equal(isInScope({ regionId: 'operational-region', code: 'KOR-1001' }, 'mockup-region'), false);
+  const assertExclusive = Reflect.get(mockupPlan, 'assertNamedMockupRegion');
+  assert.equal(typeof assertExclusive, 'function');
+  assert.throws(() => (assertExclusive as (points: Array<{ regionId: string; code: string }>, regionId: string) => void)([
+    { regionId: 'mockup-region', code: 'KOR-1001' }, { regionId: 'mockup-region', code: 'LIVE-5001' },
+  ], 'mockup-region'), /outside the named mockup scope/i);
+});
+
 test('mockup reset is idempotent and leaves non-mockup records untouched', async () => {
   const execute = Reflect.get(mockupPlan, 'resetMockupDataset');
   assert.equal(typeof execute, 'function');

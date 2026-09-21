@@ -76,3 +76,27 @@ export async function resetMockupDataset<P, S>(operations: ResetOperations<P, S>
   const seeded = await operations.seed();
   return { purged, seeded };
 }
+
+const MOCKUP_POINT_CODES = [
+  'KOR-1001', 'KOR-1002', 'KOR-1003', 'KOR-1004', 'KOR-1005', 'KOR-1006',
+  'KOR-1007', 'KOR-1008', 'KOR-1009', 'KOR-1010', 'KOR-1011',
+] as const;
+
+export function buildNamedMockupPointWhere(regionId: string) {
+  return {
+    regionId,
+    AND: [{ code: { startsWith: MOCKUP_DATASET.pointCodePrefix } }, { code: { in: [...MOCKUP_POINT_CODES] } }],
+  };
+}
+
+export function isNamedMockupPoint(point: { regionId: string | null; code: string }, regionId: string) {
+  return point.regionId === regionId
+    && point.code.startsWith(MOCKUP_DATASET.pointCodePrefix)
+    && MOCKUP_POINT_CODES.includes(point.code as typeof MOCKUP_POINT_CODES[number]);
+}
+
+export function assertNamedMockupRegion(points: Array<{ regionId: string | null; code: string }>, regionId: string) {
+  if (points.some((point) => !isNamedMockupPoint(point, regionId))) {
+    throw new Error('Mockup region contains records outside the named mockup scope');
+  }
+}

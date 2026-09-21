@@ -1,6 +1,6 @@
 import { MaintenanceType, PrismaClient, PaperworkKind, PaperworkStatus, PointAssignmentKind, PointStatus, UserRole } from '@prisma/client';
 import { hashPassword } from '../auth/password';
-import { MOCKUP_DATASET, buildMockupResetPlan, resetMockupDataset } from './demo-data-plan';
+import { MOCKUP_DATASET, assertNamedMockupRegion, buildMockupResetPlan, buildNamedMockupPointWhere, resetMockupDataset } from './demo-data-plan';
 
 const prisma = new PrismaClient();
 const now = new Date();
@@ -11,7 +11,9 @@ type DemoUsers = { technician: { id: string }, helper: { id: string } };
 
 async function purge() {
   const region = await prisma.region.findUnique({ where: { name: MOCKUP_DATASET.regionName }, select: { id: true } });
-  const points = region ? await prisma.point.findMany({ where: { regionId: region.id }, select: { id: true } }) : [];
+  const regionPoints = region ? await prisma.point.findMany({ where: { regionId: region.id }, select: { id: true, code: true, regionId: true } }) : [];
+  if (region) assertNamedMockupRegion(regionPoints, region.id);
+  const points = region ? await prisma.point.findMany({ where: buildNamedMockupPointWhere(region.id), select: { id: true } }) : [];
   const pointIds = points.map((point) => point.id);
   const users = await prisma.user.findMany({ where: { username: { in: [MOCKUP_DATASET.technicianUsername, MOCKUP_DATASET.helperUsername] } }, select: { id: true } });
   const userIds = users.map((user) => user.id);
