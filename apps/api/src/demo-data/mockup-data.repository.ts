@@ -58,6 +58,16 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
     })
     : [];
   const visitIds = visits.map((visit) => visit.id);
+  const nonMaintenanceVisits = pointIds.length && userIds.length
+    ? await prisma.nonMaintenanceVisit.findMany({
+      where: {
+        pointId: { in: pointIds },
+        technicianId: { in: userIds },
+      },
+      select: { id: true },
+    })
+    : [];
+  const nonMaintenanceVisitIds = nonMaintenanceVisits.map((visit) => visit.id);
   const prospects = userIds.length
     ? await prisma.prospectCustomer.findMany({
       where: { createdById: { in: userIds } },
@@ -80,6 +90,24 @@ export async function purgeNamedMockupData(prisma: MockupPurgeStore, datasetNote
             entityType: 'MaintenanceVisit',
             entityId: { in: visitIds },
             action: 'PARTIAL_MAINTENANCE',
+            actorId: { in: userIds },
+          },
+          {
+            entityType: 'MAINTENANCE_VISIT',
+            entityId: { in: visitIds },
+            action: {
+              in: [
+                'MAINTENANCE_COOLER_COUNT_RECORDED',
+                'MAINTENANCE_PARTIAL_COOLER_COUNT_RECORDED',
+                'MAINTENANCE_ENTERED_LATE',
+              ],
+            },
+            actorId: { in: userIds },
+          },
+          {
+            entityType: 'NON_MAINTENANCE_VISIT',
+            entityId: { in: nonMaintenanceVisitIds },
+            action: 'NON_MAINTENANCE_VISIT_RECORDED',
             actorId: { in: userIds },
           },
         ],

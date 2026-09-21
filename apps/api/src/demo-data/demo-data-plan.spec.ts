@@ -146,6 +146,7 @@ test('purge removes only explicitly owned mockup audits sharing its fixture note
     point: { findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }], deleteMany: noop },
     user: { findMany: async () => [{ id: 'mockup-user' }], deleteMany: noop },
     maintenanceVisit: { findMany: async () => [{ id: 'mockup-visit' }], deleteMany: noop },
+    nonMaintenanceVisit: { findMany: async () => [], deleteMany: noop },
     prospectCustomer: { findMany: async () => [], deleteMany: noop },
     adminAuditLog: {
       findMany: async ({ where }: { where: unknown }) => { calls.auditFindWhere = where; return audits.filter((audit) => audit.id === 'mockup-audit'); },
@@ -160,9 +161,86 @@ test('purge removes only explicitly owned mockup audits sharing its fixture note
     note,
     OR: [
       { entityType: 'SHOWCASE_DATASET', entityId: 'mockup-region', action: 'SEED_CREATED', actorId: { in: ['mockup-user'] } },
-      { entityType: 'MaintenanceVisit', entityId: { in: ['mockup-visit'] }, action: 'PARTIAL_MAINTENANCE', actorId: { in: ['mockup-user'] } },
+      {
+        entityType: 'MaintenanceVisit',
+        entityId: { in: ['mockup-visit'] },
+        action: 'PARTIAL_MAINTENANCE',
+        actorId: { in: ['mockup-user'] },
+      },
+      {
+        entityType: 'MAINTENANCE_VISIT',
+        entityId: { in: ['mockup-visit'] },
+        action: {
+          in: [
+            'MAINTENANCE_COOLER_COUNT_RECORDED',
+            'MAINTENANCE_PARTIAL_COOLER_COUNT_RECORDED',
+            'MAINTENANCE_ENTERED_LATE',
+          ],
+        },
+        actorId: { in: ['mockup-user'] },
+      },
+      {
+        entityType: 'NON_MAINTENANCE_VISIT',
+        entityId: { in: [] },
+        action: 'NON_MAINTENANCE_VISIT_RECORDED',
+        actorId: { in: ['mockup-user'] },
+      },
     ],
   });
+});
+
+test('purge removes owned runtime audits before mockup users while keeping unrelated audit rows', async () => {
+  const { purgeNamedMockupData: purge } = require('./mockup-data.repository') as {
+    purgeNamedMockupData: (store: any, note: string) => Promise<unknown>;
+  };
+  const note = 'mockup note';
+  let audits = [
+    { id: 'coolers', entityType: 'MAINTENANCE_VISIT', entityId: 'mockup-visit', action: 'MAINTENANCE_COOLER_COUNT_RECORDED', actorId: 'mockup-user', note },
+    { id: 'past-date', entityType: 'MAINTENANCE_VISIT', entityId: 'mockup-visit', action: 'MAINTENANCE_ENTERED_LATE', actorId: 'mockup-user', note },
+    { id: 'non-maintenance', entityType: 'NON_MAINTENANCE_VISIT', entityId: 'mockup-non-maintenance', action: 'NON_MAINTENANCE_VISIT_RECORDED', actorId: 'mockup-user', note },
+    { id: 'live-audit', entityType: 'MAINTENANCE_VISIT', entityId: 'live-visit', action: 'MAINTENANCE_COOLER_COUNT_RECORDED', actorId: 'operational-user', note },
+  ];
+  const deletedAuditIds: string[] = [];
+  const noop = async () => undefined;
+  const matchesWhere = (audit: typeof audits[number], where: any) => where.note === audit.note && where.OR.some((rule: any) =>
+    rule.entityType === audit.entityType
+      && (rule.entityId === audit.entityId || rule.entityId?.in?.includes(audit.entityId))
+      && (rule.action === audit.action || rule.action?.in?.includes(audit.action))
+      && rule.actorId?.in?.includes(audit.actorId));
+  const tx = {
+    paperworkStatusHistory: { deleteMany: noop }, maintenanceReviewResolution: { deleteMany: noop },
+    sapConfirmationReconciliation: { deleteMany: noop },
+    adminAuditLog: { deleteMany: async ({ where }: any) => {
+      deletedAuditIds.push(...(where.id?.in ?? []));
+      audits = audits.filter((audit) => !where.id?.in?.includes(audit.id));
+    } },
+    maintenanceVisit: { deleteMany: noop }, maintenanceAttempt: { deleteMany: noop },
+    nonMaintenanceVisit: { deleteMany: noop }, pointAssignment: { deleteMany: noop },
+    pointAlias: { deleteMany: noop }, maintenanceObligation: { deleteMany: noop },
+    point: { deleteMany: noop }, prospectVisit: { deleteMany: noop },
+    prospectCustomer: { deleteMany: noop }, technicianHelpPermission: { deleteMany: noop },
+    region: { delete: noop },
+    user: { deleteMany: async () => {
+      if (audits.some((audit) => audit.actorId === 'mockup-user')) throw new Error('FK restrict: audit actor remains');
+    } },
+  };
+  const store = {
+    region: { findUnique: async () => ({ id: 'mockup-region' }), delete: noop },
+    point: { findMany: async () => [{ id: 'mockup-point', regionId: 'mockup-region', code: 'KOR-1001' }], deleteMany: noop },
+    user: { findMany: async () => [{ id: 'mockup-user' }], deleteMany: noop },
+    maintenanceVisit: { findMany: async () => [{ id: 'mockup-visit' }], deleteMany: noop },
+    nonMaintenanceVisit: { findMany: async () => [{ id: 'mockup-non-maintenance' }], deleteMany: noop },
+    prospectCustomer: { findMany: async () => [], deleteMany: noop },
+    adminAuditLog: { findMany: async ({ where }: any) => audits.filter((audit) => matchesWhere(audit, where)), deleteMany: noop },
+    $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  await purge(store, note);
+  assert.deepEqual(deletedAuditIds.sort(), ['coolers', 'non-maintenance', 'past-date']);
+  assert.deepEqual(audits.map((audit) => audit.id), ['live-audit']);
+
+  await purge(store, note);
+  assert.deepEqual(deletedAuditIds.sort(), ['coolers', 'non-maintenance', 'past-date']);
+  assert.deepEqual(audits.map((audit) => audit.id), ['live-audit']);
 });
 
 test('mockup reset is idempotent and leaves non-mockup records untouched', async () => {
