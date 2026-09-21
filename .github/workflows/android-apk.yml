@@ -15,6 +15,11 @@ on:
       - '.github/workflows/android-apk.yml'
       - 'ops/release/mobile-apk-manifest.json'
   workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'Optional test-only API base URL for an isolated emulator APK'
+        required: false
+        type: string
 
 jobs:
   build-apk:
@@ -23,6 +28,7 @@ jobs:
     env:
       CI: '1'
       NODE_PATH: ${{ github.workspace }}/node_modules
+      EXPO_PUBLIC_API_BASE_URL: ${{ inputs.api_base_url || 'https://api.field-maintenance-prod.com/api' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
