@@ -126,3 +126,37 @@ test('queue retry restores its own metrics without clearing a failed report', as
   await expect(priorities.getByRole('button', { name: /Bekleyen onay: 2/ })).toBeVisible();
   await expect(page.getByText('Dönem raporu kullanılamıyor', { exact: true })).toBeVisible();
 });
+
+test('point assignment and audit 503 failures recover independently without fictional data', async ({ page }) => {
+  let assignmentFails = true, auditFails = true;
+  await page.route('**/api/backend/assignments/effective/p1', route => assignmentFails ? route.fulfill({ status: 503, json: {} }) : route.fallback());
+  await page.route('**/api/backend/audit?*', route => auditFails ? route.fulfill({ status: 503, json: {} }) : route.fulfill({ json: [] }));
+  await page.goto('/?section=point-detail&pointId=p1&tab=audit');
+  await expect(page.getByRole('button', { name: 'Geçerli teknisyeni yeniden dene', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sekme verilerini yeniden dene', exact: true })).toBeVisible();
+  await expect(page.getByText('Yükleniyor…', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Bu nokta için audit kaydı yok.', { exact: true })).toHaveCount(0);
+  assignmentFails = false;
+  await page.getByRole('button', { name: 'Geçerli teknisyeni yeniden dene', exact: true }).click();
+  await expect(page.getByText('Ege Usta', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sekme verilerini yeniden dene', exact: true })).toBeVisible();
+  auditFails = false;
+  await page.getByRole('button', { name: 'Sekme verilerini yeniden dene', exact: true }).click();
+  await expect(page.getByText('Bu nokta için audit kaydı yok.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel').getByRole('alert')).toHaveCount(0);
+});
+
+test('bulk initial list 503 is recoverable and cannot appear as zero or empty results', async ({ page }) => {
+  let failed = true;
+  await page.route('**/api/backend/points', route => failed ? route.fulfill({ status: 503, json: {} }) : route.fulfill({ json: [point] }));
+  await page.goto('/?section=bulk-operations');
+  await expect(page.getByRole('button', { name: 'Noktaları yeniden dene', exact: true })).toBeVisible();
+  await expect(page.locator('.filterCount')).toHaveCount(0);
+  await expect(page.getByText('Eşleşen nokta yok.', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Değişiklikleri Önizle', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  failed = false;
+  await page.getByRole('button', { name: 'Noktaları yeniden dene', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: '1001 kodlu Kordon Pub noktasını seç' })).toBeVisible();
+  await expect(page.locator('.filterCount')).toHaveText('1 / 1');
+});

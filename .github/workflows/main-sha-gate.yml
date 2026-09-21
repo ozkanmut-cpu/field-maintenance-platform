@@ -41,6 +41,6 @@ jobs:
         run: npx playwright install --with-deps chromium firefox
       - name: Admin dashboard Chromium browser contract
         working-directory: apps/admin
-        run: timeout 4m npx playwright test e2e/ai-dashboard.spec.ts --config=playwright.config.ts
+        run: timeout 4m npx playwright test e2e/ai-dashboard.spec.ts e2e/navigation-point-redesign.spec.ts --config=playwright.config.ts
       - name: SAP Export 2 Firefox DOM contract
         run: timeout 2m node --test runtime/sap/export2_dom_contract.spec.js

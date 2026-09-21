@@ -11,7 +11,7 @@ const ts = require('typescript');
 // Execute the real panels and event handlers with deterministic hook scheduling.
 // Only network I/O and React's host scheduler are replaced; request ownership,
 // state transitions, JSX output and user event callbacks remain production code.
-function mount(file, fetcher) {
+function mount(file, fetcher, props = {}) {
   const slots = [], pendingEffects = [], modules = new Map();
   let cursor = 0, dirty = true, tree;
   const hooks = {
@@ -52,7 +52,7 @@ function mount(file, fetcher) {
     return { type: node.type, props: node.props, children: expand(node.props.children) };
   }
   function render() {
-    if (dirty) { dirty = false; cursor = 0; tree = expand(Panel()); while (pendingEffects.length) pendingEffects.shift()(); }
+    if (dirty) { dirty = false; cursor = 0; tree = expand(Panel(props)); while (pendingEffects.length) pendingEffects.shift()(); }
     return tree;
   }
   return {
@@ -211,3 +211,54 @@ test('failed paperwork refresh removes stale selectable rows and never exposes s
   assert.equal(all(view.tree(), n => n.props.className === 'dashboardGrid').length, 1, 'only independent analytics metrics remain');
   view.unmount();
 });
+
+for (const lane of ['effective', 'audit']) {
+  test('point detail ' + lane + ' failure has independent recovery without invented data', async () => {
+    const failures = new Set([lane]);
+    const calls = [];
+    const fetcher = async url => {
+      calls.push(url);
+      const source = url.includes('/effective/') ? 'effective' : url.includes('/audit?') ? 'audit' : 'other';
+      if (failures.has(source)) return { ok: false, status: 503 };
+      return { ok: true, json: async () => source === 'effective' ? { technician: { name: 'Ege Usta' } } : url.endsWith('/points/p1') ? { ...point, status: 'ACTIVE', maintenanceType: 'STANDARD' } : [] };
+    };
+    const view = mount('point-detail-page', fetcher, { location: { section: 'point-detail', pointId: 'p1', detailTab: 'audit' }, onNavigate() {} });
+    await view.settle();
+    assert.match(text(view.tree()), /HTTP 503/);
+    assert.doesNotMatch(text(view.tree()), /Yükleniyor…/);
+    if (lane === 'audit') assert.doesNotMatch(text(view.tree()), /audit kaydı yok/);
+    failures.clear();
+    button(view.tree(), lane === 'audit' ? /Sekme verilerini yeniden dene/ : /Geçerli teknisyeni yeniden dene/).props.onClick();
+    await view.settle();
+    assert.doesNotMatch(text(view.tree()), /HTTP 503/);
+    assert.match(text(view.tree()), /Ege Usta/);
+    assert.match(text(view.tree()), /audit kaydı yok/);
+    assert.equal(calls.filter(url => lane === 'audit' ? url.includes('/audit?') : url.includes('/effective/')).length, 2);
+    view.unmount();
+  });
+}
+
+for (const lane of ['points', 'regions']) {
+  test('bulk initial ' + lane + ' failure gates selection and recovers the failed source', async () => {
+    let failed = true;
+    const calls = [];
+    const view = mount('bulk-operations', async url => {
+      calls.push(url);
+      if (failed && url.endsWith('/' + lane)) return { ok: false, status: 503 };
+      return { ok: true, json: async () => url.endsWith('/points') ? [{ ...point, aliases: [], status: 'ACTIVE' }] : [{ id: 'r1', name: 'Urla' }] };
+    });
+    await view.settle();
+    assert.match(text(view.tree()), /HTTP 503/);
+    assert.doesNotMatch(text(view.tree()), /Eşleşen nokta yok|nokta seçildi|Değişiklikleri Önizle/);
+    assert.equal(all(view.tree(), n => n.props.className === 'filterCount').length, 0);
+    assert.equal(all(view.tree(), n => n.type === 'input' && n.props.type === 'checkbox').length, 0);
+    failed = false;
+    button(view.tree(), lane === 'points' ? /Noktaları yeniden dene/ : /Bölgeleri yeniden dene/).props.onClick();
+    await view.settle();
+    assert.doesNotMatch(text(view.tree()), /HTTP 503/);
+    assert.match(text(view.tree()), /Kordon Market/);
+    assert.equal(calls.filter(url => url.endsWith('/' + lane)).length, 2);
+    assert.equal(calls.filter(url => !url.endsWith('/' + lane)).length, 1);
+    view.unmount();
+  });
+}
