@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, ReviewDecision, UserRole, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -170,10 +170,6 @@ export class MaintenanceAnomalyService {
     if (!admin || admin.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Kontrol kararını yalnızca admin verebilir');
     }
-    if (visit.status !== VisitStatus.VALID) {
-      throw new BadRequestException('Yalnızca geçerli bakım kaydı çözümlenebilir');
-    }
-
     const keepOpen = dto.decision === ReviewDecision.NEEDS_FOLLOWUP;
     const clearAnomaly = dto.decision === ReviewDecision.NO_ISSUE;
     // Review resolution must not promote a visit into location learning. Eligibility
