@@ -80,3 +80,49 @@ test('compact point tabs and aliases stay inside the viewport with keyboard menu
   await page.keyboard.press('Escape');
   await expect(menu).toBeFocused();
 });
+
+for (const report of [{ endpoint: 'admin-daily-summary', title: 'Günlük Operasyon Özeti' }, { endpoint: 'admin-period-summary', title: 'Haftalık / Dönem Sonu Özeti' }]) {
+  test(`${report.endpoint} failure and retry do not hide loaded queue priorities`, async ({ page }) => {
+    let fail = true;
+    await page.route(`**/api/backend/maintenance/${report.endpoint}?*`, route =>
+      fail ? route.fulfill({ status: 503, json: { message: 'Rapor geçici olarak kullanılamıyor' } }) : route.fallback());
+    await page.goto('/');
+    await page.getByText('Raporlar ve ayrıntılar', { exact: true }).click();
+    await expect(page.getByText('Rapor geçici olarak kullanılamıyor', { exact: true })).toBeVisible();
+    const priorities = page.getByRole('region', { name: 'Operasyon kuyrukları' });
+    await expect(priorities.getByRole('button', { name: /Ayar bekleyen: 1/ })).toBeVisible();
+    await expect(priorities.getByRole('button', { name: /Bekleyen onay: 2/ })).toBeVisible();
+    fail = false;
+    const panel = page.locator('section.panel').filter({ has: page.getByRole('heading', { name: report.title, exact: true }) });
+    await panel.getByRole('button', { name: 'YENİLE', exact: true }).click();
+    await expect(page.getByText('Rapor geçici olarak kullanılamıyor', { exact: true })).toHaveCount(0);
+    await expect(priorities.getByRole('button', { name: /Ayar bekleyen: 1/ })).toBeVisible();
+    await expect(priorities.getByRole('button', { name: /Bekleyen onay: 2/ })).toBeVisible();
+  });
+}
+test('point latest activity ignores future scheduled obligations and assignments', async ({ page }) => {
+  await page.route('**/api/backend/maintenance/point-timeline?*', route => route.fulfill({ json: { events: [
+    { id: 'future-assignment', type: 'ASSIGNMENT', at: '2100-01-01T00:00:00Z', data: { kind: 'TEMPORARY' } },
+    { id: 'future-obligation', type: 'OBLIGATION', at: '2099-01-01T00:00:00Z', data: { status: 'OPEN' } },
+    { id: 'actual-visit', type: 'MAINTENANCE', at: '2020-01-01T10:00:00Z', data: { status: 'VALID' } },
+  ] } }));
+  await page.goto('/?section=point-detail&pointId=p1&tab=general');
+  await expect(page.getByRole('region', { name: 'Nokta kimliği ve durum' }).getByText(/Son hareket/)).toContainText('Bakım ziyaretleri');
+});
+test('queue retry restores its own metrics without clearing a failed report', async ({ page }) => {
+  let queueFails = true;
+  await page.route('**/api/backend/regions', route => queueFails
+    ? route.fulfill({ status: 503, json: { message: 'Kuyruk verisi kullanılamıyor' } }) : route.fallback());
+  await page.route('**/api/backend/maintenance/admin-period-summary?*', route =>
+    route.fulfill({ status: 503, json: { message: 'Dönem raporu kullanılamıyor' } }));
+  await page.goto('/');
+  await page.getByText('Raporlar ve ayrıntılar', { exact: true }).click();
+  await expect(page.getByText('Dönem raporu kullanılamıyor', { exact: true })).toBeVisible();
+  const priorities = page.getByRole('region', { name: 'Operasyon kuyrukları' });
+  await expect(priorities.getByRole('button', { name: /Ayar bekleyen: —/ })).toBeVisible();
+  queueFails = false;
+  await page.getByRole('button', { name: 'Kuyrukları tekrar yükle', exact: true }).click();
+  await expect(priorities.getByRole('button', { name: /Ayar bekleyen: 1/ })).toBeVisible();
+  await expect(priorities.getByRole('button', { name: /Bekleyen onay: 2/ })).toBeVisible();
+  await expect(page.getByText('Dönem raporu kullanılamıyor', { exact: true })).toBeVisible();
+});

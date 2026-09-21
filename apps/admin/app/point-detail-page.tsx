@@ -109,7 +109,7 @@ export default function PointDetailPage({ location, onNavigate: navigate }: Prop
     setRecentActivity(null); setActivityError('');
     void fetch(`/api/backend/maintenance/point-timeline?pointId=${encodeURIComponent(location.pointId)}`)
       .then(async response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); })
-      .then(data => { if (!cancelled) setRecentActivity(asItems(data).filter(item => typeof item.at === 'string' && !Number.isNaN(Date.parse(item.at))).sort((a, b) => Date.parse(String(b.at)) - Date.parse(String(a.at))).slice(0, 1)); })
+      .then(data => { if (!cancelled) setRecentActivity(asItems(data).filter(item => typeof item.at === 'string' && !Number.isNaN(Date.parse(item.at)) && Date.parse(item.at) <= Date.now()).sort((a, b) => Date.parse(String(b.at)) - Date.parse(String(a.at))).slice(0, 1)); })
       .catch(cause => { if (!cancelled) setActivityError(cause instanceof Error ? cause.message : String(cause)); });
     return () => { cancelled = true; };
   }, [location.pointId]);
