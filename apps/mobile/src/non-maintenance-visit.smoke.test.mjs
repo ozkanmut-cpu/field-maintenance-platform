@@ -26,11 +26,20 @@ test('all exact visit types are exposed by the mobile API contract and form', ()
   assert.match(api, /NonMaintenanceVisitType/);
   assert.match(api, /recordNonMaintenanceVisit/);
 });
-test('flow is entered from Jobs and is not a primary tab', () => {
+test('flow is entered from My Customers and is not a primary tab', () => {
   const tasksStart = app.indexOf('function TaskList');
   const tasksEnd = app.indexOf('\nfunction MissingItemsView', tasksStart);
   assert.ok(tasksStart >= 0 && tasksEnd > tasksStart);
-  assert.match(app.slice(tasksStart, tasksEnd), /Bakım Dışı Ziyaret/);
+  assert.doesNotMatch(app.slice(tasksStart, tasksEnd), /Bakım Dışı Ziyaret/);
+
+  const customersStart = app.indexOf('function CustomersView');
+  const customersEnd = app.indexOf('\nfunction CustomerView', customersStart);
+  assert.ok(customersStart >= 0 && customersEnd > customersStart);
+  const customersView = app.slice(customersStart, customersEnd);
+  assert.match(customersView, /Bakım Dışı Ziyaret/);
+  assert.match(customersView, /accessibilityLabel="Bakım dışı ziyaret başlat"/);
+  assert.match(customersView, /onPress=\{openNonMaintenance\}/);
+  assert.match(app, /openNonMaintenance=\{\(\)\s*=>\s*void openNonMaintenanceVisit\(\)\}/);
   assert.match(app, /navigate\('NON_MAINTENANCE_VISIT'\)/);
   assert.doesNotMatch(navigation, /label:\s*'Bakım Dışı Ziyaret'/);
 });
