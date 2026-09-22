@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const shellPath = new URL('./admin-shell.tsx', import.meta.url);
+const stylesPath = new URL('./globals.css', import.meta.url);
 
 test('shell exposes accessible grouped navigation and collapse control', () => {
   assert.equal(existsSync(shellPath), true);
@@ -15,8 +16,11 @@ test('shell exposes accessible grouped navigation and collapse control', () => {
 
 test('desktop navigation starts expanded instead of inheriting an old collapsed preference', () => {
   const source = readFileSync(shellPath, 'utf8');
+  const styles = readFileSync(stylesPath, 'utf8');
   assert.match(source, /const \[collapsed, setCollapsed\] = useState\(false\);/);
   assert.doesNotMatch(source, /localStorage\.getItem\('admin-sidebar-collapsed'\)/);
+  assert.match(styles, /@media\(min-width:961px\)\{\.adminLayout:not\(\.sidebarCollapsed\)\{grid-template-columns:272px minmax\(0,1fr\)\}\}/);
+  assert.match(styles, /\.sidebarBrand div,\.sideNav span\{display:initial\}/);
 });
 
 test('shell provides a keyboard-dismissible text navigation drawer on compact screens', () => {

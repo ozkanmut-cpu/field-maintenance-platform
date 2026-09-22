@@ -16,7 +16,7 @@ export type NavigationItem = {
 };
 
 export const navigationItems: NavigationItem[] = [
-  { section: 'dashboard', label: 'Operasyon Dashboard', group: 'Ana Sayfa', icon: 'dashboard' },
+  { section: 'dashboard', label: 'Operasyon Dashboard', group: 'Ana', icon: 'dashboard' },
   { section: 'maintenance-calendar', label: 'Bakım Takvimi / Yükümlülükler', group: 'Operasyon', icon: 'calendar' },
   { section: 'assignments', label: 'Görevlendirmeler', group: 'Operasyon', icon: 'assignment' },
   { section: 'non-maintenance-visits', label: 'Bakım Dışı Ziyaretler', group: 'Operasyon', icon: 'visit' },

@@ -17,7 +17,7 @@ test('admin navigation registry defines deep-linkable point workflows', () => {
 test('navigation registry groups every existing admin capability', () => {
   assert.equal(existsSync(navigationPath), true);
   const source = readFileSync(navigationPath, 'utf8');
-  for (const group of ['Ana Sayfa', 'Operasyon', 'Onay & İnceleme', 'Nokta Yönetimi', 'Raporlar & Analiz', 'Entegrasyonlar', 'Kullanıcı Yönetimi', 'Sistem']) {
+  for (const group of ['Ana', 'Operasyon', 'Onay & İnceleme', 'Nokta Yönetimi', 'Raporlar & Analiz', 'Entegrasyonlar', 'Kullanıcı Yönetimi', 'Sistem']) {
     assert.match(source, new RegExp(group));
   }
 });
