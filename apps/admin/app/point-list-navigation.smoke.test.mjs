@@ -17,8 +17,10 @@ test('point list persists its find context before navigating to a detail record'
   assert.match(list, /scrollY = window\.scrollY/,
     'Detail navigation must capture the current list scroll position');
   assert.match(list, /onNavigate\('point-detail', \{ pointId: point\.id, \.\.\.values \}\)/);
-  assert.match(list, /const visiblePage = visible\.slice/,
-    'page must represent real client pagination, not a dead URL parameter');
+  assert.match(list, /const groupedVisible = groupPointsByIdentity\(visible\)/,
+    'repeated point records must be grouped before client pagination');
+  assert.match(list, /const visibleGroups = groupedVisible\.slice/,
+    'page must represent grouped client pagination, not a dead URL parameter');
   assert.match(list, /pushListLocation\(next, status, region, maintenanceType, 1\)/,
     'a query change must push the reset first page into browser history');
   assert.match(list, /pushListLocation\(query, next, region, maintenanceType, 1\)/,

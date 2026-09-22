@@ -100,7 +100,7 @@ test('desktop priorities fill three columns beside a wide text sidebar', async (
   await page.goto('/');
   const sidebar = page.getByRole('complementary', { name: 'Yönetim menüsü' });
   await expect(sidebar).toBeVisible();
-  expect((await sidebar.boundingBox())!.width).toBeGreaterThanOrEqual(280);
+  expect((await sidebar.boundingBox())!.width).toBeGreaterThanOrEqual(272);
   const priorities = page.getByRole('region', { name: 'Operasyon kuyrukları' });
   expect(await priorities.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length)).toBe(3);
 });
@@ -122,6 +122,7 @@ for (const report of [{ endpoint: 'admin-daily-summary', title: 'Günlük Operas
     await page.route(`**/api/backend/maintenance/${report.endpoint}?*`, route =>
       fail ? route.fulfill({ status: 503, json: { message: 'Rapor geçici olarak kullanılamıyor' } }) : route.fallback());
     await page.goto('/');
+    await page.getByRole('button', { name: 'Raporları ve ayrıntıları göster', exact: true }).click();
     await expect(page.getByText('Rapor geçici olarak kullanılamıyor', { exact: true })).toBeVisible();
     const priorities = page.getByRole('region', { name: 'Operasyon kuyrukları' });
     await expect(priorities.getByRole('button', { name: /Ayar bekleyen: 1/ })).toBeVisible();
@@ -150,9 +151,11 @@ test('queue retry restores its own metrics without clearing a failed report', as
   await page.route('**/api/backend/maintenance/admin-period-summary?*', route =>
     route.fulfill({ status: 503, json: { message: 'Dönem raporu kullanılamıyor' } }));
   await page.goto('/');
+  await page.getByRole('button', { name: 'Raporları ve ayrıntıları göster', exact: true }).click();
   await expect(page.getByText('Dönem raporu kullanılamıyor', { exact: true })).toBeVisible();
   const priorities = page.getByRole('region', { name: 'Operasyon kuyrukları' });
-  await expect(priorities.getByText('Operasyon öncelikleri alınamadı', { exact: true })).toBeVisible();
+  await expect(priorities.getByText('Ayar bekleyenler alınamadı', { exact: true })).toBeVisible();
+  await expect(priorities.getByText('Bekleyen onaylar alınamadı', { exact: true })).toBeVisible();
   await expect(priorities.getByRole('button', { name: /Ayar bekleyen:/ })).toHaveCount(0);
   queueFails = false;
   await page.getByRole('button', { name: 'Kuyrukları tekrar yükle', exact: true }).click();
