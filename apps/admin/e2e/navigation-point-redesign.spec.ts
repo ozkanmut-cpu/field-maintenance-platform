@@ -135,7 +135,7 @@ for (const report of [{ endpoint: 'admin-daily-summary', title: 'Günlük Operas
   });
 }
 test('point latest activity ignores future scheduled obligations and assignments', async ({ page }) => {
-  await page.route('**/api/backend/maintenance/point-timeline?*', route => route.fulfill({ json: { events: [
+  await page.route('**/api/backend/maintenance/point-timeline?*', route => route.fulfill({ json: { items: [
     { id: 'future-assignment', type: 'ASSIGNMENT', at: '2100-01-01T00:00:00Z', data: { kind: 'TEMPORARY' } },
     { id: 'future-obligation', type: 'OBLIGATION', at: '2099-01-01T00:00:00Z', data: { status: 'OPEN' } },
     { id: 'actual-visit', type: 'MAINTENANCE', at: '2020-01-01T10:00:00Z', data: { status: 'VALID' } },
@@ -172,7 +172,7 @@ test('point assignment and audit 503 failures recover independently without fict
   await expect(page.getByText('Bu nokta için audit kaydı yok.', { exact: true })).toHaveCount(0);
   assignmentFails = false;
   await page.getByRole('button', { name: 'Geçerli teknisyeni yeniden dene', exact: true }).click();
-  await expect(page.getByText('Ege Usta', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Nokta kimliği ve durum' })).toContainText('Ege Usta');
   await expect(page.getByRole('button', { name: 'Sekme verilerini yeniden dene', exact: true })).toBeVisible();
   auditFails = false;
   await page.getByRole('button', { name: 'Sekme verilerini yeniden dene', exact: true }).click();
