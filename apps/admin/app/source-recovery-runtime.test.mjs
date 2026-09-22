@@ -83,7 +83,7 @@ function network(failures = new Set(), visitData = visit) {
     calls.push(url);
     const lane = url === '/api/backend/users' ? 'users' : url === '/api/backend/points' ? 'points' : url.includes('technician-history') ? 'visits' : url.includes('paperwork-analytics') ? 'analytics' : url.includes('paperwork-history') ? 'history' : url.includes('/assignments/point/') ? 'assignment' : 'effective';
     if (failures.has(lane)) return { ok: false, status: 503, json: async () => ({ message: lane + ' unavailable' }) };
-    const data = lane === 'users' ? [user] : lane === 'points' ? [point] : lane === 'visits' ? { date: '2026-09-21', maintenanceCount: 1, items: [visitData] } : lane === 'analytics' ? analytics : lane === 'history' ? [] : lane === 'assignment' ? { point, assignments: [] } : { pointId: 'p1', source: 'REGION', technicianId: 't1', technician: user };
+    const data = lane === 'users' ? [user] : lane === 'points' ? [point] : lane === 'visits' ? { date: '2026-09-21', maintenanceCount: 1, items: [visitData] } : lane === 'analytics' ? analytics : lane === 'history' ? { visit: { id: visitData.id, status: 'VALID', serviceSlipStatus: visitData.serviceSlipStatus, confirmationStatus: visitData.confirmationStatus, point: visitData.point }, history: [] } : lane === 'assignment' ? { point, assignments: [] } : { pointId: 'p1', source: 'REGION', technicianId: 't1', technician: user };
     return { ok: true, status: 200, json: async () => data };
   } };
 }
@@ -207,6 +207,32 @@ test('paperwork decisions update only their row without reloading the visit data
   assert.match(text(view.tree()), /Kaydedildi/);
   assert.doesNotMatch(text(view.tree()), /Manuel final/,
     'technician-history does not return a durable approval source');
+  view.unmount();
+});
+
+test('a pending paperwork mutation locks every decision on its row', async () => {
+  const net = network();
+  let releaseMutation;
+  const mutation = new Promise((resolve) => { releaseMutation = resolve; });
+  const fetcher = async (url, init) => {
+    if (url === '/api/backend/maintenance/paperwork') {
+      await mutation;
+      return { ok: true, status: 200, json: async () => ({}) };
+    }
+    return net.fetch(url, init);
+  };
+  const view = mount('paperwork-management', fetcher);
+  await view.settle();
+  button(view.tree(), /^Teyit Onaylandı$/).props.onClick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  for (const label of [/^Teyit Onaylandı$/, /^Teyit Yok$/, /^Teyit Eksik$/, /^Fiş Var$/, /^Fiş Yok$/, /^Detay$/]) {
+    assert.equal(button(view.tree(), label).props.disabled, true, `${label} must lock with the row`);
+  }
+
+  releaseMutation();
+  await view.settle();
+  assert.equal(button(view.tree(), /^Fiş Yok$/).props.disabled, false);
   view.unmount();
 });
 

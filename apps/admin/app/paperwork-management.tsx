@@ -33,6 +33,10 @@ type PaperworkHistoryItem = {
   changedAt: string; note?: string | null; changedBy: { id: string; name: string } | null;
   provenance?: 'MANUAL_USER' | 'SAP_RECONCILIATION';
 };
+type PaperworkHistoryResponse = {
+  visit: { id: string; status: string; serviceSlipStatus: PaperworkStatus; confirmationStatus: PaperworkStatus; point: { id: string; code: string; name: string } };
+  history: PaperworkHistoryItem[];
+};
 type RowAction = { kind: PaperworkKind; status: 'APPROVED' | 'MISSING'; note: string };
 type RowError = { message: string; action: RowAction };
 
@@ -50,7 +54,7 @@ type PaperworkAnalytics = {
 
 const PAPERWORK_FILTERS_KEY = 'fmp.admin.paperwork.filters.v1';
 const statusLabel: Record<PaperworkStatus, string> = {
-  PENDING: 'Bekliyor', PRESENT: 'Var', MISSING: 'Eksik', PENDING_REVIEW: 'İnceleme bekliyor', APPROVED: 'Onaylandı',
+  PENDING: 'Bekliyor', PRESENT: 'Var', MISSING: 'Eksik / yok', PENDING_REVIEW: 'İnceleme bekliyor', APPROVED: 'Onaylandı',
 };
 
 function istanbulDateKey() {
@@ -291,9 +295,10 @@ export default function PaperworkManagement() {
     setHistory([]);
     setHistoryError('');
     try {
-      const data = await api<PaperworkHistoryItem[]>(`/api/backend/maintenance/paperwork-history?visitId=${encodeURIComponent(visitId)}`);
+      const data = await api<PaperworkHistoryResponse>(`/api/backend/maintenance/paperwork-history?visitId=${encodeURIComponent(visitId)}`);
+      if (!data || !Array.isArray(data.history)) throw new Error('Evrak geçmişi yanıtı geçersiz.');
       if (!historyRequests.current.isCurrent(requestEpoch)) return;
-      setHistory(data);
+      setHistory(data.history);
     } catch (cause) {
       if (historyRequests.current.isCurrent(requestEpoch)) setHistoryError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -319,8 +324,8 @@ export default function PaperworkManagement() {
 
     <section className="dashboardGrid" aria-label="Fiş ve teyit özeti">
       <div className="dashboardCard"><span>Bekleyen</span><strong>{pendingCount}</strong><small>Filtrelenen açık kayıtlar</small></div>
-      <div className="dashboardCard"><span>Teyit Eksik</span><strong>{missingConfirmationCount}</strong><small>Teyit kararı gerekli</small></div>
-      <div className="dashboardCard"><span>Fiş Yok</span><strong>{missingSlipCount}</strong><small>Servis fişi gerekli</small></div>
+      <div className="dashboardCard"><span>Teyit Eksik / Yok</span><strong>{missingConfirmationCount}</strong><small>Teyit kararı gerekli</small></div>
+      <div className="dashboardCard"><span>Fiş Eksik / Yok</span><strong>{missingSlipCount}</strong><small>Servis fişi gerekli</small></div>
     </section>
 
     <AdminFilterToolbar resultCount={visible.length} resultLabel="kayıt" refreshing={visitsBusy}
@@ -370,7 +375,6 @@ export default function PaperworkManagement() {
           const confirmationIncomplete: RowAction = { kind: 'CONFIRMATION', status: 'MISSING', note: 'Teyit eksik.' };
           const slipApproved: RowAction = { kind: 'SERVICE_SLIP', status: 'APPROVED', note: 'Servis fişi var.' };
           const slipMissing: RowAction = { kind: 'SERVICE_SLIP', status: 'MISSING', note: 'Servis fişi yok.' };
-          const isBusy = (action: RowAction) => Boolean(mutationActions[actionKey(visit.id, action)]);
           const rowBusy = Object.keys(mutationActions).some((key) => key.startsWith(`${visit.id}:`));
           return <tr key={visit.id}>
             <td><strong>{visit.point?.name || '—'}</strong><div className="muted">{visit.point?.code || '—'} · {visit.regionName || 'Bölge yok'}</div></td>
@@ -379,16 +383,16 @@ export default function PaperworkManagement() {
             <td><strong><span title="Teyit adedi kaynak veride yok">—</span> / {visit.maintainedCoolerCount ?? '—'} / {visit.totalCoolerCount ?? '—'}</strong></td>
             <td>
               <div className="rowActions">
-                <button className={confirmationStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={confirmationStatus === 'APPROVED'} disabled={isBusy(confirmationApproved)} onClick={() => void updateOne(visit.id, confirmationApproved)}>Teyit Onaylandı</button>
-                <button className="small ghost" aria-pressed={false} disabled={isBusy(confirmationNone)} onClick={() => void updateOne(visit.id, confirmationNone)}>Teyit Yok</button>
-                <button className="small ghost" aria-pressed={false} disabled={isBusy(confirmationIncomplete)} onClick={() => void updateOne(visit.id, confirmationIncomplete)}>Teyit Eksik</button>
+                <button className={confirmationStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={confirmationStatus === 'APPROVED'} disabled={rowBusy} onClick={() => void updateOne(visit.id, confirmationApproved)}>Teyit Onaylandı</button>
+                <button className="small ghost" aria-pressed={false} disabled={rowBusy} onClick={() => void updateOne(visit.id, confirmationNone)}>Teyit Yok</button>
+                <button className="small ghost" aria-pressed={false} disabled={rowBusy} onClick={() => void updateOne(visit.id, confirmationIncomplete)}>Teyit Eksik</button>
                 <span className="pill">{confirmationLabel(confirmationStatus)}</span>
               </div>
-              {rowErrors[visit.id] ? <div className="error banner" role="alert">{rowErrors[visit.id].message}<button className="small" disabled={isBusy(rowErrors[visit.id].action)} onClick={() => void updateOne(visit.id, rowErrors[visit.id].action)}>Tekrar dene</button></div> : null}
+              {rowErrors[visit.id] ? <div className="error banner" role="alert">{rowErrors[visit.id].message}<button className="small" disabled={rowBusy} onClick={() => void updateOne(visit.id, rowErrors[visit.id].action)}>Tekrar dene</button></div> : null}
             </td>
             <td><div className="rowActions">
-              <button className={slipStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={slipStatus === 'APPROVED'} disabled={isBusy(slipApproved)} onClick={() => void updateOne(visit.id, slipApproved)}>Fiş Var</button>
-              <button className={slipStatus === 'MISSING' ? 'small danger' : 'small ghost'} aria-pressed={slipStatus === 'MISSING'} disabled={isBusy(slipMissing)} onClick={() => void updateOne(visit.id, slipMissing)}>Fiş Yok</button>
+              <button className={slipStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={slipStatus === 'APPROVED'} disabled={rowBusy} onClick={() => void updateOne(visit.id, slipApproved)}>Fiş Var</button>
+              <button className={slipStatus === 'MISSING' ? 'small danger' : 'small ghost'} aria-pressed={slipStatus === 'MISSING'} disabled={rowBusy} onClick={() => void updateOne(visit.id, slipMissing)}>Fiş Yok</button>
               <span className="pill">{statusLabel[slipStatus]}</span>
             </div></td>
             <td><button className="small ghost" disabled={rowBusy} onClick={() => void openHistory(visit.id)}>Detay</button></td>
@@ -419,7 +423,7 @@ export default function PaperworkManagement() {
         <div className="dashboardCard"><span>Teyit · Belge geliş medyanı</span><strong>{formatMinutes(analytics.confirmation.arrival.medianMinutes)}</strong><small>P90: {formatMinutes(analytics.confirmation.arrival.p90Minutes)}</small></div>
         <div className="dashboardCard"><span>Durum netleşme medyanı</span><strong>{formatMinutes(analytics.serviceSlip.resolution.medianMinutes)}</strong><small>Teyit: {formatMinutes(analytics.confirmation.resolution.medianMinutes)}</small></div>
       </section>
-      <AccessibleTable caption="Evrak analitiği"><thead><tr><th>Evrak</th><th>Var</th><th>Onaylandı</th><th>Bekliyor</th><th>Eksik</th><th>Belge geliş medyanı / P90</th><th>Durum netleşme medyanı / P90</th></tr></thead><tbody>
+      <AccessibleTable caption="Evrak analitiği"><thead><tr><th>Evrak</th><th>Var</th><th>Onaylandı</th><th>Bekliyor</th><th>Eksik / yok</th><th>Belge geliş medyanı / P90</th><th>Durum netleşme medyanı / P90</th></tr></thead><tbody>
         {([['Servis Fişi', analytics.serviceSlip], ['Teyit', analytics.confirmation]] as const).map(([label, item]) => <tr key={label}><td><strong>{label}</strong></td><td>{item.statusCounts.present} ({item.statusRates.present}%)</td><td>{item.statusCounts.approved} ({item.statusRates.approved}%)</td><td>{item.statusCounts.pending} ({item.statusRates.pending}%)</td><td>{item.statusCounts.missing} ({item.statusRates.missing}%)</td><td>{formatMinutes(item.arrival.medianMinutes)} / {formatMinutes(item.arrival.p90Minutes)}</td><td>{formatMinutes(item.resolution.medianMinutes)} / {formatMinutes(item.resolution.p90Minutes)}</td></tr>)}
       </tbody></AccessibleTable>
       <AccessibleTable caption="Bekleyen evrak yaşı"><thead><tr><th>Bekleyen evrak yaşı</th><th>0–24 saat</th><th>24–48 saat</th><th>2–7 gün</th><th>7+ gün</th></tr></thead><tbody>

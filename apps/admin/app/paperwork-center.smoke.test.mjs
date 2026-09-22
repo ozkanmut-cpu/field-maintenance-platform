@@ -31,6 +31,13 @@ test('paperwork filters cover range, technician, region, customer and both docum
     'the page must restore its prior session filters');
 });
 
+test('persisted missing labels remain neutral in summaries and filters', () => {
+  assert.match(source, /MISSING: 'Eksik \/ yok'/);
+  assert.match(source, /<span>Teyit Eksik \/ Yok<\/span>/);
+  assert.doesNotMatch(source, /<span>Teyit Eksik<\/span>/,
+    'the summary must not imply which MISSING decision was persisted');
+});
+
 test('paperwork center has no selection or bulk-apply affordance', () => {
   assert.doesNotMatch(source, /type="checkbox"/);
   assert.doesNotMatch(source, /Toplu Evrak İşlemi/);

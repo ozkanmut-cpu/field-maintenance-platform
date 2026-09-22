@@ -26,6 +26,13 @@ test('paperwork mutations use action-owned busy and retry state', () => {
   assert.match(source, /rowErrors\[visit\.id\][\s\S]{0,500}Tekrar dene/);
 });
 
+test('paperwork history unwraps the API response before rendering audit rows', () => {
+  assert.match(source, /type PaperworkHistoryResponse = \{/);
+  assert.match(source, /api<PaperworkHistoryResponse>/);
+  assert.match(source, /setHistory\(data\.history\)/);
+  assert.doesNotMatch(source, /api<PaperworkHistoryItem\[\]>/);
+});
+
 test('paperwork history and analytics each reject stale responses', () => {
   assert.match(source, /const requestEpoch = historyRequests\.current\.begin\(\)[\s\S]{0,900}historyRequests\.current\.isCurrent\(requestEpoch\)/);
   assert.match(source, /const requestEpoch = analyticsRequests\.current\.next\(\)[\s\S]{0,1000}analyticsRequests\.current\.isCurrent\(requestEpoch\)/);
