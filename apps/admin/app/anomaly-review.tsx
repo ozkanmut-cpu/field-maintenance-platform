@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminIcon } from "./admin-icons";
 import { AccessibleTable } from "./accessible-table";
+import { AdminFilterToolbar, AdminListState } from "./admin-primitives";
 type Technician = {
   id: string;
   name: string;
@@ -46,6 +47,18 @@ const label: Record<Decision, string> = {
   KEEP_LOCATION_EXCLUDED: "Konumu dışla",
   NEEDS_FOLLOWUP: "Takip gerekli",
 };
+type AnomalyReviewType = "ALL" | "LOCATION" | "SUSPICIOUS" | "LATE";
+export function filterAnomalyQueue(items: Item[], filters: { search: string; technicianId: string; reviewType: AnomalyReviewType }) {
+  const q = filters.search.trim().toLocaleLowerCase("tr-TR");
+  return items.filter((item) => {
+    if (filters.technicianId && item.technician.id !== filters.technicianId) return false;
+    if (filters.reviewType === "LOCATION" && !item.locationReviewRequired) return false;
+    if (filters.reviewType === "SUSPICIOUS" && !item.suspiciousBatch) return false;
+    if (filters.reviewType === "LATE" && !item.enteredLate) return false;
+    const text = [item.point.code, item.point.name, item.technician.name, item.reviewReason ?? ""].join(" ").toLocaleLowerCase("tr-TR");
+    return !q || text.includes(q);
+  });
+}
 export default function AnomalyReview() {
   const [items, setItems] = useState<Item[]>([]),
     [techs, setTechs] = useState<Technician[]>([]),
@@ -55,25 +68,14 @@ export default function AnomalyReview() {
     [historyLoading, setHistoryLoading] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [search, setSearch] = useState("");
+    [notice, setNotice] = useState(""),
+    [search, setSearch] = useState(""),
+    [technicianId, setTechnicianId] = useState(""),
+    [reviewType, setReviewType] = useState<AnomalyReviewType>("ALL"),
+    [lastUpdated, setLastUpdated] = useState("");
   const loadGeneration = useRef(0);
   const selectedItem = items.find((item) => item.id === selected),
-    visible = useMemo(() => {
-      const q = search.trim().toLocaleLowerCase("tr-TR");
-      return items.filter(
-        (item) =>
-          !q ||
-          [
-            item.point.code,
-            item.point.name,
-            item.technician.name,
-            item.reviewReason ?? "",
-          ]
-            .join(" ")
-            .toLocaleLowerCase("tr-TR")
-            .includes(q),
-      );
-    }, [items, search]);
+    visible = useMemo(() => filterAnomalyQueue(items, { search, technicianId, reviewType }), [items, search, technicianId, reviewType]);
   const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
     const r = await fetch(path, {
         ...init,
@@ -88,7 +90,7 @@ export default function AnomalyReview() {
   };
   async function load() {
     const generation = ++loadGeneration.current;
-    setLoading(true);
+    setLoading(true); setError("");
     try {
       const [queue, users] = await Promise.all([
         api<Item[]>("/api/backend/maintenance/review-queue?limit=200"),
@@ -104,6 +106,7 @@ export default function AnomalyReview() {
           ? current
           : (queue[0]?.id ?? null),
       );
+      setLastUpdated(new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
     } catch (e) {
       if (generation === loadGeneration.current)
         setError(e instanceof Error ? e.message : String(e));
@@ -112,8 +115,11 @@ export default function AnomalyReview() {
     }
   }
   useEffect(() => {
+    const saved = typeof sessionStorage === "undefined" ? null : sessionStorage.getItem("admin.anomaly.filters");
+    if (saved) try { const parsed = JSON.parse(saved); setSearch(parsed.search ?? ""); setTechnicianId(parsed.technicianId ?? ""); setReviewType(parsed.reviewType ?? "ALL"); } catch {}
     void load();
   }, []);
+  useEffect(() => { if (typeof sessionStorage !== "undefined") sessionStorage.setItem("admin.anomaly.filters", JSON.stringify({ search, technicianId, reviewType })); }, [search, technicianId, reviewType]);
   useEffect(() => {
     if (!selected) {
       setHistory(null);
@@ -153,7 +159,9 @@ export default function AnomalyReview() {
         method: "POST",
         body: JSON.stringify({ visitId: item.id, decision, note }),
       });
-      await load();
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+      setSelected((current) => current === item.id ? null : current);
+      setNotice(`${item.point.name}: ${label[decision]} olarak kaydedildi.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -175,7 +183,8 @@ export default function AnomalyReview() {
         method: "POST",
         body: JSON.stringify({ visitId: item.id, note }),
       });
-      await load();
+      setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, locationReviewRequired: false, locationPresenceConfirmed: true } : entry));
+      setNotice(`${item.point.name}: teknisyen konumu onaylandı.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -237,7 +246,8 @@ export default function AnomalyReview() {
             </p>
           </div>
         </div>
-        {error && <div className="error banner">{error}</div>}
+        {error && <AdminListState state="error" title="İnceleme kuyruğu güncellenemedi" description={`${error}. Mevcut kayıtlar korunuyor.`} onRetry={() => void load()} />}
+        {notice && <div className="banner" role="status">Kaydedildi · {notice}</div>}
         <div className="dashboardGrid">
           {metric("İnceleme bekleyen", items.length, "Açık yönetici kuyruğu")}
           {metric("Konum incelemesi", location, "Teknisyen GPS’i için karar")}
@@ -249,20 +259,11 @@ export default function AnomalyReview() {
           nokta konumunu günceller. Konum kararı bakım statüsünü değiştirmez,
           bakımı geri almaz ve diğer anomali bayraklarını otomatik kapatmaz.
         </div>
-        <div className="filterBar oneFilter">
-          <label className="searchField">
-            <AdminIcon name="search" size={18} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="İnceleme kuyruğunda ara"
-              placeholder="Nokta, kod, teknisyen veya neden ara"
-            />
-          </label>
-          <span className="filterCount">
-            {visible.length} / {items.length}
-          </span>
-        </div>
+        <AdminFilterToolbar resultCount={visible.length} resultLabel="kayıt" lastUpdated={lastUpdated} refreshing={loading} onRefresh={() => void load()} onClear={() => { setSearch(""); setTechnicianId(""); setReviewType("ALL"); }} activeFilters={[...(search ? [{ id: "search", label: `Arama: ${search}`, onRemove: () => setSearch("") }] : []), ...(technicianId ? [{ id: "technician", label: techs.find((tech) => tech.id === technicianId)?.name ?? "Teknisyen", onRemove: () => setTechnicianId("") }] : []), ...(reviewType !== "ALL" ? [{ id: "type", label: reviewType === "LOCATION" ? "Konum incelemesi" : reviewType === "SUSPICIOUS" ? "Şüpheli seri giriş" : "Geç giriş", onRemove: () => setReviewType("ALL") }] : [])]}>
+          <label className="searchField"><AdminIcon name="search" size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} aria-label="İnceleme kuyruğunda ara" placeholder="Nokta, kod, teknisyen veya neden ara" /></label>
+          <select aria-label="Teknisyen filtresi" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}><option value="">Tüm teknisyenler</option>{techs.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select>
+          <select aria-label="İnceleme türü filtresi" value={reviewType} onChange={(e) => setReviewType(e.target.value as AnomalyReviewType)}><option value="ALL">Tüm açık incelemeler</option><option value="LOCATION">Konum incelemesi</option><option value="SUSPICIOUS">Şüpheli seri giriş</option><option value="LATE">Geç giriş</option></select>
+        </AdminFilterToolbar>
         <AccessibleTable caption="Konum ve anomali inceleme kuyruğu">
             <thead>
               <tr>

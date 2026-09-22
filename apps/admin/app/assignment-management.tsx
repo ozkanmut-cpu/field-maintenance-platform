@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
+import { AdminFilterToolbar } from './admin-primitives';
 
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Point = { id: string; code: string; name: string; region?: { id: string; name: string; technicianId?: string | null } | null };
@@ -39,6 +40,22 @@ function assignmentTimingLabel(status: AssignmentTiming) {
 
 export function isAssignmentBusy(loading: { point: boolean; mutation: boolean; audit: boolean }) {
   return loading.point || loading.mutation || loading.audit;
+}
+
+export function filterAssignments(
+  assignments: Assignment[],
+  filters: { status: 'ALL' | 'ACTIVE' | 'CLOSED' | 'POINT_OVERRIDE' | 'TEMPORARY'; search: string },
+  now: Date = new Date(),
+) {
+  const q = filters.search.trim().toLocaleLowerCase('tr-TR');
+  return assignments.filter((assignment) => {
+    const timing = assignmentTimingStatus(assignment, now);
+    if (filters.status === 'ACTIVE' && timing !== 'CURRENT') return false;
+    if (filters.status === 'CLOSED' && timing !== 'CLOSED' && timing !== 'EXPIRED') return false;
+    if (filters.status === 'POINT_OVERRIDE' && assignment.kind !== 'POINT_OVERRIDE') return false;
+    if (filters.status === 'TEMPORARY' && assignment.kind !== 'TEMPORARY') return false;
+    return !q || `${assignment.technician.name} ${assignment.kind} ${assignment.reason ?? ''} ${assignment.createdBy.name}`.toLocaleLowerCase('tr-TR').includes(q);
+  });
 }
 
 type AssignmentTimingRefreshScheduler = {
@@ -334,18 +351,14 @@ export default function AssignmentManagement() {
   const activeCount = history?.assignments.filter((a) => assignmentTimingStatus(a, now) === 'CURRENT').length ?? 0;
   const overrideCount = history?.assignments.filter((a) => a.kind === 'POINT_OVERRIDE').length ?? 0;
   const temporaryCount = history?.assignments.filter((a) => a.kind === 'TEMPORARY').length ?? 0;
-  const filteredHistory = useMemo(() => {
-    const q = historySearch.trim().toLocaleLowerCase('tr-TR');
-    return (history?.assignments ?? []).filter((a) => {
-      const timing = assignmentTimingStatus(a, now);
-      if (historyFilter === 'ACTIVE' && timing !== 'CURRENT') return false;
-      if (historyFilter === 'CLOSED' && timing !== 'CLOSED' && timing !== 'EXPIRED') return false;
-      if (historyFilter === 'POINT_OVERRIDE' && a.kind !== 'POINT_OVERRIDE') return false;
-      if (historyFilter === 'TEMPORARY' && a.kind !== 'TEMPORARY') return false;
-      if (!q) return true;
-      return `${a.technician.name} ${a.kind} ${a.reason ?? ''} ${a.createdBy.name}`.toLocaleLowerCase('tr-TR').includes(q);
-    });
-  }, [history, historyFilter, historySearch, now]);
+  const filteredHistory = useMemo(() => filterAssignments(history?.assignments ?? [], { status: historyFilter, search: historySearch }, now), [history, historyFilter, historySearch, now]);
+  useEffect(() => {
+    if (typeof sessionStorage === 'undefined') return;
+    const saved = sessionStorage.getItem('admin.assignment.filters');
+    if (!saved) return;
+    try { const parsed = JSON.parse(saved); setHistoryFilter(parsed.status ?? 'ALL'); setHistorySearch(parsed.search ?? ''); } catch {}
+  }, []);
+  useEffect(() => { if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('admin.assignment.filters', JSON.stringify({ status: historyFilter, search: historySearch })); }, [historyFilter, historySearch]);
 
   return <>
     {history && effective && !baseLoading && !baseError && !pointLoading && !pointError ? <section className="dashboardGrid">
@@ -381,10 +394,10 @@ export default function AssignmentManagement() {
 
     <section className="panel">
       <div className="panelHeader"><div><h2>{history?.point.name || 'Nokta'} · Görevlendirme Geçmişi</h2><p>{history?.point.code || '—'} · Bölge varsayılanı: {history?.point.region?.name || 'Bölge yok'}</p></div></div>
-      <div className="compactForm">
-        <input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Teknisyen / neden / oluşturan ara" />
-        <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı / sona ermiş</option><option value="POINT_OVERRIDE">Kalıcı override</option><option value="TEMPORARY">Geçici</option></select>
-      </div>
+      <AdminFilterToolbar resultCount={filteredHistory.length} resultLabel="görevlendirme" refreshing={pointLoading} onRefresh={() => loadPoint(pointId)} onClear={() => { setHistorySearch(''); setHistoryFilter('ALL'); }} activeFilters={[...(historySearch ? [{ id: 'search', label: `Arama: ${historySearch}`, onRemove: () => setHistorySearch('') }] : []), ...(historyFilter !== 'ALL' ? [{ id: 'status', label: historyFilter === 'ACTIVE' ? 'Yalnız aktif' : historyFilter === 'CLOSED' ? 'Kapalı / sona ermiş' : historyFilter === 'POINT_OVERRIDE' ? 'Kalıcı istisna' : 'Geçici', onRemove: () => setHistoryFilter('ALL') }] : [])]}>
+        <input aria-label="Görevlendirme geçmişinde ara" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Teknisyen / neden / oluşturan ara" />
+        <select aria-label="Görevlendirme durumu" value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı / sona ermiş</option><option value="POINT_OVERRIDE">Kalıcı nokta istisnası</option><option value="TEMPORARY">Geçici</option></select>
+      </AdminFilterToolbar>
       <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>Neden</th><th></th></tr></thead><tbody>
         {baseError || pointError ? <tr><td colSpan={7}>Görevlendirme verileri alınamadı. Yukarıdaki yeniden deneme aksiyonunu kullanın.</td></tr> : baseLoading || pointLoading ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Görevlendirmeler yükleniyor</strong><span>Nokta geçmişi hazırlanıyor.</span></div></td></tr> : !pointId || !history ? <tr><td colSpan={7}>Görevlendirmeleri görmek için nokta seçin.</td></tr> : !filteredHistory.length ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="search" /><strong>Görevlendirme kaydı yok</strong><span>Seçili filtrelerde kayıt bulunamadı.</span></div></td></tr> : filteredHistory.map((a) => {
           const timing = assignmentTimingStatus(a, now);

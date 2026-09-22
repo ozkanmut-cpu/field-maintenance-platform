@@ -1,8 +1,25 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
 
 const source = readFileSync(new URL('./anomaly-review.tsx', import.meta.url), 'utf8');
+const require = createRequire(import.meta.url);
+
+test('anomaly filters combine text, technician and review type without mutating the queue', () => {
+  const ts = require('typescript');
+  const js = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const mod = { exports: {} };
+  const localRequire = (id) => id === './admin-icons' || id === './accessible-table' || id === './admin-primitives' ? new Proxy({}, { get: () => () => null }) : require(id);
+  new Function('require', 'module', 'exports', js)(localRequire, mod, mod.exports);
+  const items = [
+    { id: 'a', technician: { id: 't1', name: 'Ayşe' }, point: { code: 'P1', name: 'Kafe' }, reviewReason: 'GPS uzak', locationReviewRequired: true, suspiciousBatch: false, enteredLate: false },
+    { id: 'b', technician: { id: 't2', name: 'Mert' }, point: { code: 'P2', name: 'Market' }, reviewReason: 'seri', locationReviewRequired: false, suspiciousBatch: true, enteredLate: false },
+  ];
+  assert.deepEqual(mod.exports.filterAnomalyQueue(items, { search: 'gps', technicianId: 't1', reviewType: 'LOCATION' }).map((item) => item.id), ['a']);
+  assert.deepEqual(mod.exports.filterAnomalyQueue(items, { search: '', technicianId: '', reviewType: 'SUSPICIOUS' }).map((item) => item.id), ['b']);
+  assert.equal(items.length, 2);
+});
 
 test('anomaly review presents real queue metrics and keeps location decisions separate from maintenance approval', () => {
   assert.match(source, /Konum & Anomali İnceleme/);

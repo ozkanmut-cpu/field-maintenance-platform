@@ -12,7 +12,7 @@ function auditModule() {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const mod = { exports: {} };
-  const auditRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : id === './accessible-table' ? { AccessibleTable: ({ children }) => children } : require(id);
+  const auditRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : id === './accessible-table' ? { AccessibleTable: ({ children }) => children } : id === './admin-primitives' ? { AdminFilterToolbar: ({ children }) => children, AdminListState: () => null } : require(id);
   new Function('require', 'module', 'exports', js)(auditRequire, mod, mod.exports);
   return mod.exports;
 }
@@ -67,6 +67,17 @@ test('shown count labels are bounded to the loaded 300-record dataset', () => {
   const { auditShownCountLabel } = auditModule();
   assert.equal(auditShownCountLabel('', 300), 'Yüklenen 300 kaydın tamamı (en fazla 300)');
   assert.equal(auditShownCountLabel('konum', 300), 'Yüklenen en fazla 300 kayıt içinde metin aramasına uyan kayıt');
+});
+
+test('audit default window covers previous and current week and date filtering is inclusive', () => {
+  const { auditDefaultDateRange, filterAuditItems } = auditModule();
+  assert.deepEqual(auditDefaultDateRange(new Date('2026-09-22T12:00:00.000Z')), { from: '2026-09-14', to: '2026-09-27' });
+  const items = [
+    { id: 'before', createdAt: '2026-09-13T23:59:59.000Z', actor: { id: '1', name: 'A', username: 'a', role: 'ADMIN' }, entityType: 'POINT', entityId: '1', action: 'EDIT' },
+    { id: 'from', createdAt: '2026-09-14T00:00:00.000Z', actor: { id: '1', name: 'A', username: 'a', role: 'ADMIN' }, entityType: 'POINT', entityId: '1', action: 'EDIT' },
+    { id: 'to', createdAt: '2026-09-27T23:59:59.000Z', actor: { id: '1', name: 'A', username: 'a', role: 'ADMIN' }, entityType: 'POINT', entityId: '1', action: 'EDIT' },
+  ];
+  assert.deepEqual(filterAuditItems(items, { search: '', from: '2026-09-14', to: '2026-09-27' }).map((item) => item.id), ['from', 'to']);
 });
 
 test('detail focus fallback is an enabled, connected audit heading while a refresh is busy', () => {

@@ -14,7 +14,7 @@ function panel() {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const mod = { exports: {} };
-  const panelRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : require(id);
+  const panelRequire = (id) => id === './admin-icons' ? { AdminIcon: () => null } : id === './admin-primitives' ? { AdminFilterToolbar: ({ children }) => children } : require(id);
   new Function('require', 'module', 'exports', js)(panelRequire, mod, mod.exports);
   return mod.exports;
 }
@@ -112,6 +112,17 @@ test('assignment actions remain busy while any overlapping point, mutation, or a
   assert.equal(isAssignmentBusy({ point: false, mutation: true, audit: false }), true);
   assert.equal(isAssignmentBusy({ point: false, mutation: false, audit: true }), true);
   assert.equal(isAssignmentBusy({ point: false, mutation: false, audit: false }), false);
+});
+
+test('assignment list filters combine status, kind and text consistently', () => {
+  const { filterAssignments } = panel();
+  const now = new Date('2026-09-19T12:00:00.000Z');
+  const assignments = [
+    { id: 'active', active: true, startsAt: '2026-09-19T11:00:00.000Z', endsAt: null, kind: 'POINT_OVERRIDE', technician: { name: 'Ayşe' }, createdBy: { name: 'Admin' }, reason: 'İzin' },
+    { id: 'closed', active: false, startsAt: '2026-09-18T11:00:00.000Z', endsAt: null, kind: 'TEMPORARY', technician: { name: 'Mert' }, createdBy: { name: 'Admin' }, reason: 'Vardiya' },
+  ];
+  assert.deepEqual(filterAssignments(assignments, { status: 'ACTIVE', search: 'ayşe' }, now).map((item) => item.id), ['active']);
+  assert.deepEqual(filterAssignments(assignments, { status: 'TEMPORARY', search: '' }, now).map((item) => item.id), ['closed']);
 });
 
 test('a planned assignment refreshes the effective technician at its start boundary', () => {
