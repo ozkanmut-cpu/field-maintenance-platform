@@ -10,7 +10,25 @@ import { pointListScrollKey, pointListValues } from './admin-navigation-runtime.
 type Point = { id: string; code: string; name: string; status: 'ACTIVE' | 'PASSIVE' | 'CANCELLED'; maintenanceType: 'STANDARD' | 'SMARTCLEAN'; address?: string | null; updatedAt?: string | null; region?: { id: string; name: string; technician?: { id: string; name: string; username: string; active: boolean } | null } | null; locationSource?: string | null; locationConfidence?: number | null; aliases: Array<{ alias: string }> };
 type Props = { location: AdminLocation; onNavigate: (section: AdminSection, values?: Omit<AdminLocation, 'section'>) => void };
 const pageSize = 25;
+const pointListPreferencesKey = 'admin:points:filters';
 const statusLabels: Record<Point['status'], string> = { ACTIVE: 'Aktif', PASSIVE: 'Pasif', CANCELLED: 'İptal' };
+type PointListPreferences = { query: string; status: string; region: string; maintenanceType: string };
+
+function readPointListPreferences(): PointListPreferences | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(pointListPreferencesKey);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<PointListPreferences>;
+    if (typeof value.query !== 'string' || typeof value.status !== 'string' || typeof value.region !== 'string' || typeof value.maintenanceType !== 'string') return null;
+    if (!['ALL', 'ACTIVE', 'PASSIVE', 'CANCELLED'].includes(value.status)) return null;
+    if (!['ALL', 'STANDARD', 'SMARTCLEAN'].includes(value.maintenanceType)) return null;
+    return { query: value.query, status: value.status, region: value.region, maintenanceType: value.maintenanceType };
+  } catch { return null; }
+}
+function persistPointListPreferences(value: PointListPreferences) {
+  sessionStorage.setItem(pointListPreferencesKey, JSON.stringify(value));
+}
 
 function maintenanceTypeLabel(value: Point['maintenanceType']) { return value === 'SMARTCLEAN' ? 'Smart Clean' : 'Standart Bakım'; }
 function locationSummary(point: Point) {
@@ -20,7 +38,15 @@ function locationSummary(point: Point) {
 function formatShortDateTime(value?: string | null) {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+  const day = part('day');
+  const rawMonth = part('month').replace('.', '');
+  const month = rawMonth ? `${rawMonth[0].toLocaleUpperCase('tr-TR')}${rawMonth.slice(1)}` : '';
+  const hour = part('hour');
+  const minute = part('minute');
+  return `${day} ${month} · ${hour}:${minute}`;
 }
 function groupPointsByIdentity(points: Point[]) {
   const groups = new Map<string, Point[]>();
@@ -43,13 +69,24 @@ export default function PointList({ location, onNavigate }: Props) {
   const restoredLocation = useRef('');
 
   useEffect(() => { void (async () => { try { const response = await fetch('/api/backend/points'); if (!response.ok) throw new Error(`HTTP ${response.status}`); setPoints(await response.json()); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setLoading(false); } })(); }, []);
-  useEffect(() => { setQuery(location.query ?? ''); setStatus(location.status ?? 'ALL'); setRegion(location.region ?? 'ALL'); setMaintenanceType(location.maintenanceType ?? 'ALL'); setPage(Math.max(1, Number(location.page ?? '1') || 1)); }, [location.query, location.status, location.region, location.maintenanceType, location.page]);
+  useEffect(() => {
+    const saved = readPointListPreferences();
+    const next = {
+      query: location.query ?? saved?.query ?? '',
+      status: location.status ?? saved?.status ?? 'ALL',
+      region: location.region ?? saved?.region ?? 'ALL',
+      maintenanceType: location.maintenanceType ?? saved?.maintenanceType ?? 'ALL',
+    };
+    setQuery(next.query); setStatus(next.status); setRegion(next.region); setMaintenanceType(next.maintenanceType);
+    setPage(Math.max(1, Number(location.page ?? '1') || 1));
+    if (location.query !== undefined || location.status !== undefined || location.region !== undefined || location.maintenanceType !== undefined) persistPointListPreferences(next);
+  }, [location.query, location.status, location.region, location.maintenanceType, location.page]);
   const regions = useMemo(() => Array.from(new Map(points.filter((point) => point.region).map((point) => [point.region!.id, point.region!.name])).entries()).sort(([, left], [, right]) => left.localeCompare(right, 'tr')).map(([id, name]) => ({ id, name })), [points]);
   const visible = useMemo(() => points.filter((point) => { const text = [point.code, point.name, point.address, point.region?.name, ...point.aliases.map((item) => item.alias)].filter(Boolean).join(' ').toLocaleLowerCase('tr-TR'); return (!query || text.includes(query.toLocaleLowerCase('tr-TR'))) && (status === 'ALL' || point.status === status) && (region === 'ALL' || point.region?.id === region) && (maintenanceType === 'ALL' || point.maintenanceType === maintenanceType); }), [points, query, status, region, maintenanceType]);
-  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const groupedVisible = groupPointsByIdentity(visible);
+  const totalPages = Math.max(1, Math.ceil(groupedVisible.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const visiblePage = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const visibleGroups = groupPointsByIdentity(visiblePage);
+  const visibleGroups = groupedVisible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   function listValues(nextQuery = query, nextStatus = status, nextRegion = region, nextMaintenanceType = maintenanceType, nextPage = currentPage, scrollY = window.scrollY) {
     return pointListValues({ query: nextQuery, status: nextStatus, region: nextRegion, maintenanceType: nextMaintenanceType, page: nextPage, scrollY });
@@ -61,6 +98,7 @@ export default function PointList({ location, onNavigate }: Props) {
   }
   function pushListLocation(nextQuery = query, nextStatus = status, nextRegion = region, nextMaintenanceType = maintenanceType, nextPage = currentPage) {
     rememberListScroll();
+    persistPointListPreferences({ query: nextQuery, status: nextStatus, region: nextRegion, maintenanceType: nextMaintenanceType });
     const next = listValues(nextQuery, nextStatus, nextRegion, nextMaintenanceType, nextPage, 0);
     window.history.pushState({ scrollY: 0 }, '', buildAdminLocation('points', next));
   }

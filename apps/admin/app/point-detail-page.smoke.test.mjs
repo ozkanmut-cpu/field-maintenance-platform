@@ -134,14 +134,30 @@ test('point detail exposes a single mockup-aligned identity and operations summa
   assert.match(source, /locationSummary/);
   assert.match(source, /Google doğrulandı/);
   assert.match(source, /Son bakım/);
-  assert.match(source, /Teyit girilen bakım/);
+  assert.match(source, /Teyit durumu/);
+  assert.match(source, /Girilen bakım/);
   assert.match(source, /Soğutucu/);
   assert.match(source, /Servis fişi/);
-  assert.match(source, /Admin kararı/);
+  assert.doesNotMatch(source, /Admin kararı/);
   assert.match(source, /title=\{`Kaynak:/,
     'Technical source values may appear only as supplemental badge metadata');
   assert.equal((source.match(/>Düzenle</g) ?? []).length, 1,
     'Point detail has one primary edit action');
+});
+
+test('point detail latest decision summary uses only fields returned by the point timeline contract', () => {
+  const source = readFileSync(path, 'utf8');
+
+  assert.doesNotMatch(source, /confirmationEnteredMaintenanceAt|confirmationEnteredAt|confirmationAt/,
+    'The timeline contract does not return a separate confirmation entry timestamp');
+  assert.doesNotMatch(source, /adminDecision/,
+    'Maintenance timeline rows do not return a fabricated admin decision field');
+  assert.match(source, /paperworkStatus\(latestMaintenanceData\?\.confirmationStatus\)/,
+    'The latest summary must use the real confirmation status');
+  assert.match(source, /latestMaintenanceData\?\.enteredLate/,
+    'The summary may identify a late-entered maintenance using the real timeline flag');
+  assert.match(source, /latestMaintenanceData\?\.maintainedCoolerCount/,
+    'The summary may show maintained cooler counts when the real source contains them');
 });
 
 test('point detail manages aliases only through the supported list and add contract', () => {

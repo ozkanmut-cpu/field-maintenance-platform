@@ -167,8 +167,8 @@ export default function PointDetailPage({ location, onNavigate: navigate }: Prop
   const navigateTab = (detailTab: string) => detailTab === 'points' ? returnToPoints() : onNavigate('point-detail', { pointId, detailTab, query: location.query, status: location.status, region: location.region, maintenanceType: location.maintenanceType, page: location.page, scrollY: location.scrollY });
   const latestMaintenance = recentActivity?.find((item) => item.type === 'MAINTENANCE');
   const latestMaintenanceData = latestMaintenance ? timelineData(latestMaintenance) : null;
-  const confirmationMaintenanceAt = latestMaintenanceData?.confirmationEnteredMaintenanceAt ?? latestMaintenanceData?.confirmationEnteredAt ?? latestMaintenanceData?.confirmationAt;
-  const coolerSummary = typeof latestMaintenanceData?.maintainedCoolerCount === 'number' && typeof latestMaintenanceData?.totalCoolerCount === 'number' ? `${latestMaintenanceData.maintainedCoolerCount}/${latestMaintenanceData.totalCoolerCount}` : '—';
+  const enteredMaintenanceSummary = latestMaintenanceData?.enteredLate === true ? 'Geriye dönük' : latestMaintenanceData?.enteredLate === false ? 'Zamanında' : 'Kayıtta yok';
+  const coolerSummary = typeof latestMaintenanceData?.maintainedCoolerCount === 'number' && typeof latestMaintenanceData?.totalCoolerCount === 'number' ? `${latestMaintenanceData.maintainedCoolerCount}/${latestMaintenanceData.totalCoolerCount}` : 'Kayıtta yok';
   const header = <section className="pointIdentity" aria-label="Nokta kimliği ve durum">
     <nav aria-label="İçerik yolu" className="muted"><span>Nokta Yönetimi</span> / <span>Noktalar</span> / <strong>{point.name}</strong></nav>
     <div className="panelHeader"><div><h2>{point.name}</h2><p>{point.code} · {point.region?.name ?? 'Bölge yok'} · {point.address ?? 'Adres yok'}</p></div>
@@ -183,10 +183,10 @@ export default function PointDetailPage({ location, onNavigate: navigate }: Prop
     <div className="pointAliases" aria-label="Nokta aliasları">{aliases.length ? aliases.map((alias, index) => <span className="pill" key={alias.id ?? index}>{alias.alias}</span>) : <span className="muted">Henüz alias yok · Alias ekle</span>}</div>
     <div className="metricGrid" role="region" aria-label="Son bakım özeti">
       <div className="metricCard"><span>Son bakım</span><strong>{formatDateTime(latestMaintenance?.at)}</strong></div>
-      <div className="metricCard"><span>Teyit girilen bakım</span><strong>{formatDateTime(confirmationMaintenanceAt)}</strong></div>
+      <div className="metricCard"><span>Teyit durumu</span><strong>{paperworkStatus(latestMaintenanceData?.confirmationStatus)}</strong></div>
+      <div className="metricCard"><span>Girilen bakım</span><strong>{enteredMaintenanceSummary}</strong></div>
       <div className="metricCard"><span>Soğutucu</span><strong>{coolerSummary}</strong></div>
       <div className="metricCard"><span>Servis fişi</span><strong>{paperworkStatus(latestMaintenanceData?.serviceSlipStatus)}</strong></div>
-      <div className="metricCard"><span>Admin kararı</span><strong>{paperworkStatus(latestMaintenanceData?.adminDecision ?? latestMaintenanceData?.reviewStatus)}</strong></div>
     </div>
     <p className="muted" aria-live="polite">Son hareket: {activityError ? `Yüklenemedi · ${activityError}` : recentActivity === null ? 'Yükleniyor…' : recentActivity.length ? `${timelineTitle(recentActivity[0].type)} · ${formatDateTime(recentActivity[0].at)}` : 'Kayıt yok'}</p>
   </section>;

@@ -55,3 +55,20 @@ test('point list presents mockup-aligned human labels, filters, grouping and tim
   assert.doesNotMatch(source, />SMARTCLEAN</);
   assert.doesNotMatch(source, />ACTIVE</);
 });
+
+test('point list restores safe filter preferences, formats compact timestamps, and paginates whole identity groups', () => {
+  const source = readFileSync(pointListPath, 'utf8');
+
+  assert.match(source, /pointListPreferencesKey/,
+    'Point filters need a dedicated session preference key');
+  assert.match(source, /sessionStorage\.getItem\(pointListPreferencesKey\)/,
+    'Returning from another sidebar section must restore saved point filters');
+  assert.match(source, /sessionStorage\.setItem\(pointListPreferencesKey/,
+    'Every point filter change must persist the current safe preference set');
+  assert.match(source, /const groupedVisible = groupPointsByIdentity\(visible\)/,
+    'Duplicate point identities must be grouped before pagination');
+  assert.match(source, /const visibleGroups = groupedVisible\.slice/,
+    'Pagination must slice whole groups rather than individual duplicate rows');
+  assert.match(source, /`\$\{day\} \$\{month\} · \$\{hour\}:\$\{minute\}`/,
+    'List timestamps must use the exact compact 21 Eyl · 16:48 shape');
+});
