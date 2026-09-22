@@ -76,6 +76,54 @@ AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_T
 - [x] SAP confirmation synchronization — production runtime runs every 10 minutes with normal `Operasyon → Hizmet teyitleri` search, 14-day window, product 203, max 1000, date-scoped DB deletion and guarded logout; repository integration is merged to `main` and production-verified
 - [x] SAP Web CRM browser automation proof-of-concept — superseded by the working production automation; Playwright + Firefox specifically is no longer required
 
+
+## Active TODO — Full admin visual redesign
+
+> Scope: only the admin panel's visual design and user experience. Backend contracts, CI/release mechanics, SAP, database and mobile work are deliberately outside this TODO.
+
+### Visual direction
+
+- [ ] Use the approved easy-to-use visual language: calm deep-navy navigation, bright white content surfaces, generous whitespace, clear blue primary actions and restrained green/amber/red statuses.
+- [ ] Keep desktop navigation wide and text-visible by default. Every group and submenu label remains visible; tablet and phone use a readable drawer rather than icon-only navigation.
+- [ ] Apply one consistent hierarchy across the entire admin: breadcrumb → title → short purpose → one primary action → content.
+- [ ] Use shared spacing, typography, panel, card, badge/chip, button, filter, table, dialog, loading, empty, error and success styles. Avoid screen-specific ad-hoc visuals.
+- [ ] Keep controls legible and touch-friendly; preserve visible focus, semantic labels and horizontal table scrolling.
+
+### Dashboard and reports
+
+- [ ] Redesign Operations Dashboard as a task-first home: at most three real priority metrics, a prominent “Bugünün işleri” queue, compact technician activity and one obvious primary action.
+- [ ] Give KPI/Raporlama, Teknisyen Günlük Özeti and Sanal İstatistikçi the same card hierarchy, calm density and readable drill-down patterns.
+- [ ] Replace dense visual noise with progressive disclosure: summaries first, details only when the user asks for them.
+
+### Operations and review
+
+- [ ] Redesign Bakım Takvimi, Görevlendirmeler, Bakım Dışı Ziyaretler and Evrak Yönetimi with shared page headers, filter bars, selection feedback, readable tables and clear action priority.
+- [ ] Redesign Yapılamadı, Konum & Anomali and fiş/teyit review surfaces so the current decision, its consequence and the next action are immediately understandable.
+- [ ] Standardize loading, no-result, error and completed states across these screens.
+
+### Point management
+
+- [ ] Redesign Noktalar, Ayar Bekleyenler, Bölgeler, SAP/Google, Mükerrer Noktalar, Timeline and Prospects as consistent list-to-detail journeys with search/filter context visibly preserved.
+- [ ] Redesign Nokta Detay to the approved mockup: point identity and three critical statuses at the top, one primary “Düzenle” action, secondary “Geri dön”, and clear Genel/Konum/Bakım/Atamalar/Evrak/Timeline/Audit tabs.
+- [ ] Make point detail sections skimmable: compact information groups, aliases as chips, short recent activity and detail-on-demand instead of a dense wall of fields.
+
+### Bulk operations
+
+- [ ] Redesign Toplu İşlemler around the approved safety flow: Filtre → Seçim → Önizleme → Açık onay → Uygulama → Audit.
+- [ ] Keep filter controls compact and understandable; show selected count persistently while selecting points.
+- [ ] Make preview unmistakable: current value → new value, affected count and warnings live in a separate confirmation panel.
+- [ ] Require a highly visible acknowledgement before the primary apply action; show the audit result as the final state.
+
+### Users and system
+
+- [ ] Bring Kullanıcılar, Yardım Yetkileri, SAP Senkronizasyonu and İşlem Geçmişi into the same shared visual system.
+- [ ] Make filter-heavy and audit-heavy pages easy to scan with clear labels, readable JSON/detail panels and keyboard-friendly controls.
+
+### Responsive visual quality
+
+- [ ] Validate every redesigned screen at desktop, tablet and phone widths.
+- [ ] On narrow screens, preserve label visibility in the drawer, stack actions/filters naturally, prevent button overflow and keep dialogs/table regions usable.
+
 ## Current near-term priorities
 
 Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
