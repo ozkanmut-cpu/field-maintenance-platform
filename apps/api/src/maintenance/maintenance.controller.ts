@@ -12,6 +12,7 @@ import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
 import { ResolveReviewDto } from './dto/resolve-review.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
+import { RevertNonMaintenanceVisitDto } from './dto/revert-non-maintenance-visit.dto';
 import { ReviewAttemptDto } from './dto/review-attempt.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
 import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
@@ -207,6 +208,12 @@ export class MaintenanceController {
   @Post('non-maintenance-visit')
   nonMaintenanceVisit(@CurrentUser() user: AuthenticatedUser, @Body() dto: NonMaintenanceVisitDto) {
     return this.nonMaintenanceVisits.create({ ...dto, technicianId: user.id });
+  }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Post('non-maintenance-visit/revert')
+  revertNonMaintenanceVisit(@CurrentUser() user: AuthenticatedUser, @Body() dto: RevertNonMaintenanceVisitDto) {
+    return this.nonMaintenanceVisits.revert({ ...dto, userId: user.id });
   }
 
   @Roles(UserRole.ADMIN)
