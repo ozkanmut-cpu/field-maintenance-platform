@@ -40,6 +40,10 @@ test('paperwork center has no selection or bulk-apply affordance', () => {
 
 test('paperwork rows expose counts, final single-record decisions and audit detail', () => {
   assert.match(source, /Teyit \/ Girilen Bakım \/ Soğutucu/);
+  assert.match(source, /Teyit adedi kaynak veride yok/,
+    'an unavailable confirmation count must be identified honestly');
+  assert.doesNotMatch(source, /confirmationCount|confirmationApprovalSource|Manuel final/,
+    'the UI must not rely on fields absent from technician-history');
   assert.match(source, /Teyit Onaylandı/);
   assert.match(source, /Teyit Yok/);
   assert.match(source, /Teyit Eksik/);

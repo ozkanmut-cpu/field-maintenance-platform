@@ -18,11 +18,12 @@ test('paperwork range and technician changes invalidate list and audit context',
   assert.match(source, /aria-label="Evrak teknisyeni filtresi"[\s\S]{0,250}invalidateList\(\)/);
 });
 
-test('paperwork mutations use a row-owned busy and retry state', () => {
-  assert.match(source, /const \[mutationVisitId, setMutationVisitId\] = useState\(''\)/);
+test('paperwork mutations use action-owned busy and retry state', () => {
+  assert.match(source, /const \[mutationActions, setMutationActions\] = useState<Record<string, boolean>>\(\{\}\)/);
   assert.match(source, /const \[rowErrors, setRowErrors\] = useState<Record<string, RowError>>\(\{\}\)/);
-  assert.match(source, /const rowBusy = mutationVisitId === visit\.id/);
-  assert.match(source, /rowErrors\[visit\.id\][\s\S]{0,350}Tekrar dene/);
+  assert.match(source, /function actionKey\(visitId: string, action: RowAction\)/);
+  assert.match(source, /setMutationActions\(\(current\) => \(\{ \.\.\.current, \[key\]: true \}\)\)/);
+  assert.match(source, /rowErrors\[visit\.id\][\s\S]{0,500}Tekrar dene/);
 });
 
 test('paperwork history and analytics each reject stale responses', () => {

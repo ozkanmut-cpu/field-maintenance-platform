@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
 import { AdminFilterToolbar, AdminListState, AdminPanel } from './admin-primitives';
 import { AccessibleTable } from './accessible-table';
-import { LatestRequest, RequestActivity } from './latest-request.mjs';
+import { LatestRequest, mapWithConcurrency, RequestActivity } from './latest-request.mjs';
 
 type User = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Region = { id: string; name: string };
@@ -19,10 +19,8 @@ type MaintenanceItem = {
   performedAt?: string;
   totalCoolerCount?: number | null;
   maintainedCoolerCount?: number | null;
-  confirmationCount?: number | null;
   serviceSlipStatus?: PaperworkStatus;
   confirmationStatus?: PaperworkStatus;
-  confirmationApprovalSource?: 'AUTO_SAP' | 'MANUAL_ADMIN' | null;
   point?: { id: string; code: string; name: string; maintenanceType?: string };
   technicianId?: string;
   technicianName?: string;
@@ -84,6 +82,12 @@ function formatMinutes(value: number | null) {
 function isUnresolved(status?: PaperworkStatus) {
   return status !== 'APPROVED';
 }
+function actionKey(visitId: string, action: RowAction) {
+  return `${visitId}:${action.kind}:${action.status}:${action.note}`;
+}
+function confirmationLabel(status: PaperworkStatus) {
+  return status === 'MISSING' ? 'Eksik / yok' : statusLabel[status];
+}
 
 export default function PaperworkManagement() {
   const initialRange = useMemo(defaultPaperworkRange, []);
@@ -103,7 +107,7 @@ export default function PaperworkManagement() {
   const [visitsBusy, setVisitsBusy] = useState(false);
   const [visitsError, setVisitsError] = useState('');
   const [visitsLoaded, setVisitsLoaded] = useState(false);
-  const [mutationVisitId, setMutationVisitId] = useState('');
+  const [mutationActions, setMutationActions] = useState<Record<string, boolean>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, RowError>>({});
   const [notice, setNotice] = useState('');
   const [historyVisitId, setHistoryVisitId] = useState('');
@@ -165,7 +169,8 @@ export default function PaperworkManagement() {
     const selectedTechnicians = technicianId === 'ALL' ? technicians : technicians.filter((item) => item.id === technicianId);
     const pointMap = new Map(points.map((point) => [point.id, point]));
     try {
-      const requests = selectedTechnicians.flatMap((technician) => dateKeys(from, to).map(async (date) => {
+      const requests = selectedTechnicians.flatMap((technician) => dateKeys(from, to).map((date) => ({ technician, date })));
+      const rows = (await mapWithConcurrency(requests, 6, async ({ technician, date }) => {
         const data = await api<TechnicianHistory>(`/api/backend/maintenance/technician-history?technicianId=${encodeURIComponent(technician.id)}&date=${encodeURIComponent(date)}`);
         return data.items.filter((item) => item.type === 'MAINTENANCE').map((item) => {
           const point = item.point ? pointMap.get(item.point.id) : undefined;
@@ -177,8 +182,7 @@ export default function PaperworkManagement() {
             regionName: point?.region?.name,
           };
         });
-      }));
-      const rows = (await Promise.all(requests)).flat();
+      })).flat();
       if (!visitsRequests.current.isCurrent(requestEpoch)) return;
       setVisits(Array.from(new Map(rows.map((row) => [row.id, row])).values()).sort((left, right) =>
         new Date(right.performedAt || right.at).getTime() - new Date(left.performedAt || left.at).getTime()));
@@ -254,7 +258,8 @@ export default function PaperworkManagement() {
   }, [visits, search, regionId, filterStatus, confirmationFilter, slipFilter]);
 
   async function updateOne(visitId: string, action: RowAction) {
-    setMutationVisitId(visitId);
+    const key = actionKey(visitId, action);
+    setMutationActions((current) => ({ ...current, [key]: true }));
     setNotice('');
     setRowErrors((current) => { const next = { ...current }; delete next[visitId]; return next; });
     try {
@@ -265,7 +270,7 @@ export default function PaperworkManagement() {
       setVisits((current) => current.map((visit) => visit.id === visitId ? {
         ...visit,
         ...(action.kind === 'CONFIRMATION'
-          ? { confirmationStatus: action.status, ...(action.status === 'APPROVED' ? { confirmationApprovalSource: 'MANUAL_ADMIN' as const } : {}) }
+          ? { confirmationStatus: action.status }
           : { serviceSlipStatus: action.status }),
       } : visit));
       setNotice('Kaydedildi.');
@@ -276,7 +281,7 @@ export default function PaperworkManagement() {
         [visitId]: { message: cause instanceof Error ? cause.message : String(cause), action },
       }));
     } finally {
-      setMutationVisitId('');
+      setMutationActions((current) => { const next = { ...current }; delete next[key]; return next; });
     }
   }
 
@@ -299,6 +304,7 @@ export default function PaperworkManagement() {
   const pendingCount = visible.filter((visit) => isUnresolved(visit.confirmationStatus) || isUnresolved(visit.serviceSlipStatus)).length;
   const missingConfirmationCount = visible.filter((visit) => visit.confirmationStatus === 'MISSING').length;
   const missingSlipCount = visible.filter((visit) => visit.serviceSlipStatus === 'MISSING').length;
+  const historyVisit = visits.find((visit) => visit.id === historyVisitId);
   const activeFilters = [
     ...(filterStatus === 'PENDING' ? [{ id: 'pending', label: 'Yalnız bekleyenler', onRemove: () => setFilterStatus('ALL') }] : []),
     ...(regionId !== 'ALL' ? [{ id: 'region', label: `Bölge: ${regions.find((item) => item.id === regionId)?.name || regionId}`, onRemove: () => setRegionId('ALL') }] : []),
@@ -359,25 +365,30 @@ export default function PaperworkManagement() {
         <tbody>{visible.map((visit) => {
           const confirmationStatus = visit.confirmationStatus || 'PENDING';
           const slipStatus = visit.serviceSlipStatus || 'PENDING';
-          const rowBusy = mutationVisitId === visit.id;
-          const confirmationFinal = confirmationStatus === 'APPROVED' && visit.confirmationApprovalSource === 'MANUAL_ADMIN';
+          const confirmationApproved: RowAction = { kind: 'CONFIRMATION', status: 'APPROVED', note: 'Teyit admin tarafından onaylandı.' };
+          const confirmationNone: RowAction = { kind: 'CONFIRMATION', status: 'MISSING', note: 'Teyit yok.' };
+          const confirmationIncomplete: RowAction = { kind: 'CONFIRMATION', status: 'MISSING', note: 'Teyit eksik.' };
+          const slipApproved: RowAction = { kind: 'SERVICE_SLIP', status: 'APPROVED', note: 'Servis fişi var.' };
+          const slipMissing: RowAction = { kind: 'SERVICE_SLIP', status: 'MISSING', note: 'Servis fişi yok.' };
+          const isBusy = (action: RowAction) => Boolean(mutationActions[actionKey(visit.id, action)]);
+          const rowBusy = Object.keys(mutationActions).some((key) => key.startsWith(`${visit.id}:`));
           return <tr key={visit.id}>
             <td><strong>{visit.point?.name || '—'}</strong><div className="muted">{visit.point?.code || '—'} · {visit.regionName || 'Bölge yok'}</div></td>
             <td>{visit.technicianName || '—'}</td>
             <td>{new Date(visit.performedAt || visit.at).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-            <td><strong>{visit.confirmationCount ?? '—'} / {visit.maintainedCoolerCount ?? '—'} / {visit.totalCoolerCount ?? '—'}</strong></td>
+            <td><strong><span title="Teyit adedi kaynak veride yok">—</span> / {visit.maintainedCoolerCount ?? '—'} / {visit.totalCoolerCount ?? '—'}</strong></td>
             <td>
               <div className="rowActions">
-                <button className={confirmationStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={confirmationStatus === 'APPROVED'} disabled={rowBusy || confirmationFinal} onClick={() => void updateOne(visit.id, { kind: 'CONFIRMATION', status: 'APPROVED', note: 'Teyit admin tarafından onaylandı.' })}>Teyit Onaylandı</button>
-                <button className={confirmationStatus === 'MISSING' ? 'small danger' : 'small ghost'} aria-pressed={confirmationStatus === 'MISSING'} disabled={rowBusy || confirmationFinal} onClick={() => void updateOne(visit.id, { kind: 'CONFIRMATION', status: 'MISSING', note: 'Teyit yok.' })}>Teyit Yok</button>
-                <button className="small ghost" aria-pressed={false} disabled={rowBusy || confirmationFinal} onClick={() => void updateOne(visit.id, { kind: 'CONFIRMATION', status: 'MISSING', note: 'Teyit eksik.' })}>Teyit Eksik</button>
-                <span className="pill">{statusLabel[confirmationStatus]}{confirmationFinal ? ' · Manuel final' : ''}</span>
+                <button className={confirmationStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={confirmationStatus === 'APPROVED'} disabled={isBusy(confirmationApproved)} onClick={() => void updateOne(visit.id, confirmationApproved)}>Teyit Onaylandı</button>
+                <button className="small ghost" aria-pressed={false} disabled={isBusy(confirmationNone)} onClick={() => void updateOne(visit.id, confirmationNone)}>Teyit Yok</button>
+                <button className="small ghost" aria-pressed={false} disabled={isBusy(confirmationIncomplete)} onClick={() => void updateOne(visit.id, confirmationIncomplete)}>Teyit Eksik</button>
+                <span className="pill">{confirmationLabel(confirmationStatus)}</span>
               </div>
-              {rowErrors[visit.id] ? <div className="error banner" role="alert">{rowErrors[visit.id].message}<button className="small" disabled={rowBusy} onClick={() => void updateOne(visit.id, rowErrors[visit.id].action)}>Tekrar dene</button></div> : null}
+              {rowErrors[visit.id] ? <div className="error banner" role="alert">{rowErrors[visit.id].message}<button className="small" disabled={isBusy(rowErrors[visit.id].action)} onClick={() => void updateOne(visit.id, rowErrors[visit.id].action)}>Tekrar dene</button></div> : null}
             </td>
             <td><div className="rowActions">
-              <button className={slipStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={slipStatus === 'APPROVED'} disabled={rowBusy} onClick={() => void updateOne(visit.id, { kind: 'SERVICE_SLIP', status: 'APPROVED', note: 'Servis fişi var.' })}>Fiş Var</button>
-              <button className={slipStatus === 'MISSING' ? 'small danger' : 'small ghost'} aria-pressed={slipStatus === 'MISSING'} disabled={rowBusy} onClick={() => void updateOne(visit.id, { kind: 'SERVICE_SLIP', status: 'MISSING', note: 'Servis fişi yok.' })}>Fiş Yok</button>
+              <button className={slipStatus === 'APPROVED' ? 'small' : 'small ghost'} aria-pressed={slipStatus === 'APPROVED'} disabled={isBusy(slipApproved)} onClick={() => void updateOne(visit.id, slipApproved)}>Fiş Var</button>
+              <button className={slipStatus === 'MISSING' ? 'small danger' : 'small ghost'} aria-pressed={slipStatus === 'MISSING'} disabled={isBusy(slipMissing)} onClick={() => void updateOne(visit.id, slipMissing)}>Fiş Yok</button>
               <span className="pill">{statusLabel[slipStatus]}</span>
             </div></td>
             <td><button className="small ghost" disabled={rowBusy} onClick={() => void openHistory(visit.id)}>Detay</button></td>
@@ -388,6 +399,7 @@ export default function PaperworkManagement() {
 
     {historyVisitId ? <AdminPanel title="Evrak Değişiklik Geçmişi" titleId="paperwork-history-title"
       actions={<button className="ghost" onClick={() => { historyRequests.current.invalidate(); setHistoryVisitId(''); setHistory([]); }}><AdminIcon name="error" size={16} /> Kapat</button>}>
+      {historyVisit ? <div className="banner" aria-label="Kayıt bağlamı"><strong>{historyVisit.point?.name || '—'}</strong> · {historyVisit.technicianName || '—'} · {new Date(historyVisit.performedAt || historyVisit.at).toLocaleDateString('tr-TR')}</div> : null}
       {historyBusy ? <AdminListState state="loading" title="Geçmiş yükleniyor" /> :
       historyError ? <AdminListState state="error" title="Geçmiş alınamadı" description={historyError} onRetry={() => void openHistory(historyVisitId)} /> :
       history.length === 0 ? <AdminListState state="empty" title="Evrak değişikliği yok" description="Bu kayıt için audit geçmişi bulunmuyor." /> :

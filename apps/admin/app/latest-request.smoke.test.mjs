@@ -1,6 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { LatestRequest, RequestActivity } from './latest-request.mjs';
+import * as requestTools from './latest-request.mjs';
+
+const { LatestRequest, RequestActivity } = requestTools;
 
 function deferred() {
   let resolve;
@@ -68,4 +70,31 @@ test('a replacement request retains lane activity when the invalidated request f
   currentResponse.resolve();
   await current;
   assert.deepEqual(activity, [true, true, false]);
+});
+
+test('bounded request mapping never exceeds its concurrency limit and preserves order', async () => {
+  assert.equal(typeof requestTools.mapWithConcurrency, 'function', 'bounded mapper must be exported');
+  let active = 0;
+  let maximum = 0;
+  const gates = Array.from({ length: 5 }, deferred);
+  const pending = requestTools.mapWithConcurrency([0, 1, 2, 3, 4], 2, async (value) => {
+    active += 1;
+    maximum = Math.max(maximum, active);
+    await gates[value].promise;
+    active -= 1;
+    return value * 10;
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(maximum, 2);
+  gates[0].resolve();
+  gates[1].resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  gates[2].resolve();
+  gates[3].resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  gates[4].resolve();
+
+  assert.deepEqual(await pending, [0, 10, 20, 30, 40]);
+  assert.equal(maximum, 2);
 });

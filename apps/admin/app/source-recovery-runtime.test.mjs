@@ -77,13 +77,13 @@ const point = { id: 'p1', code: '100', name: 'Kordon Market', region: null };
 const visit = { type: 'MAINTENANCE', id: 'v1', at: '2026-09-21T10:00:00Z', performedAt: '2026-09-21T10:00:00Z', serviceSlipStatus: 'PENDING', confirmationStatus: 'PENDING', point };
 const kind = { statusCounts: { pending: 0, present: 0, missing: 0, approved: 0 }, statusRates: { pending: 0, present: 0, missing: 0, approved: 0 }, arrival: { completedCount: 0, medianMinutes: null, p90Minutes: null }, resolution: { resolvedCount: 0, medianMinutes: null, p90Minutes: null }, pendingAgeBuckets: { under24h: 0, h24to48: 0, d2to7: 0, d7plus: 0 } };
 const analytics = { from: '2026-09-01', to: '2026-09-21', technicianId: null, generatedAt: '2026-09-21T10:00:00Z', totalVisits: 0, serviceSlip: kind, confirmation: kind };
-function network(failures = new Set()) {
+function network(failures = new Set(), visitData = visit) {
   const calls = [];
   return { calls, failures, fetch: async url => {
     calls.push(url);
     const lane = url === '/api/backend/users' ? 'users' : url === '/api/backend/points' ? 'points' : url.includes('technician-history') ? 'visits' : url.includes('paperwork-analytics') ? 'analytics' : url.includes('paperwork-history') ? 'history' : url.includes('/assignments/point/') ? 'assignment' : 'effective';
     if (failures.has(lane)) return { ok: false, status: 503, json: async () => ({ message: lane + ' unavailable' }) };
-    const data = lane === 'users' ? [user] : lane === 'points' ? [point] : lane === 'visits' ? { date: '2026-09-21', maintenanceCount: 1, items: [visit] } : lane === 'analytics' ? analytics : lane === 'history' ? [] : lane === 'assignment' ? { point, assignments: [] } : { pointId: 'p1', source: 'REGION', technicianId: 't1', technician: user };
+    const data = lane === 'users' ? [user] : lane === 'points' ? [point] : lane === 'visits' ? { date: '2026-09-21', maintenanceCount: 1, items: [visitData] } : lane === 'analytics' ? analytics : lane === 'history' ? [] : lane === 'assignment' ? { point, assignments: [] } : { pointId: 'p1', source: 'REGION', technicianId: 't1', technician: user };
     return { ok: true, status: 200, json: async () => data };
   } };
 }
@@ -150,7 +150,11 @@ test('history failure opens its own retry without hiding visits or inventing emp
   await view.settle();
   button(view.tree(), /^Detay$/).props.onClick();
   await view.settle();
-  assert.match(text(panel(view, 'Evrak Değişiklik Geçmişi')), /history unavailable/);
+  const historyPanel = panel(view, 'Evrak Değişiklik Geçmişi');
+  assert.match(text(historyPanel), /history unavailable/);
+  assert.match(text(historyPanel), /Kordon Market/);
+  assert.match(text(historyPanel), /Teknisyen Ada/);
+  assert.match(text(historyPanel), /21\.09\.2026/);
   assert.doesNotMatch(text(view.tree()), /Evrak değişikliği yok/);
   assert.match(text(view.tree()), /Kordon Market/);
   net.failures.clear();
@@ -201,7 +205,20 @@ test('paperwork decisions update only their row without reloading the visit data
   assert.deepEqual(payloads, [{ visitId: 'v1', kind: 'CONFIRMATION', status: 'APPROVED', note: 'Teyit admin tarafından onaylandı.' }]);
   assert.equal(net.calls.filter(url => url.includes('technician-history')).length, visitCalls);
   assert.match(text(view.tree()), /Kaydedildi/);
-  assert.match(text(view.tree()), /Manuel final/);
+  assert.doesNotMatch(text(view.tree()), /Manuel final/,
+    'technician-history does not return a durable approval source');
+  view.unmount();
+});
+
+test('persisted missing confirmation is neutral because the API cannot distinguish yok from eksik', async () => {
+  const missingVisit = { ...visit, confirmationStatus: 'MISSING' };
+  const net = network(new Set(), missingVisit);
+  const view = mount('paperwork-management', net.fetch);
+  await view.settle();
+
+  assert.equal(button(view.tree(), /^Teyit Yok$/).props['aria-pressed'], false);
+  assert.equal(button(view.tree(), /^Teyit Eksik$/).props['aria-pressed'], false);
+  assert.match(text(view.tree()), /Eksik \/ yok/);
   view.unmount();
 });
 

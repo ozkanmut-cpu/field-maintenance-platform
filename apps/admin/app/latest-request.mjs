@@ -11,6 +11,22 @@ export class LatestRequest {
   }
 }
 
+export async function mapWithConcurrency(items, limit, mapper) {
+  if (!Number.isInteger(limit) || limit < 1) throw new RangeError('limit must be a positive integer');
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workerCount = Math.min(limit, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export class RequestActivity {
   #requests = new LatestRequest();
   #setActive;
