@@ -413,13 +413,13 @@ return (
 {loadError ? <div className="error banner" role="alert">{loadError}<button className="ghost" onClick={() => void load()} disabled={loading}>Kuyrukları tekrar yükle</button></div> : null}
 {activeSection === 'dashboard' ? <>
 <section className="metricGrid dashboardQueueMetrics" aria-label="Operasyon kuyrukları">
-<div className="metricCard dashboardPriorityState">
+<div className="dashboardPriorityState">
 {loading ? <AdminListState state="loading" title="Ayar bekleyenler yükleniyor" description="Gerçek kuyruk sayacı hazırlanıyor." /> : loadError ? <AdminListState state="error" title="Ayar bekleyenler alınamadı" description="Kuyruğu yeniden yükleyin." onRetry={() => void load()} /> : <MetricCard label="Ayar bekleyen" value={setupPending.length} description="Ayar bekleyenler ekranını aç" section="setup-pending" onNavigate={onNavigate} />}
 </div>
-<div className="metricCard dashboardPriorityState">
+<div className="dashboardPriorityState">
 {loading ? <AdminListState state="loading" title="Bekleyen onaylar yükleniyor" description="Gerçek kuyruk sayacı hazırlanıyor." /> : loadError ? <AdminListState state="error" title="Bekleyen onaylar alınamadı" description="Kuyruğu yeniden yükleyin." onRetry={() => void load()} /> : <MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı onaylarını aç" section="approvals" onNavigate={onNavigate} />}
 </div>
-<div className="metricCard dashboardPriorityState">
+<div className="dashboardPriorityState">
 {dailySummaryLoading ? <AdminListState state="loading" title="Geciken işler yükleniyor" description="Bakım takvimi sayacı hazırlanıyor." /> : dailySummary ? <MetricCard label="Geciken açık iş" value={dailySummary.metrics.overdueOpen} description="Bakım takviminde gecikenleri aç" section="maintenance-calendar" onNavigate={onNavigate} /> : <AdminListState state="error" title="Geciken iş sayısı alınamadı" description="Günlük özeti yeniden yükleyin." onRetry={() => void loadDailySummary()} />}
 </div>
 </section>

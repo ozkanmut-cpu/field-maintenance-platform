@@ -3,6 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('./operations.tsx', import.meta.url), 'utf8');
+const styles = fs.readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
 
 test('operations dashboard loads the admin daily summary for an Istanbul business date', () => {
   assert.match(source, /admin-daily-summary\?date=/);
@@ -28,8 +29,11 @@ test('daily summary clears stale data and refreshes whenever the dashboard becom
 
 test('dashboard preserves exactly three priority slots with card-level loading and retry states', () => {
   const prioritySection = source.match(/<section className="metricGrid dashboardQueueMetrics"[\s\S]*?<\/section>/)?.[0] ?? '';
-  assert.equal((prioritySection.match(/className="metricCard dashboardPriorityState"/g) ?? []).length, 3);
+  assert.equal((prioritySection.match(/className="dashboardPriorityState"/g) ?? []).length, 3);
+  assert.doesNotMatch(prioritySection, /className="metricCard dashboardPriorityState"/,
+    'loaded priority cards must not be nested inside a second metric-card surface');
   assert.equal((prioritySection.match(/<MetricCard/g) ?? []).length, 3);
+  assert.match(styles, /\.dashboardPriorityState>\.metricCard,\.dashboardPriorityState>\.adminListState\{width:100%;height:100%\}/);
   assert.match(prioritySection, /Ayar bekleyenler ekranını aç/);
   assert.match(prioritySection, /Yapılamadı onaylarını aç/);
   assert.match(prioritySection, /Bakım takviminde gecikenleri aç/);
