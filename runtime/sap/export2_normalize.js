@@ -22,7 +22,17 @@ function validateExport2Rows(rows, dateRange) {
   for (const row of rows) {
     const date = sapDateToIso(row['Kayıt tarihi']);
     if (date < dateRange.from || date > dateRange.to) {
-      throw new Error('SAFE_ABORT_EXPORT2:record-date-outside-range');
+      const error = new Error('SAFE_ABORT_EXPORT2:record-date-outside-range');
+      error.diagnostic = {
+        reason: 'record-date-outside-range',
+        rowIndex: rows.indexOf(row),
+        dateField: 'Kayıt tarihi',
+        recordDate: date,
+        windowStart: dateRange.from,
+        windowEnd: dateRange.to,
+        direction: date < dateRange.from ? 'before-start' : 'after-end',
+      };
+      throw error;
     }
   }
   return rows;

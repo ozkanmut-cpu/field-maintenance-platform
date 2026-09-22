@@ -44,6 +44,38 @@ test('runner failure payload preserves the stack and emits only allowed diagnost
   });
 });
 
+test('runner failure payload emits only the allowlisted date-range diagnostic schema', () => {
+  const error = new Error('SAFE_ABORT_EXPORT2:record-date-outside-range');
+  error.stack = 'safe stack';
+  error.diagnostic = {
+    reason: 'record-date-outside-range',
+    rowIndex: 3,
+    dateField: 'Kayıt tarihi',
+    recordDate: '2026-09-21',
+    windowStart: '2026-09-06',
+    windowEnd: '2026-09-20',
+    direction: 'after-end',
+    rawRow: { 'Tanıtıcı': 'do-not-log' },
+    customerName: 'Do Not Log Ltd.',
+    token: 'do-not-log',
+  };
+
+  assert.deepEqual(failurePayload(error), {
+    ok: false,
+    error: 'SAFE_ABORT_EXPORT2:record-date-outside-range',
+    stack: 'safe stack',
+    diagnostic: {
+      reason: 'record-date-outside-range',
+      rowIndex: 3,
+      dateField: 'Kayıt tarihi',
+      recordDate: '2026-09-21',
+      windowStart: '2026-09-06',
+      windowEnd: '2026-09-20',
+      direction: 'after-end',
+    },
+  });
+});
+
 test('Export 1 captures the complete active search state before executing its search', async () => {
   const calls = [];
   const searchState = {

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { persistExport2 } = require('./export2_normalize');
+const { persistExport2, validateExport2Rows } = require('./export2_normalize');
 
 test('Export 2 persists an immutable raw copy and normalized source envelope', () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fmp-export2-'));
@@ -90,6 +90,37 @@ test('Export 2 rejects rows outside the declared 14-day acquisition range', () =
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
+});
+
+test('Export 2 range rejection attaches only canonical safe date diagnostic fields', () => {
+  const rows = [{
+    'Tanıtıcı': 'T-raw-identifier',
+    'Nokta Kodu': 'P-customer-point',
+    'Kayıt tarihi': '05.09.2026',
+    'Müşteri Adı': 'Do Not Log Ltd.',
+  }];
+
+  assert.throws(
+    () => validateExport2Rows(rows, { from: '2026-09-06', to: '2026-09-20' }),
+    (error) => {
+      assert.equal(error.message, 'SAFE_ABORT_EXPORT2:record-date-outside-range');
+      assert.deepEqual(error.diagnostic, {
+        reason: 'record-date-outside-range',
+        rowIndex: 0,
+        dateField: 'Kayıt tarihi',
+        recordDate: '2026-09-05',
+        windowStart: '2026-09-06',
+        windowEnd: '2026-09-20',
+        direction: 'before-start',
+      });
+      return true;
+    },
+  );
+});
+
+test('Export 2 keeps in-range records unchanged', () => {
+  const rows = [{ 'Tanıtıcı': 'T-1', 'Nokta Kodu': 'P-1', 'Kayıt tarihi': '20.09.2026' }];
+  assert.equal(validateExport2Rows(rows, { from: '2026-09-06', to: '2026-09-20' }), rows);
 });
 
 test('Export 2 rejects missing or duplicate confirmation identities', () => {
