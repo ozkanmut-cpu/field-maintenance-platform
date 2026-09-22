@@ -52,6 +52,28 @@ export class PointAddressDiscoveryService {
     setImmediate(() => void this.discover(pointId).finally(() => this.inFlight.delete(pointId)));
   }
 
+  async enqueueMany(pointIds: string[], concurrency = 5) {
+    const queue = [...new Set(pointIds)].filter(Boolean);
+    if (!queue.length) return;
+    const workerCount = Math.min(queue.length, Math.min(5, Math.max(1, Math.trunc(concurrency) || 1)));
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const pointId = queue[cursor++];
+        if (!pointId || this.inFlight.has(pointId)) continue;
+        this.inFlight.add(pointId);
+        try {
+          await this.discover(pointId);
+        } catch (error) {
+          this.logger.warn(`Toplu adres keşfi başarısız (${pointId}): ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+          this.inFlight.delete(pointId);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  }
+
   async discover(pointId: string) {
     const key = this.config.get<string>('GOOGLE_MAPS_API_KEY')?.trim();
     if (!key) { this.logger.warn('GOOGLE_MAPS_API_KEY tanımlı değil; otomatik adres keşfi atlandı'); return { status: 'DISABLED' as const }; }

@@ -1,104 +1,96 @@
 # V1 TODO
 
+> Last synchronized with `main` and current production state: 2026-09-18.
+> `[x]` means implemented and present in the current system. Open items are still missing, incomplete, or intentionally left for a later pass.
+
 ## P0 — Core operating system
 
-- [ ] Monorepo/package manager setup
-- [ ] Backend API foundation
-- [ ] Admin web foundation
-- [ ] Technician mobile foundation
-- [ ] PostgreSQL/PostGIS migrations
-- [ ] Authentication and role authorization
-- [ ] Audit log foundation
-- [ ] Device/server time metadata
-- [ ] Region CRUD
-- [ ] Region technician assignment
-- [ ] Temporary technician assignment
-- [ ] Point-specific technician exception
-- [ ] Point CRUD
-- [ ] Point ACTIVE/PASSIVE/CANCELLED lifecycle
-- [ ] Standard Week 1/2 schedule engine
-- [ ] SmartClean +2 calendar-month schedule engine
-- [ ] Maintenance obligation generation/history
-- [ ] Past-period-overdue-first priority engine
-- [ ] Technician dashboard counters/lists
-- [ ] Point detail minimal UX
-- [ ] `BAKIM YAPILDI`
-- [ ] Mandatory current-location acquisition
-- [ ] Completion idempotency / duplicate protection
-- [ ] Backdated maintenance entry + short reason
-- [ ] Backdated-entry review flag and location-learning exclusion
-- [ ] Maintenance revert without hard delete
-- [ ] Technician daily history
-- [ ] Service slip status lifecycle
-- [ ] Confirmation status lifecycle
-- [ ] Admin-only MISSING decision
-- [ ] Technician missing-paperwork queue
+- [x] Monorepo/package manager setup
+- [x] Backend API foundation
+- [x] Admin web foundation
+- [x] Technician mobile foundation
+- [x] PostgreSQL/PostGIS migrations — point coordinates now project into indexed PostGIS geography and power the technician-only nearby-points API
+- [x] Authentication and role authorization
+- [x] Audit log foundation
+- [x] Device/server time metadata
+- [x] Region CRUD
+- [x] Region technician assignment
+- [x] Temporary technician assignment
+- [x] Point-specific technician exception
+- [x] Point CRUD
+- [x] Point ACTIVE/PASSIVE/CANCELLED lifecycle
+- [x] Standard Week 1/2 schedule engine
+- [x] SmartClean +2 calendar-month schedule engine
+- [x] Maintenance obligation generation/history
+- [x] Past-period-overdue-first priority engine
+- [x] Technician dashboard counters/lists
+- [x] Point detail minimal UX
+- [x] `BAKIM YAPILDI`
+- [x] Mandatory current-location acquisition
+- [x] Completion idempotency / duplicate protection
+- [x] Backdated maintenance entry + short reason
+- [x] Backdated-entry review flag and location-learning exclusion
+- [x] Maintenance revert without hard delete
+- [x] Technician daily history
+- [x] Service slip status lifecycle
+- [x] Confirmation status lifecycle
+- [x] Admin-only MISSING decision
+- [x] Technician missing-paperwork queue
 
 ## P1 — Field intelligence and operations
 
-- [ ] `BAKIM YAPILAMADI` visit attempt
-- [ ] Canonical point location model
-- [ ] Location evidence model
-- [ ] Nearby Google/Places matching abstraction
-- [ ] Fuzzy name/alias matching
-- [ ] Repeated-field location confidence
-- [ ] Anti-batch / implausible travel detection
-- [ ] Location-learning eligibility gate
-- [ ] `YAKINIMDAKILER`
-- [ ] Map screen
-- [ ] Search by point code/name/address/region/old name
+- [x] `BAKIM YAPILAMADI` visit attempt
+- [x] Canonical point location model
+- [x] Location evidence model
+- [x] Nearby Google/Places matching abstraction
+- [x] Fuzzy name/alias matching
+- [x] Repeated-field location confidence
+- [x] Anti-batch / implausible travel detection
+- [x] Location-learning eligibility gate
+- [x] Distance-aware task ordering — overdue first, then nearest-to-farthest within each priority group
+- [ ] Dedicated `YAKINIMDAKILER` screen
+- [ ] Map screen — directions/open-in-map exists, but no dedicated in-app map screen yet
+- [ ] Search by point code/name/address/region/old name — technician Jobs/My Customers now cover all fields; admin covers code/name/address/region but still needs old-name alias matching
 - [ ] Favorites / pinned / recent
-- [ ] Admin dashboard
-- [ ] Unified point chronology
-- [ ] Review-required queue
-- [ ] CSV/Excel point import with validation report
-- [ ] Bulk region/status/week/SmartClean operations
-- [ ] Bulk paperwork status operations
+- [x] Admin dashboard
+- [x] Unified point chronology
+- [x] Review-required queue
+- [x] CSV/Excel point import with validation/setup-pending flow
+- [x] Bulk region/status/week/SmartClean operations — admin can atomically update selected points with per-point audit logging and guarded region/status/Standard-week/SmartClean actions
+- [x] Bulk paperwork status operations
 - [x] Point equipment profile: cooler/tower/tap/SmartTap counts
 - [x] Technician `Müşterilerim` equipment entry before maintenance
 - [x] Maintenance-time equipment verification/correction
 - [x] Immutable visit-level equipment snapshot and audit trail
+- [x] Technician Jobs search
+- [x] Technician My Customers search
 - [ ] Offline point cache
 - [ ] Offline maintenance queue
 - [ ] Auto-sync / conflict handling
 
-## P2 — Background intelligence, reporting and automation
+## P2 — Reporting and automation
 
-- [ ] AI Risk Engine
-- [ ] AI Planning Engine
-- [ ] AI Location Engine
-- [ ] AI Data Quality Engine
-- [ ] Point Difficulty Score using equipment profile as primary workload features
-- [ ] Treat expert prior as fixed domain knowledge: equipment-aware workload is more informative than raw point count; point count remains contextual only
-- [ ] Learn relative workload impact among cooler/tower/tap/SmartTap types from observed outcomes rather than hard-coding arbitrary per-equipment weights
-- [ ] Equipment-profile confidence: completeness, verification age and verification history
-- [ ] Equipment-profile stability/change-rate feature per point
-- [ ] Equipment-change anomaly detection for implausible or repeated count swings
-- [ ] Equipment data-quality brake for difficulty/capacity/risk/recommendation engines
-- [ ] Historical point-difficulty reconstruction from visit-level equipment snapshots
-- [ ] Cold-start cohorts incorporating maintenance type + equipment profile when sample size is sufficient
-- [ ] Technician capacity model adjusted for equipment mix, not only point count
-- [ ] Decompose weekly workload into service workload and travel workload; do not collapse both into raw point count
-- [ ] Travel workload features from point-to-point distance, geographic dispersion, isolated points, cluster fragmentation and technician work-area proximity
-- [ ] Prefer route-coherent equipment workload over equalized point counts when evaluating workload balance
-- [ ] Weekly workload engine using equipment-weighted point difficulty + geographic/travel burden
-- [ ] Risk prediction using workload mix + equipment difficulty + geography + past performance
-- [ ] Recommendation ranking aware of equipment-heavy clusters, travel burden and technician capacity
-- [ ] Similar Week matching using equipment-mix + geographic-dispersion similarity
-- [ ] What-if simulator inputs for equipment-count changes, route/geography changes and resulting workload/risk delta
-- [ ] Outcome validation should calibrate equipment-type and travel-burden weights; it must not be used to decide whether raw point count is preferable to the equipment-aware domain model
-- [ ] AI maturity gating based on equipment-profile coverage, location coverage and verified-history depth
-- [ ] Period-end delay risk
-- [ ] Technician workload/capacity analysis
-- [ ] Region health indicators
-- [ ] SmartClean approaching windows
-- [ ] Paperwork completion-time analytics
-- [ ] Daily technician summary
-- [ ] Daily admin summary
-- [ ] Period/week-end admin summary
-- [ ] KPI/reporting module
-- [ ] Future SAP confirmation synchronization interface
-- [ ] Playwright + Firefox SAP connector proof-of-concept
+AI / karar destek V1 kapsamı tamamlandı; kapanış ve doğrulama kaydı: [AI_TODO.md](./AI_TODO.md) (108/108).
+
+- [x] Paperwork completion-time analytics — admin analytics measures document-arrival and status-resolution time from server-recorded maintenance time, with median/P90 and pending-age buckets
+- [x] Daily technician summary — admin drill-down reports one technician’s Istanbul business day with own maintenance/attempt/visit/prospect activity, historical open-work snapshot, paperwork status and explicit help-given/help-received separation
+- [x] Daily admin summary — admin dashboard shows selected-day field activity, open/current/overdue/unassigned work, paperwork backlog and technician-level distribution
+- [x] Period/week-end admin summary — admin dashboard aggregates Monday–Sunday Istanbul field activity with week-end open/overdue/unassigned work and technician-level distribution
+- [x] KPI/reporting module — admin date-range report covers activity success, field visits, late entry, help given/received, current paperwork status, daily and technician trends, and read-only end-date open-work snapshots
+- [x] SAP confirmation synchronization — production runtime runs every 10 minutes with normal `Operasyon → Hizmet teyitleri` search, 14-day window, product 203, max 1000, date-scoped DB deletion and guarded logout; repository integration is merged to `main` and production-verified
+- [x] SAP Web CRM browser automation proof-of-concept — superseded by the working production automation; Playwright + Firefox specifically is no longer required
+
+## Current near-term priorities
+
+Non-mobile work is intentionally scheduled first. Mobile-specific work stays at the end of the current V1 queue.
+
+1. Complete old-name alias matching in admin point search.
+2. Decide and, if retained for V1, implement dedicated `YAKINIMDAKILER` and in-app map screens.
+3. Add mobile favorites/pinned/recent if retained for V1.
+4. Add offline point cache, maintenance queue and auto-sync/conflict handling only if field connectivity requirements make them necessary for V1.
+5. Keep Android APK CI green and distribute the latest `fıçıbakım` release build after the remaining mobile V1 scope is closed.
+
+AI V1 (108/108) and SAP synchronization are closed and are not part of this execution queue.
 
 ## Explicitly out of V1
 

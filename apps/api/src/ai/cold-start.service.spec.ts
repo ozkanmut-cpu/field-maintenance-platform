@@ -90,3 +90,21 @@ test('SmartClean prefers same region, type and rut-week cohort', () => {
   assert.equal(result.source, 'REGION_TYPE_WEEK_COHORT');
   assert.equal(result.value, 13);
 });
+
+
+test('new point prefers same equipment mix and geography cohort when evidence is sufficient', () => {
+  const mk = (id: string, value: number, isolated = false): FeatureRecord => ({
+    entityType: 'POINT', entityId: id, features: {
+      regionId: 'r1', maintenanceType: 'STANDARD', maintenanceWeek: null, visitCount: value,
+      coolerCount: 2, towerCount: 1, tapCount: 4, smarttapCount: 0, geographicIsolated: isolated,
+    },
+  });
+  const history = [
+    snapshot('2026-W01', [mk('target', 0), mk('a', 10), mk('b', 12), { ...mk('other', 100), features: { ...mk('other', 100).features, coolerCount: 9 } }]),
+    snapshot('2026-W02', [mk('target', 0), mk('a', 14), mk('b', 16), { ...mk('other', 100), features: { ...mk('other', 100).features, coolerCount: 9 } }]),
+  ];
+  const result = service.estimatePoint(history, 'target', 'visitCount');
+  assert.equal(result.source, 'REGION_TYPE_EQUIPMENT_GEO_COHORT');
+  assert.equal(result.value, 13);
+  assert.equal(result.entityCount, 2);
+});

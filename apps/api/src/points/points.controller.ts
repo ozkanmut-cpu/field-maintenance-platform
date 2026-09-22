@@ -4,16 +4,22 @@ import { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { PointAddressDiscoveryService } from './point-address-discovery.service';
+import { PointSpatialService } from './point-spatial.service';
 import { AddPointAliasDto } from './dto/add-point-alias.dto';
 import { CreatePointDto } from './dto/create-point.dto';
 import { ImportPointsDto } from './dto/import-points.dto';
 import { UpdatePointDto } from './dto/update-point.dto';
 import { UpdatePointEquipmentDto } from './dto/update-point-equipment.dto';
+import { BulkUpdatePointsDto } from './dto/bulk-update-points.dto';
 import { PointsService } from './points.service';
 
 @Controller('points')
 export class PointsController {
-  constructor(private readonly points: PointsService, private readonly addressDiscovery: PointAddressDiscoveryService) {}
+  constructor(
+    private readonly points: PointsService,
+    private readonly addressDiscovery: PointAddressDiscoveryService,
+    private readonly spatial: PointSpatialService,
+  ) {}
 
   @Get()
   list() { return this.points.list(); }
@@ -42,9 +48,33 @@ export class PointsController {
     return result;
   }
 
+  @Roles(UserRole.ADMIN)
+  @Post('bulk-update')
+  async bulkUpdate(@CurrentUser() user: AuthenticatedUser, @Body() dto: BulkUpdatePointsDto) {
+    const result = await this.points.bulkUpdate(user.id, dto);
+    return result;
+  }
+
   @Roles(UserRole.TECHNICIAN)
   @Get('my-customers')
   myCustomers(@CurrentUser() user: AuthenticatedUser) { return this.points.myCustomers(user.id); }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Get('nearby')
+  nearby(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
+    @Query('radiusMeters') radiusMeters?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.spatial.nearbyAssigned(user.id, {
+      latitude,
+      longitude,
+      radiusMeters,
+      limit,
+    });
+  }
 
   @Roles(UserRole.TECHNICIAN)
   @Patch(':id/equipment')
@@ -80,7 +110,7 @@ export class PointsController {
   @Patch(':id')
   async update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdatePointDto) {
     const point = await this.points.update(user.id, id, dto);
-    if (dto.name !== undefined || dto.regionId !== undefined) this.addressDiscovery.enqueue(id);
+    if (dto.name !== undefined) this.addressDiscovery.enqueue(id);
     return point;
   }
 }

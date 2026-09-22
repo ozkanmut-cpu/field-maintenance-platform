@@ -6,6 +6,16 @@ import { WeeklyWorkloadService } from './weekly-workload.service';
 
 const service = new WeeklyWorkloadService();
 
+const calibration:any = {
+  confidence:'HIGH',
+  equipment:[
+    { code:'COOLER_RELATIVE_WORKLOAD', relativeImpact:0.15, confidence:'HIGH' },
+    { code:'TOWER_RELATIVE_WORKLOAD', relativeImpact:0.20, confidence:'HIGH' },
+    { code:'TAP_RELATIVE_WORKLOAD', relativeImpact:0.10, confidence:'HIGH' },
+    { code:'SMARTTAP_RELATIVE_WORKLOAD', relativeImpact:0.05, confidence:'HIGH' },
+  ],
+};
+
 function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): TechnicianAssignedWeeklyWorkload {
   return {
     technicianId: 't1',
@@ -19,6 +29,15 @@ function assigned(overrides: Partial<TechnicianAssignedWeeklyWorkload>): Technic
     assignedTowerCount: 0,
     assignedTapCount: 0,
     assignedSmarttapCount: 0,
+    assignedLocatedPointCount: 0,
+    assignedUnlocatedPointCount: 0,
+    assignedFieldP90RadiusMeters: null,
+    assignedRouteEstimateMeters: null,
+    assignedRouteCoherenceRatio: null,
+    assignedClusterCount: 0,
+    assignedIsolatedPointCount: 0,
+    assignedFragmentationRatio: null,
+    workAreaCenterDistanceMeters: null,
     ...overrides,
   };
 }
@@ -41,31 +60,60 @@ function baseline(state: 'WARMING_UP' | 'ACTIVE'): TechnicianWeeklyBaseline {
     travel: {
       routeDistanceMeters: { median: 10000, p75: 15000, p90: 20000 },
       fieldP90RadiusMeters: { median: 5000, p75: 7000, p90: 9000 },
+      routeCoherenceRatio: { median: 1.2, p75: 1.5, p90: 2 },
+      fragmentationRatio: { median: 0.2, p75: 0.4, p90: 0.6 },
     },
     context: { uniqueVisitedPoints: { median: 9, p75: 11, p90: 13 } },
     reasons: state === 'ACTIVE' ? [] : ['SERVICE_HISTORY_TOO_SHORT'],
   };
 }
 
-test('marks assessment ready when technician baseline is active', () => {
+test('compares complete assigned equipment and geography against learned baseline bands', () => {
   const result = service.assess(
-    assigned({ standardCurrent: 3, standardCarryover: 1, smartcleanCurrent: 2, smartcleanCarryover: 1 }),
+    assigned({
+      standardCurrent: 3,
+      smartcleanCurrent: 2,
+      equipmentKnownPointCount: 5,
+      assignedCoolerCount: 29,
+      assignedTowerCount: 11,
+      assignedTapCount: 7,
+      assignedSmarttapCount: 3,
+      assignedLocatedPointCount: 5,
+      assignedFieldP90RadiusMeters: 8000,
+      assignedRouteEstimateMeters: 18000,
+    }),
     baseline('ACTIVE'),
+    calibration,
   );
 
   assert.equal(result.evidenceState, 'READY');
-  assert.deepEqual(result.assigned, {
-    standardCurrent: 3,
-    standardCarryover: 1,
-    smartcleanCurrent: 2,
-    smartcleanCarryover: 1,
-  });
+  assert.equal(result.servicePressure.coolerCount, 'ABOVE_P90');
+  assert.equal(result.servicePressure.towerCount, 'ABOVE_P75');
+  assert.equal(result.servicePressure.tapCount, 'WITHIN_BASELINE');
+  assert.equal(result.servicePressure.smarttapCount, 'WITHIN_BASELINE');
+  assert.equal(result.serviceWorkload.state, 'READY');
+  assert.ok((result.serviceWorkload.index ?? 0) > 100);
+  assert.equal(result.travelPressure.fieldP90RadiusMeters, 'ABOVE_P75');
+  assert.equal(result.travelPressure.routeDistanceMeters, 'ABOVE_P75');
+  assert.deepEqual(result.reasons, []);
+});
+
+test('brakes equipment pressure when any assigned point has an incomplete profile', () => {
+  const result = service.assess(
+    assigned({ standardCurrent: 3, equipmentKnownPointCount: 2, equipmentUnknownPointCount: 1, assignedCoolerCount: 40 }),
+    baseline('ACTIVE'),
+  );
   assert.equal(result.servicePressure.coolerCount, 'UNKNOWN');
-  assert.equal(result.travelPressure.routeDistanceMeters, 'UNKNOWN');
-  assert.deepEqual(result.reasons, [
-    'ASSIGNED_EQUIPMENT_LOAD_NOT_AVAILABLE',
-    'ASSIGNED_TRAVEL_LOAD_NOT_AVAILABLE',
-  ]);
+  assert.ok(result.reasons.includes('ASSIGNED_EQUIPMENT_PROFILE_INCOMPLETE'));
+});
+
+test('brakes geographic pressure when an assigned point lacks canonical location', () => {
+  const result = service.assess(
+    assigned({ standardCurrent: 2, equipmentKnownPointCount: 2, assignedLocatedPointCount: 1, assignedUnlocatedPointCount: 1, assignedFieldP90RadiusMeters: 12000 }),
+    baseline('ACTIVE'),
+  );
+  assert.equal(result.travelPressure.fieldP90RadiusMeters, 'UNKNOWN');
+  assert.ok(result.reasons.includes('ASSIGNED_LOCATION_PROFILE_INCOMPLETE'));
 });
 
 test('keeps assessment insufficient while baseline is warming up', () => {
@@ -81,5 +129,6 @@ test('keeps assessment insufficient while baseline is warming up', () => {
     'BASELINE_NOT_ACTIVE',
     'ASSIGNED_EQUIPMENT_LOAD_NOT_AVAILABLE',
     'ASSIGNED_TRAVEL_LOAD_NOT_AVAILABLE',
+    'ASSIGNED_ROUTE_ESTIMATE_NOT_AVAILABLE',
   ]);
 });

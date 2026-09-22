@@ -8,12 +8,19 @@ import AnomalyReview from './anomaly-review';
 import MaintenanceCalendar from './maintenance-calendar';
 import Prospects from './prospects';
 import AuditLog from './audit-log';
-import PointDetails from './point-details';
 import AssignmentManagement from './assignment-management';
 import PaperworkManagement from './paperwork-management';
 import PointTimeline from './point-timeline';
 import DuplicateSuggestions from './duplicate-suggestions';
 import NonMaintenanceVisits from './non-maintenance-visits';
+import SapSyncStatus from './sap-sync-status';
+import AdminShell from './admin-shell';
+import { buildAdminLocation, parseAdminLocation, type AdminLocation, type AdminSection } from './admin-navigation';
+import PointList from './point-list';
+import PointDetailPage from './point-detail-page';
+import BulkOperations from './bulk-operations';
+import KpiReportingPanel from './kpi-reporting';
+import TechnicianDailySummaryPanel from './technician-daily-summary';
 
 type User = {
   id: string;
@@ -43,11 +50,31 @@ export default function Home() {
   const [error, setError] = useState('');
   const [helpEditorId, setHelpEditorId] = useState('');
   const [helpTargetIds, setHelpTargetIds] = useState<string[]>([]);
-  const [section, setSection] = useState<'dashboard' | 'approvals' | 'setup-pending' | 'regions' | 'points' | 'location-matching' | 'ai-dashboard' | 'anomalies' | 'maintenance-calendar' | 'prospects' | 'audit-log' | 'point-details' | 'assignments' | 'paperwork' | 'point-timeline' | 'duplicates' | 'non-maintenance-visits' | 'users' | 'new-user'>('dashboard');
+  const [location, setLocation] = useState<AdminLocation>(() => typeof window === 'undefined' ? { section: 'dashboard' } : parseAdminLocation(window.location.search));
+  const createUserOpen = location.createUser === true;
+  const section = location.section;
 
   useEffect(() => {
     void restore();
   }, []);
+  useEffect(() => {
+    const restoreLocation = () => setLocation(parseAdminLocation(window.location.search));
+    window.addEventListener('popstate', restoreLocation);
+    return () => window.removeEventListener('popstate', restoreLocation);
+  }, []);
+  useEffect(() => {
+    if (!me || section !== 'help-targets' || !location.userId) {
+      if (!location.userId) setHelpEditorId('');
+      return;
+    }
+    void openHelpSettings(location.userId, false);
+  }, [location.userId, me, section]);
+  function navigate(section: AdminSection, values: Omit<AdminLocation, 'section'> = {}) {
+    const next = { section, ...values } as AdminLocation;
+    window.history.pushState({}, '', buildAdminLocation(section, values));
+    setLocation(next);
+  }
+  const setSection = navigate;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, {
@@ -130,12 +157,13 @@ export default function Home() {
       setBusy(false);
     }
   }
-  async function openHelpSettings(helperId: string) {
+  async function openHelpSettings(helperId: string, updateLocation = true) {
     setBusy(true); setError('');
     try {
       const data = await api<{ targets: User[] }>(`/api/backend/users/${helperId}/help-targets`);
       setHelpEditorId(helperId);
       setHelpTargetIds(data.targets.map((item) => item.id));
+      if (updateLocation) navigate('help-targets', { userId: helperId });
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -188,59 +216,15 @@ export default function Home() {
   }
 
   return (
-    <main className="adminLayout">
-      <aside className="sidebar">
-        <div className="sidebarBrand"><span className="brandMark">S</span><div><strong>SAHA BAKIM</strong><small>Yönetim Sistemi</small></div></div>
-        <nav className="sideNav">
-          <button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>▣ <span>Dashboard</span></button>
-          <button className={section === 'approvals' ? 'active' : ''} onClick={() => setSection('approvals')}>! <span>Onaylar</span></button>
-          <button className={section === 'setup-pending' ? 'active' : ''} onClick={() => setSection('setup-pending')}>⚙ <span>Ayar Bekleyenler</span></button>
-          <button className={section === 'regions' ? 'active' : ''} onClick={() => setSection('regions')}>◉ <span>Bölgeler</span></button>
-          <button className={section === 'points' ? 'active' : ''} onClick={() => setSection('points')}>● <span>Noktalar</span></button>
-          <button className={section === 'location-matching' ? 'active' : ''} onClick={() => setSection('location-matching')}>⌖ <span>SAP / Google</span></button>
-          <button className={section === 'ai-dashboard' ? 'active' : ''} onClick={() => setSection('ai-dashboard')}>◈ <span>Sanal İstatistikçi</span></button>
-          <button className={section === 'anomalies' ? 'active' : ''} onClick={() => setSection('anomalies')}>⚠ <span>Anomaliler</span></button>
-          <button className={section === 'maintenance-calendar' ? 'active' : ''} onClick={() => setSection('maintenance-calendar')}>▤ <span>Bakım Takvimi</span></button>
-          <button className={section === 'prospects' ? 'active' : ''} onClick={() => setSection('prospects')}>◇ <span>Potansiyel Müşteriler</span></button>
-          <button className={section === 'audit-log' ? 'active' : ''} onClick={() => setSection('audit-log')}>≡ <span>İşlem Geçmişi</span></button>
-          <button className={section === 'point-details' ? 'active' : ''} onClick={() => setSection('point-details')}>◎ <span>Nokta Detayı</span></button>
-          <button className={section === 'assignments' ? 'active' : ''} onClick={() => setSection('assignments')}>⇄ <span>Görevlendirmeler</span></button>
-          <button className={section === 'paperwork' ? 'active' : ''} onClick={() => setSection('paperwork')}>▧ <span>Evrak Yönetimi</span></button>
-          <button className={section === 'point-timeline' ? 'active' : ''} onClick={() => setSection('point-timeline')}>◷ <span>Nokta Timeline</span></button>
-          <button className={section === 'duplicates' ? 'active' : ''} onClick={() => setSection('duplicates')}>⧉ <span>Mükerrer Noktalar</span></button>
-          <button className={section === 'non-maintenance-visits' ? 'active' : ''} onClick={() => setSection('non-maintenance-visits')}>↗ <span>Bakım Dışı Ziyaretler</span></button>
-          <button className={section === 'users' ? 'active' : ''} onClick={() => setSection('users')}>♙ <span>Teknisyenler</span></button>
-          <button className={section === 'new-user' ? 'active' : ''} onClick={() => setSection('new-user')}>＋ <span>Yeni Kullanıcı</span></button>
-        </nav>
-        <div className="sidebarFoot">Saha operasyon yönetimi</div>
-      </aside>
-      <div className="adminMain">
-      <header className="topbar" id="dashboard">
-        <div>
-          <div className="brand">FIELD MAINTENANCE</div>
-          <h1>{section === 'dashboard' ? 'Dashboard' : section === 'approvals' ? 'Onaylar' : section === 'setup-pending' ? 'Ayar Bekleyen Noktalar' : section === 'regions' ? 'Bölgeler' : section === 'points' ? 'Noktalar' : section === 'location-matching' ? 'SAP / Google Eşleştirme' : section === 'ai-dashboard' ? 'Sanal İstatistikçi' : section === 'anomalies' ? 'Bakım Anomalileri' : section === 'maintenance-calendar' ? 'Bakım Takvimi' : section === 'prospects' ? 'Potansiyel Müşteriler' : section === 'audit-log' ? 'İşlem Geçmişi' : section === 'point-details' ? 'Nokta Detayı' : section === 'assignments' ? 'Görevlendirmeler' : section === 'paperwork' ? 'Evrak Yönetimi' : section === 'point-timeline' ? 'Nokta Timeline' : section === 'duplicates' ? 'Mükerrer Noktalar' : section === 'non-maintenance-visits' ? 'Bakım Dışı Ziyaretler' : section === 'users' ? 'Teknisyenler' : 'Yeni Kullanıcı'}</h1>
-        </div>
-        <div className="account">
-          <span>{me.name}</span>
-          <button className="ghost" onClick={() => void signOut()}>Çıkış</button>
-        </div>
-      </header>
+    <AdminShell me={me} location={location} onNavigate={navigate} onLogout={() => void signOut()}>
 
       {error ? <div className="error banner">{error}</div> : null}
 
-      {section === 'dashboard' ? <>
-        <div className="sectionEyebrow">KULLANICI ÖZETİ</div>
-        <section className="stats">
-          <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.length}</strong><span>Toplam kullanıcı</span></button>
-          <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => u.role === 'TECHNICIAN' && u.active).length}</strong><span>Aktif teknisyen</span></button>
-          <button className="stat statButton" onClick={() => setSection('users')}><strong>{users.filter((u) => !u.active).length}</strong><span>Pasif kullanıcı</span></button>
-        </section>
-      </> : null}
-      {section === 'location-matching' ? <LocationMatching /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects /> : section === 'audit-log' ? <AuditLog /> : section === 'point-details' ? <PointDetails /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline /> : section === 'duplicates' ? <DuplicateSuggestions /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : <Operations users={users} activeSection={section} onNavigate={setSection} />}
-      {section === 'users' ? <section className="panel" id="users">
+      {section === 'points' ? <PointList location={location} onNavigate={navigate} /> : section === 'bulk-operations' ? <BulkOperations /> : section === 'location-matching' ? <LocationMatching onNavigate={navigate} /> : section === 'ai-dashboard' ? <AiDashboard /> : section === 'anomalies' ? <AnomalyReview /> : section === 'maintenance-calendar' ? <MaintenanceCalendar /> : section === 'prospects' ? <Prospects onNavigate={navigate} /> : section === 'audit-log' ? <AuditLog /> : section === 'point-detail' ? <PointDetailPage location={location} onNavigate={navigate} /> : section === 'assignments' ? <AssignmentManagement /> : section === 'paperwork' ? <PaperworkManagement /> : section === 'point-timeline' ? <PointTimeline onNavigate={navigate} /> : section === 'duplicates' ? <DuplicateSuggestions onNavigate={navigate} /> : section === 'non-maintenance-visits' ? <NonMaintenanceVisits /> : section === 'sap-sync' ? <SapSyncStatus /> : section === 'kpi-reporting' ? <KpiReportingPanel technicians={users.filter((user) => user.role === 'TECHNICIAN' && user.active)} /> : section === 'technician-daily-summary' ? <TechnicianDailySummaryPanel users={users} /> : section === 'dashboard' || section === 'approvals' || section === 'setup-pending' || section === 'regions' ? <Operations users={users} activeSection={section} onNavigate={navigate} /> : null}
+      {section === 'users' || section === 'help-targets' ? <section className="panel" id="users">
         <div className="panelHeader">
           <div><h2>Kullanıcılar</h2><p>Teknisyen ve yönetici hesaplarını buradan yönet.</p></div>
-          <button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button>
+          <div className="rowActions"><button className="ghost" onClick={() => void loadUsers()} disabled={busy}>Yenile</button><button onClick={() => navigate('users', { createUser: true })}>Yeni Kullanıcı</button></div>
         </div>
         <div className="tableWrap">
           <table>
@@ -264,8 +248,8 @@ export default function Home() {
           </table>
         </div>
       </section> : null}
-      {section === 'users' && helpEditorId ? <section className="panel">
-        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => setHelpEditorId('')}>Kapat</button></div>
+      {section === 'users' || section === 'help-targets' ? helpEditorId ? <section className="panel">
+        <div className="panelHeader"><div><h2>Detaylı kullanıcı ayarları</h2><p>{users.find((u) => u.id === helpEditorId)?.name} kimlere yardım edebilir?</p></div><button className="ghost" onClick={() => navigate('help-targets')}>Kapat</button></div>
         <div className="helpGrid">
           {users.filter((u) => u.role === 'TECHNICIAN' && u.active && u.id !== helpEditorId).map((target) => (
             <label className="helpOption" key={target.id}>
@@ -275,10 +259,10 @@ export default function Home() {
           ))}
         </div>
         <button onClick={() => void saveHelpSettings()} disabled={busy}>YARDIM YETKİLERİNİ KAYDET</button>
-      </section> : null}
+      </section> : section === 'help-targets' ? <section className="panel"><div className="emptyState compact"><strong>Teknisyen seçin</strong><span>Yardım yetkilerini düzenlemek için kullanıcı satırındaki Yardım aksiyonunu kullanın.</span></div></section> : null : null}
 
-      {section === 'new-user' ? <section className="panel" id="new-user">
-        <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div></div>
+      {(section === 'users' || section === 'help-targets') && createUserOpen ? <section className="panel" id="new-user">
+        <div className="panelHeader"><div><h2>Yeni kullanıcı</h2><p>Yeni teknisyen veya yönetici hesabı oluştur.</p></div><button className="ghost" type="button" onClick={() => navigate('users')}>Kapat</button></div>
         <form className="userForm" onSubmit={createUser}>
           <input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Ad soyad" minLength={2} required />
           <input value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase() })} placeholder="Kullanıcı adı" required />
@@ -290,7 +274,6 @@ export default function Home() {
           <button type="submit" disabled={busy}>KULLANICI OLUŞTUR</button>
         </form>
       </section> : null}
-      </div>
-    </main>
+    </AdminShell>
   );
 }

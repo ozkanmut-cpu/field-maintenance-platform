@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -6,6 +6,7 @@ import { Roles } from '../auth/roles.decorator';
 import { GooglePlaceMatchService } from './google-place-match.service';
 import { MaintenanceAnomalyService } from './maintenance-anomaly.service';
 import { BulkUpdatePaperworkDto } from './dto/bulk-update-paperwork.dto';
+import { CompleteServiceSlipReviewDto } from './dto/complete-service-slip-review.dto';
 import { CompleteMaintenanceDto } from './dto/complete-maintenance.dto';
 import { MaintenanceAttemptDto } from './dto/maintenance-attempt.dto';
 import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
@@ -13,7 +14,9 @@ import { ResolveReviewDto } from './dto/resolve-review.dto';
 import { RevertMaintenanceDto } from './dto/revert-maintenance.dto';
 import { ReviewAttemptDto } from './dto/review-attempt.dto';
 import { UpdatePaperworkDto } from './dto/update-paperwork.dto';
+import { ApproveVisitLocationDto } from './dto/approve-visit-location.dto';
 import { MaintenanceService } from './maintenance.service';
+import { KpiReportingService } from './kpi-reporting.service';
 import { NonMaintenanceVisitService } from './non-maintenance-visit.service';
 import { PointLocationLearningService } from './point-location-learning.service';
 
@@ -25,6 +28,7 @@ export class MaintenanceController {
     private readonly locationLearning: PointLocationLearningService,
     private readonly googlePlaces: GooglePlaceMatchService,
     private readonly nonMaintenanceVisits: NonMaintenanceVisitService,
+    private readonly kpiReporting: KpiReportingService,
   ) {}
 
   @Get('due')
@@ -108,9 +112,56 @@ export class MaintenanceController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Get('admin-kpi-reporting')
+  adminKpiReporting(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('technicianId') technicianId?: string,
+  ) {
+    return this.kpiReporting.report({ from, to, technicianId });
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('admin-technician-daily-summary')
+  adminTechnicianDailySummary(
+    @Query('technicianId') technicianId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.maintenance.adminTechnicianDailySummary(technicianId, date);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('admin-daily-summary')
+  adminDailySummary(@Query('date') date?: string) {
+    return this.maintenance.adminDailySummary(date);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('admin-period-summary')
+  adminPeriodSummary(@Query('date') date?: string) {
+    return this.maintenance.adminPeriodSummary(date);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('paperwork-analytics')
+  paperworkAnalytics(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('technicianId') technicianId?: string,
+  ) {
+    return this.maintenance.paperworkAnalytics({ from, to, technicianId });
+  }
+
+  @Roles(UserRole.ADMIN)
   @Get('paperwork-history')
   paperworkHistory(@Query('visitId') visitId: string) {
     return this.maintenance.paperworkHistory(visitId);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Get('point/:pointId/paperwork-history')
+  pointPaperworkHistory(@Param('pointId') pointId: string) {
+    return this.maintenance.pointPaperworkHistory(pointId);
   }
 
   @Roles(UserRole.ADMIN)
@@ -123,6 +174,12 @@ export class MaintenanceController {
   @Get('review-history')
   reviewHistory(@Query('visitId') visitId: string) {
     return this.anomaly.reviewHistory(visitId);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('location-review/approve-visit')
+  approveVisitLocation(@CurrentUser() user: AuthenticatedUser, @Body() dto: ApproveVisitLocationDto) {
+    return this.maintenance.approveVisitLocation(user.id, dto);
   }
 
   @Roles(UserRole.TECHNICIAN)
@@ -153,6 +210,12 @@ export class MaintenanceController {
   @Post('paperwork')
   paperwork(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdatePaperworkDto) {
     return this.maintenance.updatePaperwork({ ...dto, adminUserId: user.id });
+  }
+
+  @Roles(UserRole.TECHNICIAN)
+  @Post('service-slip/complete')
+  completeMissingServiceSlip(@CurrentUser() user: AuthenticatedUser, @Body() dto: CompleteServiceSlipReviewDto) {
+    return this.maintenance.completeMissingServiceSlip({ ...dto, technicianId: user.id });
   }
 
   @Roles(UserRole.ADMIN)

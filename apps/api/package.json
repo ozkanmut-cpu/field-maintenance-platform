@@ -22,7 +22,9 @@
     "test:point-difficulty": "node --test --require ts-node/register src/ai/point-difficulty.service.spec.ts",
     "test:technician-baseline": "node --test --require ts-node/register src/ai/technician-baseline.service.spec.ts",
     "prisma:validate": "cd ../.. && prisma validate --schema apps/api/prisma/schema.prisma",
-    "test:point-address-discovery": "node --test --require ts-node/register src/points/point-address-discovery.service.spec.ts"
+    "test:point-address-discovery": "node --test --require ts-node/register src/points/point-address-discovery.service.spec.ts",
+    "demo:seed": "set -a; . ../../.env; set +a; ts-node --compiler-options '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' src/demo-data/demo-data.cli.ts seed",
+    "demo:purge": "set -a; . ../../.env; set +a; ts-node --compiler-options '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' src/demo-data/demo-data.cli.ts purge"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

@@ -32,3 +32,18 @@ test('adjacency requires caller-supplied threshold', () => {
   assert.equal(service.areAdjacent(a, b, 500), true);
   assert.equal(service.areAdjacent(a, b, 50), false);
 });
+
+
+test('open route estimate is deterministic and increases for dispersed points', () => {
+  const compact = [
+    { id: 'a', latitude: 38.40, longitude: 27.10 },
+    { id: 'b', latitude: 38.401, longitude: 27.101 },
+    { id: 'c', latitude: 38.402, longitude: 27.102 },
+  ];
+  const dispersed = [compact[0], { id: 'b', latitude: 38.50, longitude: 27.20 }, { id: 'c', latitude: 38.60, longitude: 27.30 }];
+  const first = service.estimateOpenRouteMeters(compact);
+  const second = service.estimateOpenRouteMeters([...compact].reverse());
+  assert.ok(first > 0);
+  assert.ok(Math.abs(first - second) < 0.000001);
+  assert.ok(service.estimateOpenRouteMeters(dispersed) > first * 10);
+});

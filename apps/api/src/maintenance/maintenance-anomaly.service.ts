@@ -45,14 +45,15 @@ export class MaintenanceAnomalyService {
       },
     });
 
+    const locationVisits: VisitSample[] = visits.filter((visit): visit is VisitSample => visit.latitude !== null && visit.longitude !== null);
     const flagged = new Map<string, string[]>();
     const windowMinutes = this.numberConfig('ANTI_BATCH_WINDOW_MINUTES', 12);
     const stationaryMeters = this.numberConfig('ANTI_BATCH_STATIONARY_METERS', 150);
     const maxSpeedKmh = this.numberConfig('ANTI_BATCH_MAX_SPEED_KMH', 160);
 
-    for (let index = 1; index < visits.length; index += 1) {
-      const previous = visits[index - 1];
-      const current = visits[index];
+    for (let index = 1; index < locationVisits.length; index += 1) {
+      const previous = locationVisits[index - 1];
+      const current = locationVisits[index];
       if (previous.pointId === current.pointId) continue;
 
       const elapsedMinutes =
@@ -87,7 +88,7 @@ export class MaintenanceAnomalyService {
 
     let appliedFlags = 0;
     for (const [visitId, reasons] of flagged.entries()) {
-      const visit = visits.find((item) => item.id === visitId);
+      const visit = locationVisits.find((item) => item.id === visitId);
       if (!visit) continue;
 
       const latestResolution = await this.prisma.maintenanceReviewResolution.findFirst({
@@ -129,7 +130,7 @@ export class MaintenanceAnomalyService {
     return this.prisma.maintenanceVisit.findMany({
       where: {
         status: VisitStatus.VALID,
-        reviewRecommended: true,
+        OR: [{ reviewRecommended: true }, { locationReviewRequired: true }],
       },
       select: {
         id: true,
@@ -139,11 +140,20 @@ export class MaintenanceAnomalyService {
         suspiciousBatch: true,
         reviewReason: true,
         locationLearningEligible: true,
+        locationReviewRequired: true,
+        locationPresenceConfirmed: true,
         latitude: true,
         longitude: true,
         accuracyMeters: true,
         technician: { select: { id: true, name: true } },
-        point: { select: { id: true, code: true, name: true, regionId: true } },
+        point: {
+          select: {
+            id: true, code: true, name: true, regionId: true, address: true,
+            canonicalLatitude: true, canonicalLongitude: true,
+            locationSource: true, locationConfidence: true,
+            googlePlaceId: true, googleBusinessName: true,
+          },
+        },
       },
       orderBy: { recordedAtServer: 'desc' },
       take: Math.min(Math.max(limit, 1), 500),
@@ -163,14 +173,16 @@ export class MaintenanceAnomalyService {
 
     const keepOpen = dto.decision === ReviewDecision.NEEDS_FOLLOWUP;
     const clearAnomaly = dto.decision === ReviewDecision.NO_ISSUE;
-    const locationEligible =
-      clearAnomaly && visit.status === VisitStatus.VALID && !visit.enteredLate;
+    // Review resolution must not promote a visit into location learning. Eligibility
+    // is decided at completion from presence, distance, accuracy and anomaly data.
+    const locationEligible = visit.locationLearningEligible;
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.maintenanceVisit.update({
         where: { id: visit.id },
         data: {
           reviewRecommended: keepOpen,
+          locationReviewRequired: keepOpen ? visit.locationReviewRequired : false,
           suspiciousBatch: clearAnomaly ? false : visit.suspiciousBatch,
           locationLearningEligible:
             dto.decision === ReviewDecision.KEEP_LOCATION_EXCLUDED

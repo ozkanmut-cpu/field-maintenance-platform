@@ -176,7 +176,7 @@ export class GooglePlaceMatchService {
       orderBy: { performedAt: 'desc' },
       select: { latitude: true, longitude: true },
     });
-    if (!visit) return null;
+    if (!visit || visit.latitude === null || visit.longitude === null) return null;
     return {
       latitude: Number(visit.latitude),
       longitude: Number(visit.longitude),

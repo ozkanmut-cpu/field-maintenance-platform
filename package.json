@@ -11,9 +11,21 @@
     "build:api": "npm run build -w @fmp/api",
     "prisma:generate": "npm run prisma:generate -w @fmp/api",
     "prisma:migrate": "npm run prisma:migrate -w @fmp/api",
-    "prisma:validate": "npm run prisma:validate -w @fmp/api"
+    "prisma:validate": "npm run prisma:validate -w @fmp/api",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "expo": "~54.0.37",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }

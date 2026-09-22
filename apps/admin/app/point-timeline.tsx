@@ -1,9 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AdminIcon } from './admin-icons';
+import type { AdminLocation, AdminSection } from './admin-navigation';
 
 type Point = { id: string; code: string; name: string; maintenanceType: string; region?: { id: string; name: string } | null };
-type TimelineItem = { id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'OBLIGATION' | 'ASSIGNMENT'; at: string; data: Record<string, any> };
+type TimelineData = {
+  technician?: { name?: string };
+  status?: string;
+  serviceSlipStatus?: string;
+  confirmationStatus?: string;
+  enteredLate?: boolean;
+  totalCoolerCount?: number | null;
+  maintainedCoolerCount?: number | null;
+  missingMaintenanceCount?: number | null;
+  missingMaintenanceExplanation?: string | null;
+  [key: string]: any;
+};
+type TimelineItem = { id: string; type: 'MAINTENANCE' | 'ATTEMPT' | 'NON_MAINTENANCE_VISIT' | 'OBLIGATION' | 'ASSIGNMENT'; at: string; data: TimelineData };
 type TimelineResponse = {
   point: Point;
   counts: { maintenance: number; attempts: number; nonMaintenanceVisits: number; obligations: number; assignments: number };
@@ -14,7 +28,7 @@ const labels: Record<TimelineItem['type'], string> = {
   MAINTENANCE: 'Bakım', ATTEMPT: 'Bakım denemesi', NON_MAINTENANCE_VISIT: 'Bakım dışı ziyaret', OBLIGATION: 'Yükümlülük', ASSIGNMENT: 'Görevlendirme',
 };
 
-export default function PointTimeline() {
+export default function PointTimeline({ onNavigate }: { onNavigate: (section: AdminSection, values?: Omit<AdminLocation, 'section'>) => void }) {
   const [points, setPoints] = useState<Point[]>([]);
   const [pointId, setPointId] = useState('');
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
@@ -57,7 +71,12 @@ export default function PointTimeline() {
 
   function summary(item: TimelineItem) {
     const d = item.data;
-    if (item.type === 'MAINTENANCE') return `${d.technician?.name || '—'} · ${d.status} · Fiş ${d.serviceSlipStatus} · Teyit ${d.confirmationStatus}${d.enteredLate ? ' · Geç giriş' : ''}`;
+    if (item.type === 'MAINTENANCE') {
+      const partial = d.totalCoolerCount != null && d.maintainedCoolerCount != null
+        ? ` · Soğutucu ${d.maintainedCoolerCount}/${d.totalCoolerCount}${d.missingMaintenanceCount ? ` (${d.missingMaintenanceCount} eksik${d.missingMaintenanceExplanation ? `: ${d.missingMaintenanceExplanation}` : ''})` : ''}`
+        : '';
+      return `${d.technician?.name || '—'} · ${d.status} · Fiş ${d.serviceSlipStatus} · Teyit ${d.confirmationStatus}${d.enteredLate ? ' · Geç giriş' : ''}${partial}`;
+    }
     if (item.type === 'ATTEMPT') return `${d.technician?.name || '—'} · ${d.reason} · ${d.reviewStatus}${d.note ? ` · ${d.note}` : ''}`;
     if (item.type === 'NON_MAINTENANCE_VISIT') return `${d.technician?.name || '—'} · ${d.purpose}${d.note ? ` · ${d.note}` : ''}`;
     if (item.type === 'OBLIGATION') return `${d.cycleKey} · ${d.status} · ${new Date(d.dueStart).toLocaleDateString('tr-TR')}–${new Date(d.dueEnd).toLocaleDateString('tr-TR')}`;
@@ -66,7 +85,7 @@ export default function PointTimeline() {
 
   return <>
     <section className="panel">
-      <div className="panelHeader"><div><h2>Nokta Timeline</h2><p>Bir noktanın bakım, deneme, ziyaret, yükümlülük ve görevlendirme geçmişini tek kronolojide incele.</p></div><button className="ghost" disabled={busy} onClick={() => void loadTimeline(pointId)}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Nokta Timeline</h2><p>Bir noktanın bakım, deneme, ziyaret, yükümlülük ve görevlendirme geçmişini tek kronolojide incele.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadTimeline(pointId)}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       <div className="compactForm">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Müşteri no / nokta / bölge ara" />
@@ -85,9 +104,9 @@ export default function PointTimeline() {
       </section>
 
       <section className="panel">
-        <div className="panelHeader"><div><h2>{timeline.point.name}</h2><p>{timeline.point.code} · {timeline.point.region?.name || 'Bölge yok'} · {timeline.point.maintenanceType}</p></div><span className="pill">{items.length} olay</span></div>
+        <div className="panelHeader"><div><h2>{timeline.point.name}</h2><p>{timeline.point.code} · {timeline.point.region?.name || 'Bölge yok'} · {timeline.point.maintenanceType}</p></div><div className="rowActions"><span className="pill">{items.length} olay</span><button className="small" onClick={() => onNavigate('point-detail', { pointId: timeline.point.id, detailTab: 'timeline' })}>NOKTA DETAYI</button></div></div>
         <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Tür</th><th>Özet</th><th>Detay</th></tr></thead><tbody>
-          {items.length === 0 ? <tr><td colSpan={4}>Kayıt yok.</td></tr> : items.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleString('tr-TR')}</td><td><span className="pill">{labels[item.type]}</span></td><td>{summary(item)}</td><td><details><summary>JSON</summary><pre>{JSON.stringify(item.data, null, 2)}</pre></details></td></tr>)}
+          {busy && !timeline ? <tr><td colSpan={4}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Timeline yükleniyor</strong><span>Noktanın kronolojik geçmişi hazırlanıyor.</span></div></td></tr> : items.length === 0 ? <tr><td colSpan={4}><div className="emptyState compact"><AdminIcon name="history" /><strong>Kayıt yok</strong><span>Seçili olay türünde timeline kaydı bulunmuyor.</span></div></td></tr> : items.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleString('tr-TR')}</td><td><span className="pill">{labels[item.type]}</span></td><td>{summary(item)}</td><td><details><summary>JSON</summary><pre>{JSON.stringify(item.data, null, 2)}</pre></details></td></tr>)}
         </tbody></table></div>
       </section>
     </> : null}

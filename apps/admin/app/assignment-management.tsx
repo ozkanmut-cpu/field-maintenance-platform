@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Point = { id: string; code: string; name: string; region?: { id: string; name: string; technicianId?: string | null } | null };
@@ -20,6 +21,168 @@ type AuditHistory = {
   history: Array<{ id: string; action: string; note?: string | null; oldValue?: unknown; newValue?: unknown; createdAt: string; actor: { id: string; name: string } }>;
 };
 
+type AssignmentTiming = 'PLANNED' | 'CURRENT' | 'EXPIRED' | 'CLOSED';
+
+export function assignmentTimingStatus(
+  assignment: Pick<Assignment, 'active' | 'startsAt' | 'endsAt'>,
+  now: Date = new Date(),
+): AssignmentTiming {
+  if (!assignment.active) return 'CLOSED';
+  if (new Date(assignment.startsAt) > now) return 'PLANNED';
+  if (assignment.endsAt && new Date(assignment.endsAt) <= now) return 'EXPIRED';
+  return 'CURRENT';
+}
+
+function assignmentTimingLabel(status: AssignmentTiming) {
+  return ({ PLANNED: 'PLANLI', CURRENT: 'AKTİF', EXPIRED: 'SÜRESİ DOLDU', CLOSED: 'KAPALI' } as const)[status];
+}
+
+export function isAssignmentBusy(loading: { point: boolean; mutation: boolean; audit: boolean }) {
+  return loading.point || loading.mutation || loading.audit;
+}
+
+type AssignmentTimingRefreshScheduler = {
+  setTimeout: (callback: () => void, delay: number) => unknown;
+  clearTimeout: (handle: unknown) => void;
+};
+
+export function startAssignmentTimingRefresh(
+  assignments: Array<Pick<Assignment, 'active' | 'startsAt' | 'endsAt'>>,
+  now: Date,
+  refreshEffective: () => void,
+  scheduler: AssignmentTimingRefreshScheduler = {
+    setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+    clearTimeout: (handle) => window.clearTimeout(handle as number),
+  },
+) {
+  const nextBoundary = assignments.reduce<Date | null>((nearest, assignment) => {
+    if (!assignment.active) return nearest;
+    const candidates = [assignment.startsAt, assignment.endsAt]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value))
+      .filter((value) => value > now);
+    const boundary = candidates.reduce<Date | null>((next, value) => !next || value < next ? value : next, null);
+    return !boundary || nearest && nearest <= boundary ? nearest : boundary;
+  }, null);
+  if (!nextBoundary) return () => {};
+  const handle = scheduler.setTimeout(refreshEffective, nextBoundary.getTime() - now.getTime());
+  return () => scheduler.clearTimeout(handle);
+}
+
+type PointRequestHandlers = {
+  history: (value: PointHistory | null) => void;
+  effective: (value: Effective | null) => void;
+  audit: (value: AuditHistory | null) => void;
+  error: (value: string) => void;
+  loading: (value: boolean) => void;
+};
+
+type AuditRequestHandlers = {
+  audit: (value: AuditHistory | null) => void;
+  error: (value: string) => void;
+  loading: (value: boolean) => void;
+};
+
+type EffectiveRequestHandlers = {
+  effective: (value: Effective) => void;
+  error: (value: string) => void;
+  loading: (value: boolean) => void;
+};
+
+export function startAssignmentPointRequest(
+  pointId: string,
+  handlers: PointRequestHandlers,
+  fetcher: typeof fetch = fetch,
+) {
+  const controller = new AbortController();
+  let cancelled = false;
+  handlers.history(null);
+  handlers.effective(null);
+  handlers.audit(null);
+  handlers.error('');
+  handlers.loading(true);
+  void (async () => {
+    try {
+      const [historyResponse, effectiveResponse] = await Promise.all([
+        fetcher(`/api/backend/assignments/point/${pointId}`, { signal: controller.signal }),
+        fetcher(`/api/backend/assignments/effective/${pointId}`, { signal: controller.signal }),
+      ]);
+      const [pointHistory, effective] = await Promise.all([
+        historyResponse.json().catch(() => null),
+        effectiveResponse.json().catch(() => null),
+      ]);
+      if (!historyResponse.ok) throw new Error(Array.isArray(pointHistory?.message) ? pointHistory.message.join(', ') : pointHistory?.message || `HTTP ${historyResponse.status}`);
+      if (!effectiveResponse.ok) throw new Error(Array.isArray(effective?.message) ? effective.message.join(', ') : effective?.message || `HTTP ${effectiveResponse.status}`);
+      if (cancelled) return;
+      handlers.history(pointHistory as PointHistory);
+      handlers.effective(effective as Effective);
+    } catch (e) {
+      if (!cancelled) handlers.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!cancelled) handlers.loading(false);
+    }
+  })();
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
+}
+
+export function startAssignmentAuditRequest(
+  assignmentId: string,
+  handlers: AuditRequestHandlers,
+  fetcher: typeof fetch = fetch,
+) {
+  const controller = new AbortController();
+  let cancelled = false;
+  handlers.audit(null);
+  handlers.error('');
+  handlers.loading(true);
+  void (async () => {
+    try {
+      const response = await fetcher(`/api/backend/assignments/${assignmentId}/audit-history`, { signal: controller.signal });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
+      if (!cancelled) handlers.audit(body as AuditHistory);
+    } catch (e) {
+      if (!cancelled) handlers.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!cancelled) handlers.loading(false);
+    }
+  })();
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
+}
+
+export function startAssignmentEffectiveRequest(
+  pointId: string,
+  handlers: EffectiveRequestHandlers,
+  fetcher: typeof fetch = fetch,
+) {
+  const controller = new AbortController();
+  let cancelled = false;
+  handlers.error('');
+  handlers.loading(true);
+  void (async () => {
+    try {
+      const response = await fetcher(`/api/backend/assignments/effective/${pointId}`, { signal: controller.signal });
+      const effective = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(Array.isArray(effective?.message) ? effective.message.join(', ') : effective?.message || `HTTP ${response.status}`);
+      if (!cancelled) handlers.effective(effective as Effective);
+    } catch (e) {
+      if (!cancelled) handlers.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!cancelled) handlers.loading(false);
+    }
+  })();
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
+}
+
 export default function AssignmentManagement() {
   const [points, setPoints] = useState<Point[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
@@ -35,9 +198,16 @@ export default function AssignmentManagement() {
   const [search, setSearch] = useState('');
   const [historyFilter, setHistoryFilter] = useState<'ALL' | 'ACTIVE' | 'CLOSED' | 'POINT_OVERRIDE' | 'TEMPORARY'>('ALL');
   const [historySearch, setHistorySearch] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [pointLoading, setPointLoading] = useState(false);
+  const [mutationBusy, setMutationBusy] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const cancelPointRequest = useRef<(() => void) | null>(null);
+  const cancelAuditRequest = useRef<(() => void) | null>(null);
+  const cancelEffectiveRequest = useRef<(() => void) | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const busy = isAssignmentBusy({ point: pointLoading, mutation: mutationBusy, audit: auditLoading });
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
@@ -55,21 +225,50 @@ export default function AssignmentManagement() {
     setTechnicianId((current) => current || techs[0]?.id || '');
   }
 
-  async function loadPoint(id: string) {
-    if (!id) { setHistory(null); setEffective(null); return; }
-    setBusy(true); setError('');
-    try {
-      const [pointHistory, current] = await Promise.all([
-        api<PointHistory>(`/api/backend/assignments/point/${id}`),
-        api<Effective>(`/api/backend/assignments/effective/${id}`),
-      ]);
-      setHistory(pointHistory); setEffective(current); setAudit(null);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+  function loadPoint(id: string) {
+    cancelPointRequest.current?.();
+    cancelAuditRequest.current?.();
+    cancelEffectiveRequest.current?.();
+    cancelAuditRequest.current = null;
+    cancelEffectiveRequest.current = null;
+    setAuditLoading(false);
+    if (!id) { setHistory(null); setEffective(null); setAudit(null); setPointLoading(false); return; }
+    cancelPointRequest.current = startAssignmentPointRequest(id, {
+      history: setHistory,
+      effective: setEffective,
+      audit: setAudit,
+      error: setError,
+      loading: setPointLoading,
+    });
   }
 
   useEffect(() => { void loadBase().catch((e) => setError(e instanceof Error ? e.message : String(e))); }, []);
-  useEffect(() => { void loadPoint(pointId); }, [pointId]);
+  useEffect(() => {
+    loadPoint(pointId);
+    return () => {
+      cancelPointRequest.current?.();
+      cancelPointRequest.current = null;
+      cancelAuditRequest.current?.();
+      cancelAuditRequest.current = null;
+      cancelEffectiveRequest.current?.();
+      cancelEffectiveRequest.current = null;
+    };
+  }, [pointId]);
+  function refreshEffective(id: string) {
+    cancelEffectiveRequest.current?.();
+    cancelEffectiveRequest.current = startAssignmentEffectiveRequest(id, {
+      effective: setEffective,
+      error: setError,
+      loading: setPointLoading,
+    });
+  }
+  useEffect(() => {
+    if (!pointId || !history) return;
+    return startAssignmentTimingRefresh(history.assignments, now, () => {
+      setNow(new Date());
+      refreshEffective(pointId);
+    });
+  }, [history, now, pointId]);
 
   const filteredPoints = useMemo(() => {
     const q = search.trim().toLocaleLowerCase('tr-TR');
@@ -87,7 +286,7 @@ export default function AssignmentManagement() {
     if (endDate && endDate <= startDate) { setError('Bitiş tarihi başlangıç tarihinden sonra olmalıdır.'); return; }
     const conflictingActive = history?.assignments.find((a) => a.active && (!a.endsAt || new Date(a.endsAt) > startDate));
     if (conflictingActive && !window.confirm(`Bu noktada halen aktif bir ${conflictingActive.kind === 'POINT_OVERRIDE' ? 'kalıcı override' : 'geçici görevlendirme'} var (${conflictingActive.technician.name}). Yeni kaydı yine de oluşturmak istiyor musunuz?`)) return;
-    setBusy(true); setError(''); setNotice('');
+    setMutationBusy(true); setError(''); setNotice('');
     try {
       await api('/api/backend/assignments', {
         method: 'POST',
@@ -95,56 +294,59 @@ export default function AssignmentManagement() {
       });
       setNotice(kind === 'POINT_OVERRIDE' ? 'Kalıcı nokta istisnası oluşturuldu.' : 'Geçici görevlendirme oluşturuldu.');
       setReason(''); setEndsAt('');
-      await loadPoint(pointId);
+      loadPoint(pointId);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { setMutationBusy(false); }
   }
 
   async function deactivate(assignment: Assignment) {
     const closeReason = window.prompt('Görevlendirmeyi kapatma nedeni (opsiyonel):')?.trim();
     if (closeReason === undefined) return;
     if (!window.confirm(`${assignment.technician.name} görevlendirmesi kapatılsın mı?`)) return;
-    setBusy(true); setError(''); setNotice('');
+    setMutationBusy(true); setError(''); setNotice('');
     try {
       await api(`/api/backend/assignments/${assignment.id}/deactivate`, { method: 'PATCH', body: JSON.stringify(closeReason ? { reason: closeReason } : {}) });
       setNotice('Görevlendirme kapatıldı.');
-      await loadPoint(pointId);
+      loadPoint(pointId);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { setMutationBusy(false); }
   }
 
-  async function openAudit(id: string) {
-    setBusy(true); setError('');
-    try { setAudit(await api<AuditHistory>(`/api/backend/assignments/${id}/audit-history`)); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+  function openAudit(id: string) {
+    cancelAuditRequest.current?.();
+    cancelAuditRequest.current = startAssignmentAuditRequest(id, {
+      audit: setAudit,
+      error: setError,
+      loading: setAuditLoading,
+    });
   }
 
-  const activeCount = history?.assignments.filter((a) => a.active).length ?? 0;
+  const activeCount = history?.assignments.filter((a) => assignmentTimingStatus(a, now) === 'CURRENT').length ?? 0;
   const overrideCount = history?.assignments.filter((a) => a.kind === 'POINT_OVERRIDE').length ?? 0;
   const temporaryCount = history?.assignments.filter((a) => a.kind === 'TEMPORARY').length ?? 0;
   const filteredHistory = useMemo(() => {
     const q = historySearch.trim().toLocaleLowerCase('tr-TR');
     return (history?.assignments ?? []).filter((a) => {
-      if (historyFilter === 'ACTIVE' && !a.active) return false;
-      if (historyFilter === 'CLOSED' && a.active) return false;
+      const timing = assignmentTimingStatus(a, now);
+      if (historyFilter === 'ACTIVE' && timing !== 'CURRENT') return false;
+      if (historyFilter === 'CLOSED' && timing !== 'CLOSED' && timing !== 'EXPIRED') return false;
       if (historyFilter === 'POINT_OVERRIDE' && a.kind !== 'POINT_OVERRIDE') return false;
       if (historyFilter === 'TEMPORARY' && a.kind !== 'TEMPORARY') return false;
       if (!q) return true;
       return `${a.technician.name} ${a.kind} ${a.reason ?? ''} ${a.createdBy.name}`.toLocaleLowerCase('tr-TR').includes(q);
     });
-  }, [history, historyFilter, historySearch]);
+  }, [history, historyFilter, historySearch, now]);
 
   return <>
     <section className="dashboardGrid">
       <div className="dashboardCard"><span>Effective kaynak</span><strong>{effective?.source ?? '—'}</strong><small>{effective?.technician?.name || 'Teknisyen yok'}</small></div>
-      <div className="dashboardCard"><span>Aktif istisna</span><strong>{activeCount}</strong><small>Bu nokta için</small></div>
+      <div className="dashboardCard"><span>Yürürlükte istisna</span><strong>{activeCount}</strong><small>Bu nokta için</small></div>
       <div className="dashboardCard"><span>Kalıcı override</span><strong>{overrideCount}</strong><small>Toplam geçmiş</small></div>
       <div className="dashboardCard"><span>Geçici</span><strong>{temporaryCount}</strong><small>Toplam geçmiş</small></div>
     </section>
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Görevlendirme Yönetimi</h2><p>Bölge teknisyenini ezmeden nokta bazlı kalıcı istisna veya süreli görevlendirme tanımla.</p></div><button className="ghost" disabled={busy} onClick={() => void loadPoint(pointId)}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Görevlendirme Yönetimi</h2><p>Bölge teknisyenini ezmeden nokta bazlı kalıcı istisna veya süreli görevlendirme tanımla.</p></div><button className="ghost iconAction" disabled={busy} onClick={() => void loadPoint(pointId)}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       {notice ? <div className="banner">{notice}</div> : null}
       <div className="compactForm">
@@ -169,16 +371,19 @@ export default function AssignmentManagement() {
       <div className="panelHeader"><div><h2>{history?.point.name || 'Nokta'} · Görevlendirme Geçmişi</h2><p>{history?.point.code || '—'} · Bölge varsayılanı: {history?.point.region?.name || 'Bölge yok'}</p></div></div>
       <div className="compactForm">
         <input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Teknisyen / neden / oluşturan ara" />
-        <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı</option><option value="POINT_OVERRIDE">Kalıcı override</option><option value="TEMPORARY">Geçici</option></select>
+        <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}><option value="ALL">Tüm geçmiş</option><option value="ACTIVE">Yalnız aktif</option><option value="CLOSED">Yalnız kapalı / sona ermiş</option><option value="POINT_OVERRIDE">Kalıcı override</option><option value="TEMPORARY">Geçici</option></select>
       </div>
       <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>Neden</th><th></th></tr></thead><tbody>
-        {!filteredHistory.length ? <tr><td colSpan={7}>Bu filtrelerde görevlendirme kaydı yok.</td></tr> : filteredHistory.map((a) => <tr key={a.id}>
-          <td><strong>{a.technician.name}</strong></td><td>{a.kind === 'POINT_OVERRIDE' ? 'Kalıcı override' : 'Geçici'}</td><td>{new Date(a.startsAt).toLocaleString('tr-TR')}</td><td>{a.endsAt ? new Date(a.endsAt).toLocaleString('tr-TR') : 'Süresiz'}</td><td><span className={a.active ? 'pill active' : 'pill'}>{a.active ? 'AKTİF' : 'KAPALI'}</span></td><td>{a.reason || '—'}</td><td className="actions"><button className="small" type="button" disabled={busy} onClick={() => void openAudit(a.id)}>AUDIT</button>{a.active ? <button className="small" type="button" disabled={busy} onClick={() => void deactivate(a)}>KAPAT</button> : null}</td>
-        </tr>)}
+        {busy && !history ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Görevlendirmeler yükleniyor</strong><span>Nokta geçmişi hazırlanıyor.</span></div></td></tr> : !filteredHistory.length ? <tr><td colSpan={7}><div className="emptyState compact"><AdminIcon name="search" /><strong>Görevlendirme kaydı yok</strong><span>Seçili filtrelerde kayıt bulunamadı.</span></div></td></tr> : filteredHistory.map((a) => {
+          const timing = assignmentTimingStatus(a, now);
+          return <tr key={a.id}>
+            <td><strong>{a.technician.name}</strong></td><td>{a.kind === 'POINT_OVERRIDE' ? 'Kalıcı override' : 'Geçici'}</td><td>{new Date(a.startsAt).toLocaleString('tr-TR')}</td><td>{a.endsAt ? new Date(a.endsAt).toLocaleString('tr-TR') : 'Süresiz'}</td><td><span className={timing === 'CURRENT' ? 'pill active' : 'pill'}>{assignmentTimingLabel(timing)}</span></td><td>{a.reason || '—'}</td><td className="actions"><button className="small iconAction" type="button" disabled={busy} onClick={() => void openAudit(a.id)}><AdminIcon name="history" size={15} /><span>AUDIT</span></button>{a.active ? <button className="small" type="button" disabled={busy} onClick={() => void deactivate(a)}><AdminIcon name="error" size={16} /><span>KAPAT</span></button> : null}</td>
+          </tr>;
+        })}
       </tbody></table></div>
     </section>
 
-    {audit ? <section className="panel"><div className="panelHeader"><div><h2>Görevlendirme Audit Geçmişi</h2><p>{audit.assignment.kind} · {audit.assignment.active ? 'Aktif' : 'Kapalı'}</p></div><button className="ghost" onClick={() => setAudit(null)}>KAPAT</button></div>
+    {audit ? <section className="panel"><div className="panelHeader"><div><h2>Görevlendirme Audit Geçmişi</h2><p>{audit.assignment.kind} · {audit.assignment.active ? 'Aktif' : 'Kapalı'}</p></div><button className="ghost" onClick={() => setAudit(null)}><AdminIcon name="error" size={16} /><span>KAPAT</span></button></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Kullanıcı</th><th>Not</th><th>Değişiklik</th></tr></thead><tbody>
         {audit.history.map((h) => <tr key={h.id}><td>{new Date(h.createdAt).toLocaleString('tr-TR')}</td><td>{h.action}</td><td>{h.actor.name}</td><td>{h.note || '—'}</td><td><details><summary>JSON</summary><pre>{JSON.stringify({ before: h.oldValue ?? null, after: h.newValue ?? null }, null, 2)}</pre></details></td></tr>)}
       </tbody></table></div>

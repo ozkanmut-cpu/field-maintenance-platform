@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AdminIcon } from './admin-icons';
 
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
 type Purpose = 'BREAKDOWN' | 'SURVEY' | 'INSTALLATION' | 'REMOVAL';
@@ -31,31 +32,49 @@ export default function NonMaintenanceVisits() {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const loadRequestId = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
 
-  async function api<T>(path: string): Promise<T> {
-    const response = await fetch(path);
+  async function api<T>(path: string, signal: AbortSignal): Promise<T> {
+    const response = await fetch(path, { signal });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message || `HTTP ${response.status}`);
     return body as T;
   }
 
   async function load() {
+    const requestId = ++loadRequestId.current;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setBusy(true); setError('');
     try {
-      const users = await api<Technician[]>('/api/backend/users');
+      const users = await api<Technician[]>('/api/backend/users', controller.signal);
+      if (loadRequestId.current !== requestId) return;
       const techs = users.filter((u) => u.role === 'TECHNICIAN' && u.active);
       setTechnicians(techs);
       const targets = technicianId === 'ALL' ? techs : techs.filter((t) => t.id === technicianId);
       const results = await Promise.all(targets.map(async (tech) => {
-        const data = await api<HistoryResponse>(`/api/backend/maintenance/non-maintenance-visits?technicianId=${encodeURIComponent(tech.id)}&date=${encodeURIComponent(date)}`);
+        const data = await api<HistoryResponse>(`/api/backend/maintenance/non-maintenance-visits?technicianId=${encodeURIComponent(tech.id)}&date=${encodeURIComponent(date)}`, controller.signal);
         return data.items.map((item) => ({ ...item, technician: { id: tech.id, name: tech.name } }));
       }));
-      setVisits(results.flat().sort((a, b) => new Date(b.visitedAt).getTime() - new Date(a.visitedAt).getTime()));
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+      if (loadRequestId.current === requestId) {
+        setVisits(results.flat().sort((a, b) => new Date(b.visitedAt).getTime() - new Date(a.visitedAt).getTime()));
+      }
+    } catch (e) {
+      if (loadRequestId.current === requestId && !controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (loadRequestId.current === requestId) {
+        setBusy(false);
+        if (requestController.current === controller) requestController.current = null;
+      }
+    }
   }
 
-  useEffect(() => { void load(); }, [date, technicianId]);
+  useEffect(() => {
+    void load();
+    return () => { requestController.current?.abort(); };
+  }, [date, technicianId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr-TR');
@@ -78,7 +97,7 @@ export default function NonMaintenanceVisits() {
     </section>
 
     <section className="panel">
-      <div className="panelHeader"><div><h2>Bakım Dışı Ziyaretler</h2><p>Arıza, keşif, kurulum ve söküm ziyaretlerini teknisyen ve tarih bazında incele.</p></div><button className="ghost" onClick={() => void load()} disabled={busy}>YENİLE</button></div>
+      <div className="panelHeader"><div><h2>Bakım Dışı Ziyaretler</h2><p>Arıza, keşif, kurulum ve söküm ziyaretlerini teknisyen ve tarih bazında incele.</p></div><button className="ghost iconAction" onClick={() => void load()} disabled={busy}><AdminIcon name="refresh" size={17} /><span>YENİLE</span></button></div>
       {error ? <div className="error banner">{error}</div> : null}
       <div className="compactForm">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -90,13 +109,13 @@ export default function NonMaintenanceVisits() {
 
     <section className="panel">
       <div className="panelHeader"><div><h2>Günlük Dağılım</h2><p>Seçili tarihte bakım dışı ziyaret yapan teknisyenler.</p></div><span className="pill">{technicianCounts.length} teknisyen</span></div>
-      <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Ziyaret</th><th>Pay</th></tr></thead><tbody>{technicianCounts.length === 0 ? <tr><td colSpan={3}>Kayıt yok.</td></tr> : technicianCounts.map((t) => <tr key={t.id}><td>{t.name}</td><td>{t.count}</td><td>{visits.length ? `%${Math.round(t.count / visits.length * 100)}` : '%0'}</td></tr>)}</tbody></table></div>
+      <div className="tableWrap"><table><thead><tr><th>Teknisyen</th><th>Ziyaret</th><th>Pay</th></tr></thead><tbody>{busy && visits.length === 0 ? <tr><td colSpan={3}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Ziyaretler yükleniyor</strong><span>Günlük teknisyen dağılımı hazırlanıyor.</span></div></td></tr> : technicianCounts.length === 0 ? <tr><td colSpan={3}><div className="emptyState compact"><AdminIcon name="visit" /><strong>Ziyaret yok</strong><span>Seçili tarihte bakım dışı ziyaret kaydı bulunmuyor.</span></div></td></tr> : technicianCounts.map((t) => <tr key={t.id}><td>{t.name}</td><td>{t.count}</td><td>{visits.length ? `%${Math.round(t.count / visits.length * 100)}` : '%0'}</td></tr>)}</tbody></table></div>
     </section>
 
     <section className="panel">
       <div className="panelHeader"><div><h2>Ziyaret Kayıtları</h2><p>{filtered.length} kayıt gösteriliyor.</p></div></div>
       <div className="tableWrap"><table><thead><tr><th>Tarih</th><th>Teknisyen</th><th>Nokta</th><th>Amaç</th><th>Not</th><th>Konum</th></tr></thead><tbody>
-        {filtered.length === 0 ? <tr><td colSpan={6}>Bu filtrelerde kayıt yok.</td></tr> : filtered.map((item) => <tr key={item.id}><td>{new Date(item.visitedAt).toLocaleString('tr-TR')}</td><td><strong>{item.technician.name}</strong></td><td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.status}</div></td><td><span className="pill">{purposeLabels[item.purpose]}</span></td><td>{item.note || '—'}</td><td>{Number(item.latitude).toFixed(5)}, {Number(item.longitude).toFixed(5)}<div className="muted">{item.accuracyMeters == null ? 'Hassasiyet yok' : `±${Math.round(Number(item.accuracyMeters))} m`}</div></td></tr>)}
+        {busy && visits.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Ziyaret kayıtları yükleniyor</strong><span>Seçili tarih ve teknisyen kayıtları getiriliyor.</span></div></td></tr> : filtered.length === 0 ? <tr><td colSpan={6}><div className="emptyState compact"><AdminIcon name="search" /><strong>Kayıt bulunamadı</strong><span>Arama, amaç veya teknisyen filtresini değiştir.</span></div></td></tr> : filtered.map((item) => <tr key={item.id}><td>{new Date(item.visitedAt).toLocaleString('tr-TR')}</td><td><strong>{item.technician.name}</strong></td><td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.status}</div></td><td><span className="pill">{purposeLabels[item.purpose]}</span></td><td>{item.note || '—'}</td><td>{Number(item.latitude).toFixed(5)}, {Number(item.longitude).toFixed(5)}<div className="muted">{item.accuracyMeters == null ? 'Hassasiyet yok' : `±${Math.round(Number(item.accuracyMeters))} m`}</div></td></tr>)}
       </tbody></table></div>
     </section>
   </>;

@@ -19,6 +19,8 @@ export class PointTimelineService {
         select: {
           id: true, performedAt: true, recordedAtServer: true, status: true, enteredLate: true,
           serviceSlipStatus: true, confirmationStatus: true, reviewRecommended: true, reviewReason: true,
+          totalCoolerCount: true, maintainedCoolerCount: true, missingMaintenanceCount: true,
+          missingMaintenanceExplanation: true,
           coolerCount: true, towerCount: true,
           tapCount: true, smarttapCount: true,
           technician: { select: { id: true, name: true, username: true } },

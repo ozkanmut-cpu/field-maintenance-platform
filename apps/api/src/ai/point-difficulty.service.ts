@@ -1,16 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import { FeatureSnapshot } from './feature-store.types';
+import { EquipmentProfileService } from './equipment-profile.service';
+import { DifficultyCalibrationService } from './difficulty-calibration.service';
 import { PointDifficultyProfile } from './point-difficulty.types';
+import { AI_ENGINE_VERSION, AI_FEATURE_SCHEMA_VERSION } from './ai-version';
+import { WorkloadCalibrationAssessment, WorkloadCalibrationService } from './workload-calibration.service';
+import { buildServiceWorkloadIndex } from './service-workload-index';
 
 @Injectable()
 export class PointDifficultyService {
+  constructor(
+    private readonly equipmentProfiles: EquipmentProfileService,
+    private readonly calibration: DifficultyCalibrationService,
+    private readonly workloadCalibration: WorkloadCalibrationService = new WorkloadCalibrationService(),
+  ) {}
   assess(history: FeatureSnapshot[]): PointDifficultyProfile[] {
     const ordered = [...history].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
     const ids = new Set(ordered.flatMap((s) => s.records.filter((r) => r.entityType === 'POINT').map((r) => r.entityId)));
-    return [...ids].sort().map((id) => this.assessPoint(ordered, id));
+    const workloadModel = this.workloadCalibration.assess(ordered);
+    return [...ids].sort().map((id) => this.assessPoint(ordered, id, workloadModel));
   }
 
-  assessPoint(history: FeatureSnapshot[], pointId: string): PointDifficultyProfile {
+  reconstructPoint(history: FeatureSnapshot[], pointId: string) {
+    const ordered = [...history].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    return ordered.map((snapshot, index) => ({
+      weekKey: snapshot.weekKey,
+      profile: this.assessPoint(ordered.slice(0, index + 1), pointId),
+    }));
+  }
+
+  assessPoint(history: FeatureSnapshot[], pointId: string, workloadModel?: WorkloadCalibrationAssessment): PointDifficultyProfile {
     const rows = history.flatMap((s) => s.records.filter((r) => r.entityType === 'POINT' && r.entityId === pointId));
     const latest = rows.at(-1)?.features ?? {};
     const numberOrNull = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -21,29 +40,50 @@ export class PointDifficultyService {
       smarttapCount: numberOrNull(latest.smarttapCount),
     };
     const equipmentProfileComplete = Object.values(equipment).every((v) => v !== null);
+    const workloadCalibration = workloadModel ?? this.workloadCalibration.assess(history);
+    const serviceWorkload = buildServiceWorkloadIndex(equipment, workloadCalibration.equipmentReference, workloadCalibration.equipment, workloadCalibration.confidence);
+    const equipmentProfile = this.equipmentProfiles.assessPoint(history, pointId);
     const visits = rows.reduce((s, r) => s + Number(r.features.visitCount ?? 0), 0);
     const attempts = rows.reduce((s, r) => s + Number(r.features.attemptCount ?? 0), 0);
     const missed = rows.reduce((s, r) => s + Number(r.features.missedObligationCount ?? 0), 0);
     const completed = rows.reduce((s, r) => s + Number(r.features.completedObligationCount ?? 0), 0);
     const observedPeriods = missed + completed;
     const reasons: string[] = [];
-    if (!equipmentProfileComplete) reasons.push('EQUIPMENT_PROFILE_INCOMPLETE');
+    reasons.push(...equipmentProfile.reasons);
+    reasons.push(...serviceWorkload.reasonCodes);
     if (latest.hasCanonicalLocation !== true) reasons.push('LOCATION_MISSING');
     if (history.length < 4) reasons.push('HISTORY_TOO_SHORT');
     if (visits + attempts < 4 && observedPeriods < 4) reasons.push('OUTCOME_EVIDENCE_LOW');
-    const active = equipmentProfileComplete && history.length >= 4 && (visits + attempts >= 4 || observedPeriods >= 4);
+    const equipmentReady = equipmentProfileComplete && (equipmentProfile.confidence === 'MEDIUM' || equipmentProfile.confidence === 'HIGH');
+    if (!equipmentReady) reasons.push('EQUIPMENT_DATA_QUALITY_GATE_NOT_READY');
+    const active = equipmentReady && history.length >= 4 && (visits + attempts >= 4 || observedPeriods >= 4);
     const adverse = attempts + missed;
     const favorable = visits + completed;
     const total = adverse + favorable;
-    const score = active && total > 0 ? Math.round((adverse / total) * 1000) / 10 : null;
-    const confidence = !active ? 'LOW' : history.length >= 12 && total >= 12 ? 'HIGH' : total >= 6 ? 'MEDIUM' : 'LOW';
+    const rawOutcomeScore = active && total > 0 ? Math.round((adverse / total) * 1000) / 10 : null;
+    const calibration = this.calibration.estimate(history, pointId);
+    const calibratedRate = active && total > 0 && calibration.estimatedRate !== null && calibration.effectiveEvidence > 0
+      ? (adverse + calibration.estimatedRate * calibration.effectiveEvidence) / (total + calibration.effectiveEvidence)
+      : active && total > 0 ? adverse / total : null;
+    const score = calibratedRate === null ? null : Math.round(calibratedRate * 1000) / 10;
+    if (calibration.estimatedRate === null) reasons.push(...calibration.reasonCodes);
+    else reasons.push('DIFFICULTY_SCORE_EMPIRICALLY_CALIBRATED');
+    const outcomeConfidence = !active ? 'LOW' : history.length >= 12 && total >= 12 ? 'HIGH' : total >= 6 ? 'MEDIUM' : 'LOW';
+    const confidence = !active ? 'LOW' : equipmentProfile.confidence === 'HIGH' ? outcomeConfidence : outcomeConfidence === 'HIGH' ? 'MEDIUM' : outcomeConfidence;
     return {
+      engineVersion: AI_ENGINE_VERSION,
+      featureSchemaVersion: AI_FEATURE_SCHEMA_VERSION,
       pointId,
       state: active ? 'ACTIVE' : 'WARMING_UP',
       confidence,
+      maturityState: active ? 'ACTIVE' : 'WARMING_UP',
       score,
+      rawOutcomeScore,
+      calibration,
       equipmentProfileComplete,
+      equipmentProfile,
       equipment,
+      serviceWorkload,
       geography: {
         located: latest.hasCanonicalLocation === true,
         isolated: latest.geographicIsolated === true,
@@ -51,6 +91,7 @@ export class PointDifficultyService {
       },
       history: { visits, attempts, missed, completed, observedPeriods },
       reasons,
+      reasonCodes: [...new Set(reasons)],
     };
   }
 }
