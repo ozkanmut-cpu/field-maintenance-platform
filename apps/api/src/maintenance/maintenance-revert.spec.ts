@@ -45,11 +45,14 @@ test('revert repairs obligations when the visit is already reversed', async () =
     }),
   };
 
-  const result = await serviceWith(prisma).revert({
-    visitId: visit.id,
-    userId: 'technician-1',
-    reason: 'Yanlış deneme kaydı',
-  });
+  const result = await serviceWith(prisma).revert(
+    {
+      visitId: visit.id,
+      userId: 'technician-1',
+      reason: 'Yanlış deneme kaydı',
+    },
+    new Date('2026-09-20T20:59:59.000Z'),
+  );
 
   assert.equal(result, visit);
   assert.equal(obligationUpdates.length, 1);
@@ -124,11 +127,14 @@ test('a concurrent revert loser does not overwrite the winning reversal metadata
     }),
   };
 
-  const result = await serviceWith(prisma).revert({
-    visitId: staleVisit.id,
-    userId: 'technician-1',
-    reason: 'İkinci istek',
-  });
+  const result = await serviceWith(prisma).revert(
+    {
+      visitId: staleVisit.id,
+      userId: 'technician-1',
+      reason: 'İkinci istek',
+    },
+    new Date('2026-09-20T20:59:59.000Z'),
+  );
 
   assert.equal(result, winningVisit);
   assert.equal(visitUpdateManyCalls.length, 1);
