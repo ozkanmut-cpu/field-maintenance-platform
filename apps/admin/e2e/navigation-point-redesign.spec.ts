@@ -43,6 +43,22 @@ test('dashboard leads with exactly three real priorities and keeps reports visib
   await expect(priorities.getByRole('button', { name: /Geciken açık iş: 3/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Günlük Operasyon Özeti' })).toBeVisible();
 });
+test('attempt review requires a visible rejection reason and updates only the decided row', async ({ page }) => {
+  await page.goto('/?section=approvals');
+  const row = page.getByRole('row').filter({ hasText: 'Kordon Pub' }).first();
+  await expect(row.getByText('En eski bekleyen', { exact: true })).toBeVisible();
+  await expect(row.getByText('Gecikmiş', { exact: true })).toBeVisible();
+  await expect(row.getByText('Tekrarlayan teknisyen', { exact: true })).toBeVisible();
+  await row.getByRole('button', { name: 'Reddet', exact: true }).click();
+  await expect(row.getByRole('alert')).toHaveText('Reddetmek için ret nedeni zorunludur.');
+  await row.getByRole('textbox', { name: /Ret nedeni \(zorunlu\)/ }).fill('Nokta açıktı; ziyaret yeniden yapılmalı.');
+  page.once('dialog', dialog => dialog.accept());
+  await row.getByRole('button', { name: 'Reddet', exact: true }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Alsancak Pub' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Son yapılamadı kararları' }).getByText('Kordon Pub')).toBeVisible();
+  await expect(page.getByText('1 bekliyor', { exact: true })).toBeVisible();
+});
+
 test('point list and detail use operational labels while preserving the deep link', async ({ page }) => {
   await page.goto('/?section=points&status=ACTIVE');
   await expect(page.getByText('1 sonuç', { exact: true })).toBeVisible();
