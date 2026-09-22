@@ -1,14 +1,14 @@
-const app = require('./app.json');
+const appJson = require('./app.json');
 
 const evidenceMode = process.env.EXPO_PUBLIC_MOCKUP_EVIDENCE_MODE === '1';
 
-module.exports = () => ({
-  ...app,
-  expo: {
-    ...app.expo,
-    android: {
-      ...app.expo.android,
-      ...(evidenceMode ? { usesCleartextTraffic: true } : {}),
-    },
-  },
-});
+module.exports = () => {
+  const config = appJson.expo;
+
+  return {
+    ...config,
+    plugins: evidenceMode
+      ? [...(config.plugins ?? []), './plugins/withMockupEvidenceCleartext']
+      : config.plugins,
+  };
+};
