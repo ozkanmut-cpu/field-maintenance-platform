@@ -112,14 +112,36 @@ test('point detail header uses real ownership data and preserves return-to-list 
     'Returning to the list must retain the complete filter, page, and scroll context');
   assert.match(source, /<button className="ghost" onClick=\{\(\) => returnToPoints\(\)\}>Geri dön: Noktalar<\/button>/,
     'The General-tab header return must use the complete context-preserving return path rather than dropping region or maintenance type');
-  assert.match(source, /onClick=\{\(\) => onNavigate\('points'\)\}/,
-    'The shared detail tab control must provide the direct list return');
+  assert.doesNotMatch(source, /onClick=\{\(\) => onNavigate\('points'\)\}/,
+    'The shared tab control must not duplicate the main return action');
+  assert.equal((source.match(/Geri dön: Noktalar/g) ?? []).length, 1,
+    'Point Detail must render exactly one return action');
   assert.equal((source.match(/<DetailTabs activeTab=\{activeTab\} onNavigate=\{navigateTab\} \/>/g) ?? []).length, 4,
     'General, audit, timeline, and the shared remaining-tab view must each expose the direct list return');
   assert.match(source, /Bakım tipi/,
     'The header must expose the point maintenance type');
   assert.match(source, /Geçerli teknisyen/,
     'The header must identify the effective technician rather than assuming the region technician');
+});
+
+test('point detail exposes a single mockup-aligned identity and operations summary', () => {
+  const source = readFileSync(path, 'utf8');
+
+  assert.match(source, /aria-label="İçerik yolu"/);
+  assert.match(source, /Nokta Yönetimi/);
+  assert.match(source, /Noktalar/);
+  assert.match(source, /maintenanceTypeLabel/);
+  assert.match(source, /locationSummary/);
+  assert.match(source, /Google doğrulandı/);
+  assert.match(source, /Son bakım/);
+  assert.match(source, /Teyit girilen bakım/);
+  assert.match(source, /Soğutucu/);
+  assert.match(source, /Servis fişi/);
+  assert.match(source, /Admin kararı/);
+  assert.match(source, /title=\{`Kaynak:/,
+    'Technical source values may appear only as supplemental badge metadata');
+  assert.equal((source.match(/>Düzenle</g) ?? []).length, 1,
+    'Point detail has one primary edit action');
 });
 
 test('point detail manages aliases only through the supported list and add contract', () => {
@@ -134,6 +156,8 @@ test('point detail manages aliases only through the supported list and add contr
     'The alias input needs a persistent accessible label');
   assert.match(source, /Alias ekle/,
     'Adding an alias must be a deliberate submit action');
+  assert.match(source, /aliases\.length === 0 \|\| editing/,
+    'An empty alias state must expose Alias ekle without forcing point edit mode first');
   assert.doesNotMatch(source, /\/aliases'.*method: 'PATCH'|\/aliases'.*method: 'DELETE'/,
     'The UI must not advertise unsupported alias mutation endpoints');
 });

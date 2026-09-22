@@ -35,3 +35,23 @@ test('point list keeps real region and maintenance filters in the list-detail UR
   assert.match(navigation, /admin-navigation-runtime/,
     'the executable navigation helper owns URL parsing and building');
 });
+
+test('point list presents mockup-aligned human labels, filters, grouping and timestamps', () => {
+  const source = readFileSync(pointListPath, 'utf8');
+
+  assert.match(source, /AdminFilterToolbar/);
+  assert.match(source, /resultLabel="sonuç"/);
+  assert.match(source, /Aktif filtreler/);
+  assert.match(source, /Filtreleri temizle/);
+  assert.match(source, /stickyColumns=\{2\}/);
+  assert.match(source, /pointRowGroup/);
+  assert.match(source, /Aynı nokta/);
+  assert.match(source, /formatShortDateTime/);
+  assert.match(source, /Google doğrulandı/);
+  assert.match(source, /Smart Clean/);
+  assert.match(source, /<strong>\{point\.name\}<\/strong>/);
+  assert.match(source, /\{point\.code\} · \{point\.address \?\? 'Adres yok'\}/);
+  assert.doesNotMatch(source, />STANDARD</);
+  assert.doesNotMatch(source, />SMARTCLEAN</);
+  assert.doesNotMatch(source, />ACTIVE</);
+});

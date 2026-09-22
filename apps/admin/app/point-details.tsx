@@ -11,6 +11,13 @@ type EquipmentAudit = {
 };
 type AuditResponse = { count: number; items: EquipmentAudit[] };
 
+function maintenanceTypeLabel(value: string) { return value === 'SMARTCLEAN' ? 'Smart Clean' : value === 'STANDARD' ? 'Standart Bakım' : 'Bakım tipi bilinmiyor'; }
+function statusLabel(value: string) { return value === 'ACTIVE' ? 'Aktif' : value === 'PASSIVE' ? 'Pasif' : value === 'CANCELLED' ? 'İptal' : 'Durum bilinmiyor'; }
+function locationSummary(source?: string | null, confidence?: number | null) {
+  const score = confidence === null || confidence === undefined ? '—' : `%${confidence}`;
+  return source === 'GOOGLE' ? `Google doğrulandı · ${score}` : `Konum kaydı · ${score}`;
+}
+
 type Point = {
   id: string; code: string; name: string; sapName?: string | null; address?: string | null;
   status: string; maintenanceType: string; maintenanceWeek?: number | null; smartcleanReferenceAt?: string | null;
@@ -124,19 +131,19 @@ export default function PointDetails() {
 
     {loadingPoints ? <section className="panel"><div className="emptyState"><AdminIcon name="clock" /><strong>Noktalar yükleniyor</strong><span>Nokta detayları hazırlanıyor.</span></div></section> : point ? <>
       <section className="dashboardGrid">
-        <div className="dashboardCard"><span>Konum confidence</span><strong>{point.locationConfidence ?? 0}%</strong><small>{point.locationSource || 'UNKNOWN'}</small></div>
+        <div className="dashboardCard"><span>Konum doğrulaması</span><strong>{locationSummary(point.locationSource, point.locationConfidence)}</strong><small title={`Kaynak: ${point.locationSource ?? 'bilinmiyor'}`}>Konum özeti</small></div>
         <div className="dashboardCard"><span>Alias</span><strong>{aliases.length}</strong><small>Alternatif isim</small></div>
         <div className="dashboardCard"><span>Ekipman</span><strong>{equipmentComplete ? 'Tam' : 'Eksik'}</strong><small>Profil durumu</small></div>
-        <div className="dashboardCard"><span>Bakım</span><strong>{point.maintenanceType}</strong><small>Hafta {point.maintenanceWeek ?? '—'}</small></div>
+        <div className="dashboardCard"><span>Bakım</span><strong>{maintenanceTypeLabel(point.maintenanceType)}</strong><small>Hafta {point.maintenanceWeek ?? '—'}</small></div>
       </section>
 
       <section className="panel">
-        <div className="panelHeader"><div><h2>{point.name}</h2><p>{point.code} · {point.region?.name || 'Bölge yok'} · {point.status}</p></div><div className="actions"><button className="small" disabled={busy} onClick={() => void addAlias()}>ALIAS EKLE</button><button className="small" disabled={busy} onClick={() => void runAction(`/api/backend/points/${point.id}/address-discovery`, 'Adres keşfi tamamlandı.')}>ADRES KEŞFİ</button><button className="small" disabled={busy} onClick={() => void runAction(`/api/backend/maintenance/google-place-match?pointId=${encodeURIComponent(point.id)}`, 'Google eşleştirme tamamlandı.')}>GOOGLE EŞLEŞTİR</button><button className="small" disabled={busy} onClick={() => void runAction(`/api/backend/maintenance/location-refresh?pointId=${encodeURIComponent(point.id)}`, 'Konum öğrenimi yenilendi.')}>KONUMU YENİLE</button></div></div>
+        <div className="panelHeader"><div><h2>{point.name}</h2><p>{point.code} · {point.region?.name || 'Bölge yok'} · {statusLabel(point.status)}</p></div><div className="actions"><button className="small" disabled={busy} onClick={() => void addAlias()}>ALIAS EKLE</button><button className="small" disabled={busy} onClick={() => void runAction(`/api/backend/points/${point.id}/address-discovery`, 'Adres keşfi tamamlandı.')}>ADRES KEŞFİ</button><button className="small" disabled={busy} onClick={() => void runAction(`/api/backend/maintenance/google-place-match?pointId=${encodeURIComponent(point.id)}`, 'Google eşleştirme tamamlandı.')}>GOOGLE EŞLEŞTİR</button><button className="small" disabled={busy} onClick={() => void runAction(`/api/backend/maintenance/location-refresh?pointId=${encodeURIComponent(point.id)}`, 'Konum öğrenimi yenilendi.')}>KONUMU YENİLE</button></div></div>
         <div className="tableWrap"><table><tbody>
           <tr><th>Saha adı</th><td>{point.name}</td><th>SAP resmi adı</th><td>{point.sapName || '—'}</td></tr>
           <tr><th>Google işletme adı</th><td>{point.googleBusinessName || '—'}</td><th>Google Place ID</th><td>{point.googlePlaceId || '—'}</td></tr>
           <tr><th>Adres</th><td colSpan={3}>{point.address || '—'}</td></tr>
-          <tr><th>Canonical konum</th><td>{point.canonicalLatitude ?? '—'}, {point.canonicalLongitude ?? '—'}</td><th>Kaynak / confidence</th><td>{point.locationSource || 'UNKNOWN'} · {point.locationConfidence ?? 0}%</td></tr>
+          <tr><th>Canonical konum</th><td>{point.canonicalLatitude ?? '—'}, {point.canonicalLongitude ?? '—'}</td><th>Konum doğrulaması</th><td title={`Kaynak: ${point.locationSource ?? 'bilinmiyor'}`}>{locationSummary(point.locationSource, point.locationConfidence)}</td></tr>
           <tr><th>Soğutucu</th><td>{point.coolerCount ?? '—'}</td><th>Kule</th><td>{point.towerCount ?? '—'}</td></tr>
           <tr><th>Musluk</th><td>{point.tapCount ?? '—'}</td><th>SmartTap</th><td>{point.smarttapCount ?? '—'}</td></tr>
           <tr><th>Ekipman doğrulama</th><td colSpan={3}>{point.equipmentVerifiedAt ? new Date(point.equipmentVerifiedAt).toLocaleString('tr-TR') : 'Henüz doğrulanmadı'}</td></tr>
@@ -165,7 +172,7 @@ export default function PointDetails() {
 
       <section className="panel"><div className="panelHeader"><div><h2>Alias / Alternatif İsimler</h2><p>Google ve saha eşleştirmelerinde kullanılan ek isimler.</p></div></div>
         <div className="tableWrap"><table><thead><tr><th>Alias</th><th>Ekleyen</th><th>Tarih</th></tr></thead><tbody>
-          {aliases.length === 0 ? <tr><td colSpan={3}><div className="emptyState compact"><AdminIcon name="detail" /><strong>Alias yok</strong><span>Henüz alternatif nokta adı eklenmemiş.</span></div></td></tr> : aliases.map((a) => <tr key={a.id}><td><strong>{a.alias}</strong></td><td>{a.createdBy?.name || '—'}</td><td>{new Date(a.createdAt).toLocaleString('tr-TR')}</td></tr>)}
+          {aliases.length === 0 ? <tr><td colSpan={3}><div className="emptyState compact"><AdminIcon name="detail" /><strong>Alias yok</strong><span>Henüz alternatif nokta adı eklenmemiş.</span><button className="small" disabled={busy} onClick={() => void addAlias()}>Alias ekle</button></div></td></tr> : aliases.map((a) => <tr key={a.id}><td><strong>{a.alias}</strong></td><td>{a.createdBy?.name || '—'}</td><td>{new Date(a.createdAt).toLocaleString('tr-TR')}</td></tr>)}
         </tbody></table></div>
       </section>
     </> : <section className="panel"><div className="emptyState"><AdminIcon name="search" /><strong>Nokta seçilmedi</strong><span>Arama sonucundan bir nokta seç.</span></div></section>}
