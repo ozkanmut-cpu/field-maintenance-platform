@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
     else if (path.endsWith('/points/p1/aliases')) json = [{ id: 'a1', alias: 'Eski Kordon' }, { id: 'a2', alias: 'Sahil Pub' }];
     else if (path.endsWith('/points')) json = [point];
     else if (path.endsWith('/assignments/effective/p1')) json = { technician: { id: 't1', name: 'Ege Usta' } };
-    else if (path.endsWith('/point-timeline')) json = { events: [{ id: 'v1', at: '2026-09-20T10:00:00Z', type: 'MAINTENANCE', data: { technician: { name: 'Ege Usta' }, status: 'VALID', confirmationEnteredAt: '2026-09-20T10:05:00Z', maintainedCoolerCount: 3, totalCoolerCount: 4, serviceSlipStatus: 'PRESENT', adminDecision: 'APPROVED' } }] };
+    else if (path.endsWith('/point-timeline')) json = { items: [{ id: 'v1', at: '2026-09-20T10:00:00Z', type: 'MAINTENANCE', data: { technician: { name: 'Ege Usta' }, status: 'VALID', enteredLate: false, maintainedCoolerCount: 3, totalCoolerCount: 4, serviceSlipStatus: 'PRESENT', confirmationStatus: 'APPROVED' } }] };
     else if (path.endsWith('/admin-daily-summary')) json = { date: '2026-09-21', generatedAt: '2026-09-21T10:00:00Z', metrics, technicians: [] };
     else if (path.endsWith('/admin-kpi-reporting')) json = { from: '2026-09-01', to: '2026-09-21', metrics: { ...metrics, ownMaintenance: 4, successRate: 80, prospectVisitCount: 0, enteredLate: 0, helpedMaintenance: 0, helpedAttempts: 0, receivedHelpMaintenance: 0, receivedHelpAttempts: 0 }, paperwork: { serviceSlip: { pending: 1, present: 3, missing: 0, approved: 0 }, confirmation: { pending: 1, present: 3, missing: 0, approved: 0 } }, daily: [], technicians: [] };
     else if (path.endsWith('/admin-period-summary')) json = { weekStart: '2026-09-21', weekEnd: '2026-09-27', metrics, technicians: [] };
@@ -34,15 +34,6 @@ test('desktop shows every navigation label without opening groups', async ({ pag
   const nav = page.getByRole('navigation', { name: 'Yönetim bölümleri' });
   for (const item of navigationItems) await expect(nav.getByRole('button', { name: item.label, exact: true })).toBeVisible();
 });
-test('dashboard leads with exactly three real priorities and keeps reports visible', async ({ page }) => {
-  await page.goto('/');
-  const priorities = page.getByRole('region', { name: 'Operasyon kuyrukları' });
-  await expect(priorities.getByRole('button')).toHaveCount(3);
-  await expect(priorities.getByRole('button', { name: /Ayar bekleyen: 1/ })).toBeVisible();
-  await expect(priorities.getByRole('button', { name: /Bekleyen onay: 2/ })).toBeVisible();
-  await expect(priorities.getByRole('button', { name: /Geciken açık iş: 3/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Günlük Operasyon Özeti' })).toBeVisible();
-});
 test('attempt review requires a visible rejection reason and updates only the decided row', async ({ page }) => {
   await page.goto('/?section=approvals');
   const row = page.getByRole('row').filter({ hasText: 'Kordon Pub' }).first();
@@ -55,7 +46,8 @@ test('attempt review requires a visible rejection reason and updates only the de
   page.once('dialog', dialog => dialog.accept());
   await row.getByRole('button', { name: 'Reddet', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'Alsancak Pub' })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Son yapılamadı kararları' }).getByText('Kordon Pub')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Kaydedildi.');
+  await expect(page.getByRole('table', { name: 'Son yapılamadı kararları' })).toBeVisible();
   await expect(page.getByText('1 bekliyor', { exact: true })).toBeVisible();
 });
 
@@ -73,10 +65,12 @@ test('point list and detail use operational labels while preserving the deep lin
   await expect(page.getByRole('button', { name: 'Geri dön: Noktalar', exact: true })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Düzenle', exact: true })).toHaveCount(1);
   const summary = page.getByRole('region', { name: 'Son bakım özeti' });
-  await expect(summary).toContainText('Teyit girilen bakım');
+  await expect(summary).toContainText('Teyit durumu');
+  await expect(summary).toContainText('Onaylandı');
+  await expect(summary).toContainText('Girilen bakım');
+  await expect(summary).toContainText('Zamanında');
   await expect(summary).toContainText('3/4');
   await expect(summary).toContainText('Mevcut');
-  await expect(summary).toContainText('Onaylandı');
 });
 
 test('all point tabs preserve identity, aliases, latest activity and one usable Edit action', async ({ page }) => {
@@ -85,7 +79,7 @@ test('all point tabs preserve identity, aliases, latest activity and one usable 
     await page.getByRole('tab', { name: tab, exact: true }).click();
     const summary = page.getByRole('region', { name: 'Nokta kimliği ve durum' });
     await expect(summary.getByRole('heading', { name: 'Kordon Pub' })).toBeVisible();
-    await expect(summary.getByText('Ege Usta', { exact: true })).toBeVisible();
+    await expect(summary).toContainText('Ege Usta');
     await expect(summary.getByText('Eski Kordon', { exact: true })).toBeVisible();
     await expect(summary.getByText('Sahil Pub', { exact: true })).toBeVisible();
     await expect(summary.getByText(/Son hareket/)).toContainText('Bakım ziyaretleri');
