@@ -12,13 +12,15 @@ const app = fs.readFileSync(path.join(here, 'CorporateApp.tsx'), 'utf8');
 const api = fs.readFileSync(path.join(here, 'api.ts'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/android-apk.yml'), 'utf8');
 
-function readAndroidConfig(evidenceMode) {
+function readAndroidCleartextIntent(evidenceMode) {
   const configPath = path.join(root, 'apps/mobile/app.config.js');
   return JSON.parse(execFileSync(process.execPath, ['-e', `
     const config = require(process.argv[1]);
     const resolved = typeof config === 'function' ? config({ config: {} }) : config;
-    const android = (resolved.expo ?? resolved).android;
-    process.stdout.write(JSON.stringify(android));
+    const expoConfig = resolved.expo ?? resolved;
+    process.stdout.write(JSON.stringify({
+      usesCleartextTraffic: (expoConfig.plugins ?? []).includes('./plugins/withMockupEvidenceCleartext'),
+    }));
   `, configPath], {
     cwd: path.join(root, 'apps/mobile'),
     env: { ...process.env, EXPO_PUBLIC_MOCKUP_EVIDENCE_MODE: evidenceMode },
@@ -34,7 +36,7 @@ test('renders the credential-free entry only for an explicit evidence build flag
 });
 
 test('permits Android cleartext only in the explicit isolated evidence build', () => {
-  assert.equal(readAndroidConfig('1').usesCleartextTraffic, true);
-  assert.notEqual(readAndroidConfig('0').usesCleartextTraffic, true);
-  assert.notEqual(readAndroidConfig(undefined).usesCleartextTraffic, true);
+  assert.equal(readAndroidCleartextIntent('1').usesCleartextTraffic, true);
+  assert.notEqual(readAndroidCleartextIntent('0').usesCleartextTraffic, true);
+  assert.notEqual(readAndroidCleartextIntent(undefined).usesCleartextTraffic, true);
 });
