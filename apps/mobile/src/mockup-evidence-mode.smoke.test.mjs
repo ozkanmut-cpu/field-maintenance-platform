@@ -17,7 +17,8 @@ function readAndroidConfig(evidenceMode) {
   return JSON.parse(execFileSync(process.execPath, ['-e', `
     const config = require(process.argv[1]);
     const resolved = typeof config === 'function' ? config({ config: {} }) : config;
-    process.stdout.write(JSON.stringify(resolved.expo.android));
+    const android = (resolved.expo ?? resolved).android;
+    process.stdout.write(JSON.stringify(android));
   `, configPath], {
     cwd: path.join(root, 'apps/mobile'),
     env: { ...process.env, EXPO_PUBLIC_MOCKUP_EVIDENCE_MODE: evidenceMode },
