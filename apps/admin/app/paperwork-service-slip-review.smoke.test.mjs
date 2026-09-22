@@ -23,17 +23,18 @@ test('confirmation choices expose APPROVED but never the service-slip-only revie
   ]);
 });
 
-test('bulk service-slip review offers no transition that the API will reject', () => {
+test('legacy bulk transition policy remains API-safe even though the redesigned page has no bulk UI', () => {
   assert.deepEqual(bulkPaperworkStatusOptions('SERVICE_SLIP', ['PRESENT', 'PENDING_REVIEW']), [
     { value: 'MISSING', label: 'Eksik', disabled: false },
     { value: 'APPROVED', label: 'Onaylandı', disabled: false },
   ]);
+  assert.doesNotMatch(source, /paperwork\/bulk/);
 });
 
-test('admin paperwork card treats pending review as unresolved and exposes its own count', () => {
-  assert.match(source, /serviceSlipStatus === 'PENDING_REVIEW'/);
-  assert.match(source, /const pendingSlip = visits\.filter\(\(v\) => v\.serviceSlipStatus === 'PENDING' \|\| v\.serviceSlipStatus === 'PENDING_REVIEW'\)\.length/);
-  assert.match(source, /İnceleme: \{pendingReviewSlip\}/);
+test('paperwork center treats pending review and missing paperwork as unresolved', () => {
+  assert.match(source, /function isUnresolved\(status\?: PaperworkStatus\)[\s\S]{0,100}status !== 'APPROVED'/);
+  assert.match(source, /const pendingCount = visible\.filter/);
+  assert.match(source, /const missingSlipCount = visible\.filter\(\(visit\) => visit\.serviceSlipStatus === 'MISSING'\)\.length/);
 });
 
 test('reporting CI executes the service-slip API and admin review regressions', () => {

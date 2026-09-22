@@ -1,7 +1,7 @@
 'use client';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminIcon } from './admin-icons';
-import { MetricCard } from './admin-primitives';
+import { AdminListState, MetricCard } from './admin-primitives';
 import KpiReportingPanel from './kpi-reporting';
 import type { AdminSection } from './admin-navigation';
 type Technician = { id: string; name: string; username: string; role: 'ADMIN' | 'TECHNICIAN'; active: boolean };
@@ -87,6 +87,9 @@ const [points, setPoints] = useState<Point[]>([]);
 const [setupPending, setSetupPending] = useState<SetupPendingItem[]>([]);
 const [attemptQueue, setAttemptQueue] = useState<AttemptReviewItem[]>([]);
 const [attemptHistory, setAttemptHistory] = useState<AttemptHistoryItem[]>([]);
+const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+const [reviewingAttemptId, setReviewingAttemptId] = useState('');
+const [attemptReviewErrors, setAttemptReviewErrors] = useState<Record<string, string>>({});
 const [dailySummaryDate, setDailySummaryDate] = useState(istanbulDateKey);
 const [dailySummary, setDailySummary] = useState<DailyAdminSummary | null>(null);
 const [dailySummaryLoading, setDailySummaryLoading] = useState(false);
@@ -127,6 +130,27 @@ const reviewedAttemptCounts = useMemo(() => ({
 approved: attemptHistory.filter((item) => item.reviewStatus === 'APPROVED').length,
 rejected: attemptHistory.filter((item) => item.reviewStatus === 'REJECTED').length,
 }), [attemptHistory]);
+const prioritizedAttemptQueue = useMemo(() => {
+const pointCounts = new Map<string, number>();
+const technicianCounts = new Map<string, number>();
+for (const item of attemptQueue) {
+pointCounts.set(item.point.id, (pointCounts.get(item.point.id) ?? 0) + 1);
+technicianCounts.set(item.technician.id, (technicianCounts.get(item.technician.id) ?? 0) + 1);
+}
+const oldestId = attemptQueue.reduce<AttemptReviewItem | null>((oldest, item) => !oldest || item.attemptedAt < oldest.attemptedAt ? item : oldest, null)?.id;
+const today = istanbulDateKey();
+return attemptQueue.map((item) => ({
+...item,
+isOldest: item.id === oldestId,
+isOverdue: item.attemptedAt.slice(0, 10) < today,
+repeatedPoint: (pointCounts.get(item.point.id) ?? 0) > 1,
+repeatedTechnician: (technicianCounts.get(item.technician.id) ?? 0) > 1,
+})).sort((a, b) => Number(b.isOldest) - Number(a.isOldest)
+|| Number(b.isOverdue) - Number(a.isOverdue)
+|| Number(b.repeatedPoint) - Number(a.repeatedPoint)
+|| Number(b.repeatedTechnician) - Number(a.repeatedTechnician)
+|| a.attemptedAt.localeCompare(b.attemptedAt));
+}, [attemptQueue]);
 useEffect(() => {
 setTechnicianDailySummaryTechnicianId((current) => current || technicians[0]?.id || '');
 }, [technicians]);
@@ -268,19 +292,35 @@ await load();
 finally { setBusy(false); }
 }
 async function reviewAttempt(item: AttemptReviewItem, decision: 'APPROVED' | 'REJECTED') {
+const note = (reviewNotes[item.id] ?? '').trim();
+if (decision === 'REJECTED' && !note) {
+setAttemptReviewErrors((current) => ({ ...current, [item.id]: 'Reddetmek için ret nedeni zorunludur.' }));
+return;
+}
 const confirmed = window.confirm(decision === 'APPROVED'
 ? 'Bu yapılamadı kaydı onaylanacak ve ilgili görev kapatılacak. Devam edilsin mi?'
 : 'Bu kayıt reddedilecek ve görev açık kalacak. Devam edilsin mi?');
 if (!confirmed) return;
-const note = window.prompt('Yönetici notu (opsiyonel):') ?? undefined;
-setBusy(true); setError('');
+setReviewingAttemptId(item.id);
+setAttemptReviewErrors((current) => ({ ...current, [item.id]: '' }));
 try {
-await api('/api/backend/maintenance/attempt-review', {
-method: 'POST', body: JSON.stringify({ attemptId: item.id, decision, note }),
+const result = await api<{ closedDueDate?: string | null }>('/api/backend/maintenance/attempt-review', {
+method: 'POST', body: JSON.stringify({ attemptId: item.id, decision, note: note || undefined }),
 });
-await load();
-} catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-finally { setBusy(false); }
+const reviewedAt = new Date().toISOString();
+setAttemptQueue((current) => current.filter((queued) => queued.id !== item.id));
+setAttemptHistory((current) => [{
+...item, reviewStatus: decision, reviewedAt, reviewNote: note || null,
+closedDueDate: result.closedDueDate ?? null,
+}, ...current.filter((historyItem) => historyItem.id !== item.id)].slice(0, 20));
+setReviewNotes((current) => {
+const next = { ...current };
+delete next[item.id];
+return next;
+});
+} catch (e) {
+setAttemptReviewErrors((current) => ({ ...current, [item.id]: e instanceof Error ? e.message : String(e) }));
+} finally { setReviewingAttemptId(''); }
 }
 async function changePointStatus(point: Point, status: Point['status']) {
 if (status === point.status) return;
@@ -360,11 +400,13 @@ return (
 {loadError ? <div className="error banner" role="alert">{loadError}<button className="ghost" onClick={() => void load()} disabled={loading}>Kuyrukları tekrar yükle</button></div> : null}
 {activeSection === 'dashboard' ? <>
 <section className="metricGrid dashboardQueueMetrics" aria-label="Operasyon kuyrukları">
-<MetricCard label="Ayar bekleyen" value={loading || loadError ? '—' : setupPending.length} description="Eksik ayarları tamamla" section="setup-pending" onNavigate={onNavigate} />
-<MetricCard label="Bekleyen onay" value={loading || loadError ? '—' : attemptQueue.length} description="Yapılamadı kayıtlarını incele" section="approvals" onNavigate={onNavigate} />
-<MetricCard label="Geciken açık iş" value={dailySummary?.metrics.overdueOpen ?? '—'} description="Geciken yükümlülükleri incele" section="maintenance-calendar" onNavigate={onNavigate} />
+{loading ? <AdminListState state="loading" title="Operasyon öncelikleri yükleniyor" description="Gerçek kuyruk sayaçları hazırlanıyor." /> : loadError ? <AdminListState state="error" title="Operasyon öncelikleri alınamadı" description="Kuyrukları yeniden yükleyin." onRetry={() => void load()} /> : <>
+<MetricCard label="Ayar bekleyen" value={setupPending.length} description="Ayar bekleyenler ekranını aç" section="setup-pending" onNavigate={onNavigate} />
+<MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı onaylarını aç" section="approvals" onNavigate={onNavigate} />
+{dailySummaryLoading ? <AdminListState state="loading" title="Geciken işler yükleniyor" description="Bakım takvimi sayacı hazırlanıyor." /> : dailySummary ? <MetricCard label="Geciken açık iş" value={dailySummary.metrics.overdueOpen} description="Bakım takviminde gecikenleri aç" section="maintenance-calendar" onNavigate={onNavigate} /> : <AdminListState state="error" title="Geciken iş sayısı alınamadı" description="Günlük özeti yeniden yükleyin." onRetry={() => void loadDailySummary()} />}
+</>}
 </section>
-<details className="panel dashboardReports"><summary>Raporlar ve ayrıntılar</summary>
+<div className="dashboardReports">
 <section className="panel">
 <div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary()} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
 {dailySummaryError ? <div className="error banner" role="alert">{dailySummaryError}</div> : dailySummary ? <>
@@ -384,7 +426,7 @@ return (
 <div className="tableWrap"><table><thead><tr><th>Teknisyen günlük dağılımı</th><th>Bakım</th><th>Yapılamadı</th><th>Diğer ziyaret</th><th>Bu dönem açık</th><th>Geciken</th></tr></thead><tbody>
 {dailySummary.technicians.map((item) => <tr key={item.technicianId}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td>{item.completedMaintenance}</td><td>{item.attempts}</td><td>{item.nonMaintenanceVisits}</td><td>{item.currentOpen}</td><td>{item.overdueOpen}</td></tr>)}
 </tbody></table></div>
-</> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Günlük özet hazırlanıyor</strong><span>Seçili günün operasyon verileri yükleniyor.</span></div>}
+</> : <AdminListState state="loading" title="Günlük özet hazırlanıyor" description="Seçili günün operasyon verileri yükleniyor." />}
 </section>
 <section className="panel">
 <div className="panelHeader"><div><h2>Haftalık / Dönem Sonu Özeti</h2><p>Seçilen tarihin ait olduğu Pazartesi–Pazar İstanbul haftasının operasyon görünümü.</p></div><div className="rowActions"><button className="ghost small" onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, -7))}>ÖNCEKİ HAFTA</button><input type="date" value={periodSummaryDate} onChange={(e) => setPeriodSummaryDate(e.target.value)} aria-label="Haftalık özet tarihi" /><button className="ghost small" disabled={shiftDateKey(periodSummaryDate, 7) > istanbulDateKey()} onClick={() => setPeriodSummaryDate((current) => shiftDateKey(current, 7))}>SONRAKİ HAFTA</button><button className="ghost iconAction" onClick={() => void loadPeriodSummary()} disabled={periodSummaryLoading}><AdminIcon name="refresh" size={17} /><span>{periodSummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
@@ -404,7 +446,7 @@ return (
 <div className="tableWrap"><table><thead><tr><th>Teknisyen haftalık dağılımı</th><th>Bakım</th><th>Yapılamadı</th><th>Diğer ziyaret</th><th>Hafta sonu açık</th><th>Geciken</th></tr></thead><tbody>
 {periodSummary.technicians.map((item) => <tr key={item.technicianId}><td><strong>{item.name}</strong><div className="muted">@{item.username}</div></td><td>{item.completedMaintenance}</td><td>{item.attempts}</td><td>{item.nonMaintenanceVisits}</td><td>{item.currentOpen}</td><td>{item.overdueOpen}</td></tr>)}
 </tbody></table></div>
-</> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Haftalık özet hazırlanıyor</strong><span>Seçili haftanın operasyon verileri yükleniyor.</span></div>}
+</> : <AdminListState state="loading" title="Haftalık özet hazırlanıyor" description="Seçili haftanın operasyon verileri yükleniyor." />}
 </section>
 <section className="panel">
 <div className="panelHeader"><div><h2>Teknisyen Günlük Özeti</h2><p>Seçilen teknisyenin İstanbul iş günündeki kendi işi, yardım hareketleri, açık görevleri ve evrak durumu.</p></div><div className="rowActions"><select value={technicianDailySummaryTechnicianId} onChange={(e) => setTechnicianDailySummaryTechnicianId(e.target.value)} aria-label="Teknisyen seç"><option value="">Teknisyen seç</option>{technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}</select><input type="date" value={technicianDailySummaryDate} onChange={(e) => setTechnicianDailySummaryDate(e.target.value)} aria-label="Teknisyen özet tarihi" /><button className="ghost iconAction" onClick={() => void loadTechnicianDailySummary()} disabled={technicianDailySummaryLoading || !technicianDailySummaryTechnicianId}><AdminIcon name="refresh" size={17} /><span>{technicianDailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
@@ -424,10 +466,10 @@ return (
 <div className="tableWrap"><table><thead><tr><th>Gün içi hareketler</th><th>Tür</th><th>Nokta / müşteri</th><th>İlişki</th><th>Detay</th></tr></thead><tbody>
 {technicianDailySummary.events.length === 0 ? <tr><td colSpan={5}>Seçili günde saha hareketi yok.</td></tr> : technicianDailySummary.events.map((item) => <tr key={`${item.type}-${item.id}`}><td>{new Date(item.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</td><td>{item.type === 'MAINTENANCE' ? 'Bakım' : item.type === 'ATTEMPT' ? 'Yapılamadı' : item.type === 'NON_MAINTENANCE_VISIT' ? 'Diğer ziyaret' : 'Prospect'}</td><td><strong>{item.point?.name || item.prospect?.name || '—'}</strong>{item.point?.code ? <div className="muted">{item.point.code}</div> : null}</td><td>{item.relation === 'HELPED_OTHER' ? 'Yardım verdi' : item.relation === 'RECEIVED_HELP' ? `Yardım aldı${item.technician?.name ? ` · ${item.technician.name}` : ''}` : 'Kendi işi'}</td><td className="muted">{item.type === 'MAINTENANCE' ? `Servis fişi: ${item.serviceSlipStatus ?? '—'} · Teyit: ${item.confirmationStatus ?? '—'}` : item.reason || item.purpose || '—'}</td></tr>)}
 </tbody></table></div>
-</> : <div className="emptyState compact"><AdminIcon name="clock" /><strong>Teknisyen özeti hazırlanıyor</strong><span>Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor.</span></div>}
+</> : <AdminListState state="loading" title="Teknisyen özeti hazırlanıyor" description="Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor." />}
 </section>
 <KpiReportingPanel technicians={technicians} />
-</details>
+</div>
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">
 <div className="panelHeader">
@@ -489,22 +531,22 @@ return (
 <div><h2>Bekleyen Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
 <span className="pill">{attemptQueue.length} bekliyor</span>
 </div>
-<section className="dashboardGrid" aria-label="Yapılamadı onay özeti">
+{loading ? <AdminListState state="loading" title="Onay verileri yükleniyor" description="Bekleyen kayıtlar ve karar geçmişi hazırlanıyor." /> : <section className="dashboardGrid" aria-label="Yapılamadı onay özeti">
 <div className="dashboardCard"><span>Bekleyen kayıtlar</span><strong>{attemptQueue.length}</strong><small>Yönetici kararı gerekiyor</small></div>
-<div className="dashboardCard"><span>Son 20 onay</span><strong>{loading ? '—' : reviewedAttemptCounts.approved}</strong><small>İlgili görev kapatıldı</small></div>
-<div className="dashboardCard"><span>Son 20 ret</span><strong>{loading ? '—' : reviewedAttemptCounts.rejected}</strong><small>İlgili görev açık kaldı</small></div>
-</section>
+<div className="dashboardCard"><span>Son 20 onay</span><strong>{reviewedAttemptCounts.approved}</strong><small>İlgili görev kapatıldı</small></div>
+<div className="dashboardCard"><span>Son 20 ret</span><strong>{reviewedAttemptCounts.rejected}</strong><small>İlgili görev açık kaldı</small></div>
+</section>}
 <div className="tableWrap">
 <table>
 <thead><tr><th>Nokta</th><th>Teknisyen</th><th>Neden / not</th><th>Tarih</th><th>İşlem</th></tr></thead>
 <tbody>
-{loading ? <tr><td colSpan={5}><div className="emptyState compact"><AdminIcon name="clock" /><strong>Onaylar yükleniyor</strong><span>Bekleyen kayıtlar getiriliyor.</span></div></td></tr> : attemptQueue.length === 0 ? <tr><td colSpan={5}><div className="emptyState compact success"><AdminIcon name="check" /><strong>Bekleyen onay yok</strong><span>İncelenmesi gereken yapılamadı kaydı bulunmuyor.</span></div></td></tr> : attemptQueue.map((item) => (
+{loading ? <tr><td colSpan={5}><AdminListState state="loading" title="Onaylar yükleniyor" description="Bekleyen kayıtlar getiriliyor." /></td></tr> : prioritizedAttemptQueue.length === 0 ? <tr><td colSpan={5}><AdminListState state="success" title="Bekleyen onay yok" description="İncelenmesi gereken yapılamadı kaydı bulunmuyor." /></td></tr> : prioritizedAttemptQueue.map((item) => (
 <tr key={item.id}>
-<td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region?.name || 'Bölge yok'}</div></td>
+<td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region?.name || 'Bölge yok'}</div><div className="rowActions"><button className="ghost small" onClick={() => onNavigate('point-detail', { pointId: item.point.id, detailTab: 'general' })}>Nokta detayını aç</button><button className="ghost small" onClick={() => onNavigate('maintenance-calendar', { pointId: item.point.id })}>Bakım bağlamını aç</button></div></td>
 <td>{item.technician.name}{item.assistedForTechnician ? <div className="muted">{item.assistedForTechnician.name} için yardım</div> : null}</td>
 <td>{item.reason === 'BUSINESS_CLOSED' ? 'İşletme kapalı' : item.reason === 'AUTHORIZED_PERSON_UNAVAILABLE' ? 'Yetkili kişi yok' : item.reason === 'ACCESS_FAILED' ? 'Erişim sağlanamadı' : 'Diğer'}{item.note ? <div className="muted">{item.note}</div> : null}</td>
-<td>{new Date(item.attemptedAt).toLocaleString('tr-TR')}</td>
-<td className="actions"><button className="small" disabled={busy} onClick={() => void reviewAttempt(item, 'REJECTED')}>Reddet</button><button disabled={busy} onClick={() => void reviewAttempt(item, 'APPROVED')}>ONAYLA / KAPAT</button></td>
+<td>{new Date(item.attemptedAt).toLocaleString('tr-TR')}<div className="rowActions">{item.isOldest ? <span className="pill">En eski bekleyen</span> : null}{item.isOverdue ? <span className="pill">Gecikmiş</span> : null}{item.repeatedPoint ? <span className="pill">Tekrarlayan nokta</span> : null}{item.repeatedTechnician ? <span className="pill">Tekrarlayan teknisyen</span> : null}</div></td>
+<td><label className="muted">Ret nedeni (zorunlu)<input value={reviewNotes[item.id] ?? ''} onChange={(event) => setReviewNotes((current) => ({ ...current, [item.id]: event.target.value }))} aria-label={`Ret nedeni (zorunlu) - ${item.point.name}`} aria-required="true" placeholder="Reddedilecekse nedeni yazın" /></label>{attemptReviewErrors[item.id] ? <div className="error" role="alert">{attemptReviewErrors[item.id]}</div> : null}<div className="actions"><button className="small" disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, 'REJECTED')}>Reddet</button><button disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, 'APPROVED')}>{reviewingAttemptId === item.id ? 'İŞLENİYOR' : 'ONAYLA / KAPAT'}</button></div></td>
 </tr>
 ))}
 </tbody>
@@ -513,7 +555,7 @@ return (
 </section>
 <section className="panel">
 <div className="panelHeader"><div><h2>Son Yapılamadı Kararları</h2><p>Son 20 yönetici kararını ve görevin kapanıp kapanmadığını gör.</p></div></div>
-<div className="tableWrap"><table>
+<div className="tableWrap"><table aria-label="Son yapılamadı kararları">
 <thead><tr><th>Nokta</th><th>Karar</th><th>Teknisyen</th><th>Yönetici</th><th>Tarih</th></tr></thead>
 <tbody>{attemptHistory.length === 0 ? <tr><td colSpan={5}>Henüz karar geçmişi yok.</td></tr> : attemptHistory.map((item) => (
 <tr key={item.id}>

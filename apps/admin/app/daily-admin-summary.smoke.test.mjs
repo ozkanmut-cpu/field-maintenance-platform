@@ -25,3 +25,20 @@ test('daily summary clears stale data and refreshes whenever the dashboard becom
   assert.match(source, /if \(activeSection !== 'dashboard'\) return;/);
   assert.match(source, /\[dailySummaryDate, activeSection\]/);
 });
+
+test('dashboard keeps exactly three actionable priorities and uses shared loading states', () => {
+  const prioritySection = source.match(/<section className="metricGrid dashboardQueueMetrics"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.equal((prioritySection.match(/<MetricCard/g) ?? []).length, 3);
+  assert.match(prioritySection, /Ayar bekleyenler ekranını aç/);
+  assert.match(prioritySection, /Yapılamadı onaylarını aç/);
+  assert.match(prioritySection, /Bakım takviminde gecikenleri aç/);
+  assert.match(source, /AdminListState/);
+  assert.doesNotMatch(prioritySection, /value=\{[^}]*'—'/,
+    'loading counters must not masquerade as a dash value');
+});
+
+test('dashboard reports remain visible instead of living in a blank collapsed container', () => {
+  assert.doesNotMatch(source, /<details className="panel dashboardReports">/);
+  assert.doesNotMatch(source, /<summary>Raporlar ve ayrıntılar<\/summary>/);
+  assert.match(source, /<div className="dashboardReports">/);
+});

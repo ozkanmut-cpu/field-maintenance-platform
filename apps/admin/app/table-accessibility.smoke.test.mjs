@@ -19,11 +19,12 @@ test('high-traffic admin tables use the shared accessible table wrapper', () => 
   }
 });
 
-test('bulk and paperwork selection controls have names', () => {
+test('bulk selection and paperwork single-record controls have names', () => {
   const bulk = readFileSync(app('bulk-operations.tsx'), 'utf8');
   const paperwork = readFileSync(app('paperwork-management.tsx'), 'utf8');
   assert.match(bulk, /noktasını seç/);
-  assert.match(paperwork, /Görünen bakım kayıtlarının tümünü seç/);
-  assert.match(paperwork, /bakım kaydını seç/);
-  assert.match(paperwork, /Evrak kayıtlarında ara/);
+  assert.doesNotMatch(paperwork, /type="checkbox"/);
+  assert.match(paperwork, /aria-label="Müşteri ara"/);
+  assert.match(paperwork, /Teyit Onaylandı/);
+  assert.match(paperwork, /Fiş Yok/);
 });

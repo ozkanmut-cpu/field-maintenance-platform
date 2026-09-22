@@ -110,27 +110,25 @@ test('failed selected assignment point exposes source recovery without zero metr
   assert.match(text(view.tree()), /Görevlendirme kaydı yok/);
   view.unmount();
 });
-test('paperwork base failure remains recoverable after independent analytics refresh', async () => {
+test('paperwork base failure remains recoverable', async () => {
   const net = network(new Set(['users'])), view = mount('paperwork-management', net.fetch);
   await view.settle();
-  button(panel(view, 'Evrak Tamamlanma Analitiği'), /YENİLE/).props.onClick();
-  await view.settle();
-  assert.doesNotMatch(text(view.tree()), /Bakım kaydı yok/);
+  assert.match(text(view.tree()), /users unavailable/);
+  assert.doesNotMatch(text(view.tree()), /Eşleşen kayıt yok/);
   net.failures.clear();
-  button(view.tree(), /Teknisyenleri yeniden dene/i).props.onClick();
+  button(view.tree(), /^Yeniden dene$/i).props.onClick();
   await view.settle();
   assert.equal(net.calls.filter(url => url === '/api/backend/users').length, 2);
   assert.match(text(view.tree()), /Kordon Market/);
   view.unmount();
 });
-test('paperwork visits failure remains recoverable after independent analytics refresh', async () => {
+test('paperwork visits failure remains recoverable', async () => {
   const net = network(new Set(['visits'])), view = mount('paperwork-management', net.fetch);
   await view.settle();
-  button(panel(view, 'Evrak Tamamlanma Analitiği'), /YENİLE/).props.onClick();
-  await view.settle();
-  assert.doesNotMatch(text(view.tree()), /Bakım kaydı yok/);
+  assert.match(text(view.tree()), /visits unavailable/);
+  assert.doesNotMatch(text(view.tree()), /Eşleşen kayıt yok/);
   net.failures.clear();
-  button(view.tree(), /Bakım kayıtlarını yeniden dene/i).props.onClick();
+  button(view.tree(), /^Yeniden dene$/i).props.onClick();
   await view.settle();
   assert.match(text(view.tree()), /Kordon Market/);
   view.unmount();
@@ -138,26 +136,25 @@ test('paperwork visits failure remains recoverable after independent analytics r
 test('analytics failure is not permanent loading and does not suppress successful visit rows', async () => {
   const net = network(new Set(['analytics'])), view = mount('paperwork-management', net.fetch);
   await view.settle();
-  const analyticsPanel = panel(view, 'Evrak Tamamlanma Analitiği');
+  const analyticsPanel = all(view.tree(), node => node.type === 'details').find(node => /Evrak Tamamlanma Analitiği/.test(text(node)));
   assert.match(text(analyticsPanel), /analytics unavailable/);
-  assert.doesNotMatch(text(analyticsPanel), /Analitik hazırlanıyor/);
   assert.match(text(view.tree()), /Kordon Market/);
   net.failures.clear();
-  button(analyticsPanel, /Analitiği yeniden dene/i).props.onClick();
+  button(analyticsPanel, /^Yeniden dene$/i).props.onClick();
   await view.settle();
-  assert.match(text(panel(view, 'Evrak Tamamlanma Analitiği')), /Analiz edilen bakım/);
+  assert.match(text(analyticsPanel), /Evrak Tamamlanma Analitiği/);
   view.unmount();
 });
 test('history failure opens its own retry without hiding visits or inventing empty audit', async () => {
   const net = network(new Set(['history'])), view = mount('paperwork-management', net.fetch);
   await view.settle();
-  button(view.tree(), /^GEÇMİŞ$/).props.onClick();
+  button(view.tree(), /^Detay$/).props.onClick();
   await view.settle();
   assert.match(text(panel(view, 'Evrak Değişiklik Geçmişi')), /history unavailable/);
   assert.doesNotMatch(text(view.tree()), /Evrak değişikliği yok/);
   assert.match(text(view.tree()), /Kordon Market/);
   net.failures.clear();
-  button(view.tree(), /Geçmişi yeniden dene/i).props.onClick();
+  button(panel(view, 'Evrak Değişiklik Geçmişi'), /^Yeniden dene$/i).props.onClick();
   await view.settle();
   assert.match(text(panel(view, 'Evrak Değişiklik Geçmişi')), /Evrak değişikliği yok/);
   view.unmount();
@@ -186,29 +183,65 @@ test('assignment audit failure stays in an open recoverable panel without hiding
   view.unmount();
 });
 
-test('paperwork bulk selection excludes rows hidden by a later search', async () => {
-  const net = network(), view = mount('paperwork-management', net.fetch);
+test('paperwork decisions update only their row without reloading the visit dataset', async () => {
+  const net = network();
+  const payloads = [];
+  const fetcher = async (url, init) => {
+    if (url === '/api/backend/maintenance/paperwork') {
+      payloads.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({}) };
+    }
+    return net.fetch(url);
+  };
+  const view = mount('paperwork-management', fetcher);
   await view.settle();
-  all(view.tree(), n => n.type === 'input' && n.props['aria-label'] === '100 kodlu bakım kaydını seç')[0].props.onChange();
+  const visitCalls = net.calls.filter(url => url.includes('technician-history')).length;
+  button(view.tree(), /^Teyit Onaylandı$/).props.onClick();
   await view.settle();
-  assert.equal(button(view.tree(), /SEÇİLİLERİ GÜNCELLE/).props.disabled, false);
-  all(view.tree(), n => n.type === 'input' && n.props['aria-label'] === 'Evrak kayıtlarında ara')[0].props.onChange({ target: { value: 'no matching point' } });
-  await view.settle();
-  assert.equal(button(view.tree(), /SEÇİLİLERİ GÜNCELLE/).props.disabled, true);
+  assert.deepEqual(payloads, [{ visitId: 'v1', kind: 'CONFIRMATION', status: 'APPROVED', note: 'Teyit admin tarafından onaylandı.' }]);
+  assert.equal(net.calls.filter(url => url.includes('technician-history')).length, visitCalls);
+  assert.match(text(view.tree()), /Kaydedildi/);
+  assert.match(text(view.tree()), /Manuel final/);
   view.unmount();
 });
 
-test('failed paperwork refresh removes stale selectable rows and never exposes stale metrics', async () => {
+test('failed paperwork decision retains the row and retries the same single-record action', async () => {
+  const net = network();
+  let fail = true;
+  const payloads = [];
+  const fetcher = async (url, init) => {
+    if (url === '/api/backend/maintenance/paperwork') {
+      payloads.push(JSON.parse(init.body));
+      return fail
+        ? { ok: false, status: 503, json: async () => ({ message: 'paperwork unavailable' }) }
+        : { ok: true, status: 200, json: async () => ({}) };
+    }
+    return net.fetch(url);
+  };
+  const view = mount('paperwork-management', fetcher);
+  await view.settle();
+  button(view.tree(), /^Fiş Yok$/).props.onClick();
+  await view.settle();
+  assert.match(text(view.tree()), /paperwork unavailable/);
+  assert.match(text(view.tree()), /Kordon Market/);
+  fail = false;
+  button(view.tree(), /^Tekrar dene$/).props.onClick();
+  await view.settle();
+  assert.equal(payloads.length, 2);
+  assert.deepEqual(payloads[0], payloads[1]);
+  assert.match(text(view.tree()), /Kaydedildi/);
+  view.unmount();
+});
+
+test('failed paperwork refresh removes stale rows and counters', async () => {
   const net = network(), view = mount('paperwork-management', net.fetch);
   await view.settle();
-  all(view.tree(), n => n.type === 'input' && n.props['aria-label'] === '100 kodlu bakım kaydını seç')[0].props.onChange();
-  await view.settle();
+  assert.match(text(view.tree()), /Kordon Market/);
   net.failures.add('visits');
-  button(panel(view, 'Evrak Yönetimi'), /YENİLE/).props.onClick();
+  button(view.tree(), /^Yenile$/).props.onClick();
   await view.settle();
-  assert.equal(button(view.tree(), /SEÇİLİLERİ GÜNCELLE/).props.disabled, true);
-  assert.equal(all(view.tree(), n => n.type === 'input' && n.props['aria-label'] === '100 kodlu bakım kaydını seç').length, 0);
-  assert.equal(all(view.tree(), n => n.props.className === 'dashboardGrid').length, 1, 'only independent analytics metrics remain');
+  assert.doesNotMatch(text(view.tree()), /Kordon Market/);
+  assert.match(text(view.tree()), /Bakım kayıtları alınamadı/);
   view.unmount();
 });
 
