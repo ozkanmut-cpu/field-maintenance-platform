@@ -28,5 +28,6 @@ test('PostGIS CI uses an ephemeral service and verifies deployed migrations befo
   assert.ok(status > deploy, 'PostGIS CI must check migration status after deployment');
   assert.ok(integration > status, 'PostGIS integration tests must run after migration status');
   assert.equal(apiPackage.scripts?.['prisma:status'], 'prisma migrate status');
+  assert.match(workflow, /src\/maintenance\/non-maintenance-visit-migration\.integration\.spec\.ts/);
   assert.match(workflow, /POSTGIS_TEST_DATABASE_URL="\$DATABASE_URL"/);
 });
