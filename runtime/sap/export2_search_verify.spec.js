@@ -152,7 +152,7 @@ test('Export 2 records only structural evidence when a blank non-product criteri
       assert.match(error.message, /slot-added/);
       assert.deepEqual(error.diagnostic, {
         reason: 'slot-added',
-        addedSlots: [{ slot: 5, key: 'PLANT', value1Present: false, value2Present: false }],
+        addedSlots: [{ slot: 5, key: 'PLANT', value1State: 'empty', value2State: 'control-missing' }],
       });
       return true;
     },

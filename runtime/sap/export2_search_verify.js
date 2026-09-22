@@ -136,14 +136,19 @@ function verifyExport2SearchDelta(export1State, export2State) {
     return !replacementSlots.includes(slot);
   });
   if (addedSlots.length) {
+    const valueState = (value) => {
+      if (value === '') return 'empty';
+      if (value === null) return 'control-missing';
+      return 'present';
+    };
     const error = new Error('SAFE_ABORT_EXPORT2_STATE:slot-added');
     error.diagnostic = {
       reason: 'slot-added',
       addedSlots: addedSlots.map((slot) => ({
         slot: slot.slot,
         key: slot.key,
-        value1Present: slot.value1 !== null && slot.value1 !== '',
-        value2Present: slot.value2 !== null && slot.value2 !== '',
+        value1State: valueState(slot.value1),
+        value2State: valueState(slot.value2),
       })),
     };
     throw error;

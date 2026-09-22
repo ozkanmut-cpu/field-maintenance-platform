@@ -31,8 +31,8 @@ function failurePayload(error) {
       addedSlots: diagnostic.addedSlots.map((slot) => ({
         slot: Number(slot.slot),
         key: String(slot.key),
-        value1Present: slot.value1Present === true,
-        value2Present: slot.value2Present === true,
+        value1State: String(slot.value1State),
+        value2State: String(slot.value2State),
       })),
     }
     : undefined;
