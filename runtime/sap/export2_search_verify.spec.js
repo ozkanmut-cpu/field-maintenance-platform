@@ -142,6 +142,23 @@ test('Export 2 rejects an added non-product criterion even when its values are b
   );
 });
 
+test('Export 2 records only structural evidence when a blank non-product criterion is added', () => {
+  const after = export2State();
+  after.slots.push({ slot: 5, key: 'PLANT', value1: '', value2: null });
+
+  assert.throws(
+    () => verifyExport2SearchDelta(export1State(), after),
+    (error) => {
+      assert.match(error.message, /slot-added/);
+      assert.deepEqual(error.diagnostic, {
+        reason: 'slot-added',
+        addedSlots: [{ slot: 5, key: 'PLANT', value1Present: false, value2Present: false }],
+      });
+      return true;
+    },
+  );
+});
+
 test('Export 2 rejects duplicate blank product replacement slots', () => {
   const after = export2State();
   after.slots = after.slots

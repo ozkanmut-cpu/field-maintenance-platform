@@ -23,6 +23,27 @@ function allowLiveDbApply(env = process.env) {
   return env.SAP_ALLOW_LIVE_DB_APPLY === '1';
 }
 
+function failurePayload(error) {
+  const diagnostic = error.diagnostic;
+  const safeDiagnostic = diagnostic?.reason === 'slot-added' && Array.isArray(diagnostic.addedSlots)
+    ? {
+      reason: 'slot-added',
+      addedSlots: diagnostic.addedSlots.map((slot) => ({
+        slot: Number(slot.slot),
+        key: String(slot.key),
+        value1Present: slot.value1Present === true,
+        value2Present: slot.value2Present === true,
+      })),
+    }
+    : undefined;
+  return {
+    ok: false,
+    error: error.message,
+    stack: error.stack,
+    ...(safeDiagnostic ? { diagnostic: safeDiagnostic } : {}),
+  };
+}
+
 function requireCredentialEnv(env = process.env) {
   const username = env.SAP_USERNAME;
   const password = env.SAP_PASSWORD;
@@ -224,6 +245,7 @@ module.exports = {
   acquireExport1,
   buildDbArgs,
   executeProductionChain,
+  failurePayload,
   main,
   requireCredentialEnv,
   requireExport1Validated,
@@ -236,7 +258,7 @@ module.exports = {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error(JSON.stringify({ ok: false, error: error.message, stack: error.stack }));
+    console.error(JSON.stringify(failurePayload(error)));
     process.exit(1);
   });
 }
