@@ -299,7 +299,11 @@ const note = (reviewNotes[item.id] ?? '').trim();
 setAttemptReviewNotice('');
 if (decision === 'REJECTED' && !note) {
 setAttemptReviewErrors((current) => ({ ...current, [item.id]: 'Reddetmek için ret nedeni zorunludur.' }));
-setAttemptReviewRetries((current) => ({ ...current, [item.id]: decision }));
+setAttemptReviewRetries((current) => {
+const next = { ...current };
+delete next[item.id];
+return next;
+});
 return;
 }
 const confirmed = window.confirm(decision === 'APPROVED'
