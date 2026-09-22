@@ -10,7 +10,7 @@ import {
   AttemptReason, AuthUser, clearSessionToken, confirmEfesim, completeMaintenance, createProspectVisit,
   completeMissingServiceSlip,
   DueTask, EfesimExtractResult, extractEfesim, HelpTarget, helpTargets, login, me, MissingPaperworkItem, ProspectRecord,
-  ProspectVisitPurpose, recordMaintenanceAttempt, recordNonMaintenanceVisit, restoreSessionToken, revertMaintenance, technicianDashboard,
+  ProspectVisitPurpose, recordMaintenanceAttempt, recordNonMaintenanceVisit, restoreSessionToken, revertMaintenance, revertNonMaintenanceVisit, technicianDashboard,
   TechnicianDashboard, technicianHistory, TechnicianHistoryItem, myCustomers, updateCustomerEquipment, MyCustomer,
   NearbyPoint, NonMaintenanceVisitType,
 } from './api';
@@ -223,9 +223,14 @@ export default function CorporateApp() {
     finally { setBusy(false); }
   }
   function confirmRevert(item: TechnicianHistoryItem) {
-    if (item.type !== 'MAINTENANCE') return;
-    const name = item.point?.name ?? 'bu bakım';
-    Alert.alert('Bakımı geri al', `${name} bakım kaydı geri alınacak ve görev yeniden açılacak. Emin misiniz?`, [
+    if (item.type !== 'MAINTENANCE' && item.type !== 'NON_MAINTENANCE_VISIT') return;
+    const isMaintenance = item.type === 'MAINTENANCE';
+    const name = item.point?.name ?? item.customerName ?? (isMaintenance ? 'bu bakım' : 'bu ziyaret');
+    const title = isMaintenance ? 'Bakımı geri al' : 'Ziyareti geri al';
+    const detail = isMaintenance
+      ? `${name} bakım kaydı geri alınacak ve görev yeniden açılacak. Emin misiniz?`
+      : `${name} bakım dışı ziyaret kaydı geri alınacak. Emin misiniz?`;
+    Alert.alert(title, detail, [
       { text: 'Vazgeç', style: 'cancel' },
       { text: 'Geri Al', style: 'destructive', onPress: () => void revertHistoryItem(item) },
     ]);
@@ -233,11 +238,17 @@ export default function CorporateApp() {
   async function revertHistoryItem(item: TechnicianHistoryItem) {
     setBusy(true);
     try {
-      await revertMaintenance(item.id, 'Teknisyen mobil geçmiş ekranından geri aldı');
+      if (item.type === 'NON_MAINTENANCE_VISIT') {
+        await revertNonMaintenanceVisit(item.id, 'Teknisyen mobil geçmiş ekranından geri aldı');
+      } else {
+        await revertMaintenance(item.id, 'Teknisyen mobil geçmiş ekranından geri aldı');
+      }
       const h = await technicianHistory();
       setHistoryItems(h.items.slice().reverse());
-      await loadTasks();
-      Alert.alert('Geri alındı', 'Bakım kaydı geri alındı ve görev yeniden açıldı.');
+      if (item.type === 'MAINTENANCE') await loadTasks();
+      Alert.alert('Geri alındı', item.type === 'MAINTENANCE'
+        ? 'Bakım kaydı geri alındı ve görev yeniden açıldı.'
+        : 'Ziyaret kaydı geri alındı.');
     } catch (e) { Alert.alert('Geri alınamadı', message(e)); }
     finally { setBusy(false); }
   }
@@ -745,7 +756,7 @@ function MaintenanceDatePicker({value,onChange}:{value:string;onChange:(value:st
 }
 
 function HistoryView({items,busy,onRevert}:{items:TechnicianHistoryItem[];busy:boolean;onRevert:(i:TechnicianHistoryItem)=>void}) {
-  return <><SectionHeader title="Son İşlemler" subtitle="Bugün ve dün girilen bakım kayıtlarını kontrol edebilir, uygunsa geri alabilirsin"/>{items.length===0?<Empty icon="clock" title="İşlem yok" text="Bugün yaptığın saha işlemleri burada görünecek."/>:<View style={styles.listCard}>{items.map((i,n)=>{const attempt=i.type==='ATTEMPT';const name=i.point?.name||i.prospect?.name||i.customerName||'Müşteri kaydı yok';const label=i.type==='MAINTENANCE'?(i.assistedForTechnician?`${i.assistedForTechnician.name} için bakım`:'Bakım yapıldı'):attempt?'Bakım yapılamadı':i.type==='PROSPECT_VISIT'?(i.purpose==='INSTALLATION'?'Kurma':'Keşif'):i.type==='NON_MAINTENANCE_VISIT'?(i.purposeLabel??'Bakım dışı ziyaret'):'Bakım dışı ziyaret';const countSummary=i.type==='MAINTENANCE'&&i.totalCoolerCount!=null&&i.maintainedCoolerCount!=null?(i.maintenanceSummary??`${i.maintainedCoolerCount}/${i.totalCoolerCount} soğutucu bakım${i.missingMaintenanceCount?` · ${i.missingMaintenanceCount} eksik`:''}`):'';const partialSummary=countSummary&&i.missingMaintenanceExplanation?`${countSummary} (${i.missingMaintenanceExplanation})`:countSummary;return <View key={`${i.at}-${n}`} style={styles.historyRow}><View style={[styles.historyDot,attempt&&styles.historyWarn]}><Feather name={attempt?'alert-triangle':'check'} size={17} color="#fff"/></View><View style={styles.historyContent}><Text style={styles.historyTime}>{new Date(i.at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.personName}>{name}</Text><Text style={attempt?styles.warningText:styles.okText}>{label}</Text>{partialSummary?<Text style={styles.personMeta}>{partialSummary}</Text>:null}{i.type==='NON_MAINTENANCE_VISIT'&&i.historyLabel?<Text style={styles.personMeta}>{i.historyLabel}</Text>:null}{i.type==='MAINTENANCE'&&i.revertEligible?<TouchableOpacity disabled={busy} onPress={()=>onRevert(i)} style={styles.revertButton}><Feather name="rotate-ccw" size={14} color="#B7372F"/><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity>:null}</View></View>})}</View>}</>;
+  return <><SectionHeader title="Son İşlemler" subtitle="Bugün ve dün girilen bakım ve bakım dışı ziyaret kayıtlarını kontrol edebilir, uygunsa geri alabilirsin"/>{items.length===0?<Empty icon="clock" title="İşlem yok" text="Bugün yaptığın saha işlemleri burada görünecek."/>:<View style={styles.listCard}>{items.map((i,n)=>{const attempt=i.type==='ATTEMPT';const name=i.point?.name||i.prospect?.name||i.customerName||'Müşteri kaydı yok';const label=i.type==='MAINTENANCE'?(i.assistedForTechnician?`${i.assistedForTechnician.name} için bakım`:'Bakım yapıldı'):attempt?'Bakım yapılamadı':i.type==='PROSPECT_VISIT'?(i.purpose==='INSTALLATION'?'Kurma':'Keşif'):i.type==='NON_MAINTENANCE_VISIT'?(i.purposeLabel??'Bakım dışı ziyaret'):'Bakım dışı ziyaret';const countSummary=i.type==='MAINTENANCE'&&i.totalCoolerCount!=null&&i.maintainedCoolerCount!=null?(i.maintenanceSummary??`${i.maintainedCoolerCount}/${i.totalCoolerCount} soğutucu bakım${i.missingMaintenanceCount?` · ${i.missingMaintenanceCount} eksik`:''}`):'';const partialSummary=countSummary&&i.missingMaintenanceExplanation?`${countSummary} (${i.missingMaintenanceExplanation})`:countSummary;return <View key={`${i.at}-${n}`} style={styles.historyRow}><View style={[styles.historyDot,attempt&&styles.historyWarn]}><Feather name={attempt?'alert-triangle':'check'} size={17} color="#fff"/></View><View style={styles.historyContent}><Text style={styles.historyTime}>{new Date(i.at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.personName}>{name}</Text><Text style={attempt?styles.warningText:styles.okText}>{label}</Text>{partialSummary?<Text style={styles.personMeta}>{partialSummary}</Text>:null}{i.type==='NON_MAINTENANCE_VISIT'&&i.historyLabel?<Text style={styles.personMeta}>{i.historyLabel}</Text>:null}{(i.type==='MAINTENANCE'||i.type==='NON_MAINTENANCE_VISIT')&&i.revertEligible?<TouchableOpacity disabled={busy} onPress={()=>onRevert(i)} style={styles.revertButton}><Feather name="rotate-ccw" size={14} color="#B7372F"/><Text style={styles.revertText}>GERİ AL</Text></TouchableOpacity>:null}</View></View>})}</View>}</>;
 }
 
 function NewPointView({begin,busy}:{begin:()=>void;busy:boolean}) { return <View style={styles.card}><Text style={styles.cardTitle}>Bu ziyaret ne için?</Text><View style={styles.newChoice}><Feather name="search" size={23} color={BLUE}/><View><Text style={styles.personName}>Keşif</Text><Text style={styles.personMeta}>Potansiyel müşteri</Text></View></View><View style={styles.newChoice}><Feather name="tool" size={23} color={BLUE}/><View><Text style={styles.personName}>Kurma</Text><Text style={styles.personMeta}>Yeni kurulacak nokta</Text></View></View><View style={styles.infoBox}><Feather name="info" size={17} color="#315A78"/><Text style={styles.infoText}>Devam etmek için önce EFESİM ekran görüntüsü alınır. Manuel adres girişi yoktur.</Text></View><PrimaryButton title="EFESİM EKRAN GÖRÜNTÜSÜ SEÇ" icon="image" onPress={begin} disabled={busy}/></View>; }
