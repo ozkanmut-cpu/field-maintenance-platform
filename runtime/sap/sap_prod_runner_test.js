@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  allowLiveDbApply,
   acquireExport1,
   buildDbArgs,
   requireCredentialEnv,
@@ -11,6 +12,9 @@ const {
 const { buildImportEvidence } = require('./sap_import_metadata');
 
 test('runner utility contracts load without the production Playwright installation', () => {
+  assert.equal(allowLiveDbApply({}), false);
+  assert.equal(allowLiveDbApply({ SAP_ALLOW_LIVE_DB_APPLY: 'true' }), false);
+  assert.equal(allowLiveDbApply({ SAP_ALLOW_LIVE_DB_APPLY: '1' }), true);
   assert.throws(() => requireCredentialEnv({}), /credentials-missing/);
   assert.deepEqual(requireCredentialEnv({ SAP_USERNAME: 'u', SAP_PASSWORD: 'p' }), { username: 'u', password: 'p' });
   const evidence = buildImportEvidence(new Date('2026-09-20T12:00:00.000Z'));
@@ -142,11 +146,12 @@ test('Cooler Movement validation failure prevents business sync', async () => {
   assert.deepEqual(calls, ['movement', 'persist3']);
 });
 
-test('Export 1 business sync keeps dry-run guard before the real write', async () => {
+test('Export 1 business sync applies to the live database only with explicit opt-in', async () => {
   const calls = [];
   const run = { advance: (state) => calls.push(['advance', state]) };
   const evidence = buildImportEvidence(new Date('2026-09-20T12:00:00.000Z'));
   const result = await syncExport1Result({ file: '/download/export1.csv', importEvidence: evidence }, run, {
+    allowLiveApply: true,
     runDbFn: (file, dryRun, receivedEvidence) => {
       calls.push(['db', file, dryRun, receivedEvidence]);
       return dryRun ? { blockedDeletes: 0 } : { ok: true, inserted: 1 };
@@ -159,6 +164,22 @@ test('Export 1 business sync keeps dry-run guard before the real write', async (
     ['advance', 'DB_SYNCED'],
   ]);
   assert.deepEqual(result.db, { ok: true, inserted: 1 });
+});
+
+test('default Export 1 business sync never applies to the live database', async () => {
+  const calls = [];
+  const run = { advance: (state) => calls.push(['advance', state]) };
+  const evidence = buildImportEvidence(new Date('2026-09-20T12:00:00.000Z'));
+  const result = await syncExport1Result({ file: '/download/export1.csv', importEvidence: evidence }, run, {
+    runDbFn: (_file, dryRun) => {
+      calls.push(dryRun ? 'dry' : 'live');
+      return { blockedDeletes: 0, ok: true, inserted: 1 };
+    },
+  });
+
+  assert.deepEqual(calls, ['dry', ['advance', 'DRY_RUN_COMPLETE']]);
+  assert.equal(result.db, undefined);
+  assert.equal(result.dryRunComplete, true);
 });
 
 test('blocked Export 1 dry-run prevents the real business write', async () => {

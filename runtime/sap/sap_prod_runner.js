@@ -19,6 +19,10 @@ const { buildDbArgs, buildImportEvidence } = require('./sap_import_metadata');
 
 const RUNTIME_DIR = '/opt/field-maintenance/sap-runtime';
 
+function allowLiveDbApply(env = process.env) {
+  return env.SAP_ALLOW_LIVE_DB_APPLY === '1';
+}
+
 function requireCredentialEnv(env = process.env) {
   const username = env.SAP_USERNAME;
   const password = env.SAP_PASSWORD;
@@ -130,6 +134,10 @@ async function syncExport1Result(export1, run, options = {}) {
   const runDbFn = options.runDbFn || runDb;
   const shadow = runDbFn(export1.file, true, export1.importEvidence);
   if (shadow.blockedDeletes > 0) throw new Error('SAFE_ABORT_DB:blocked-deletes');
+  if (options.allowLiveApply !== true) {
+    run.advance('DRY_RUN_COMPLETE');
+    return { shadow, dryRunComplete: true };
+  }
   const db = runDbFn(export1.file, false, export1.importEvidence);
   if (!db.ok) throw new Error('SAFE_ABORT_DB:not-ok');
   run.advance('DB_SYNCED');
@@ -139,6 +147,7 @@ async function syncExport1Result(export1, run, options = {}) {
 async function executeProductionChain(page, run, options = {}) {
   const clock = options.clock || Date.now;
   const storeDir = options.storeDir || `${RUNTIME_DIR}/secondary-sources`;
+  const allowLiveApply = allowLiveDbApply(options.env);
   return runSapChain({
     acquireExport1: () => acquireExport1(page, run),
     acquireExport2: (export1) => acquireExport2(page, {
@@ -152,7 +161,7 @@ async function executeProductionChain(page, run, options = {}) {
       downloadDir: `${RUNTIME_DIR}/downloads/cooler-movement`,
     }),
     persistCoolerMovement: (download) => persistCoolerMovement({ ...download, storeDir }),
-    syncExport1: (export1) => syncExport1Result(export1, run),
+    syncExport1: (export1) => syncExport1Result(export1, run, { allowLiveApply }),
   });
 }
 
@@ -174,14 +183,20 @@ async function main() {
     run.advance('CRM_VERIFIED');
 
     const result = await executeProductionChain(page, run);
-    const logout = await guardedLogout(page, run, { downloadValidated: true, dbSyncSucceeded: true });
     const db = result.businessSync.db;
+    const logout = await guardedLogout(page, run, {
+      downloadValidated: true,
+      dbSyncSucceeded: db?.ok === true,
+      dryRunComplete: result.businessSync.dryRunComplete === true,
+    });
     console.log(JSON.stringify({
       ok: true,
       state: run.state,
       rows: result.export1.csv.rowCount,
       data: { oldest: result.export1.data.oldest, newest: result.export1.data.newest },
-      db: { inserted: db.inserted, updated: db.updated, unchanged: db.unchanged, deleted: db.deleted },
+      db: db
+        ? { mode: 'live', inserted: db.inserted, updated: db.updated, unchanged: db.unchanged, deleted: db.deleted }
+        : { mode: 'dry-run', blockedDeletes: result.businessSync.shadow.blockedDeletes },
       secondary: {
         export2: {
           acquiredAt: result.export2.acquiredAt,
@@ -202,6 +217,7 @@ async function main() {
 }
 
 module.exports = {
+  allowLiveDbApply,
   acquireExport1,
   buildDbArgs,
   executeProductionChain,
