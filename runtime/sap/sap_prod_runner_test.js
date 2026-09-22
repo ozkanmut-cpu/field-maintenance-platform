@@ -29,7 +29,7 @@ test('runner failure payload preserves the stack and emits only allowed diagnost
   error.stack = 'safe stack';
   error.diagnostic = {
     reason: 'slot-added',
-    addedSlots: [{ slot: 5, key: 'PLANT', value1Present: false, value2Present: false, rawValue: 'do-not-log' }],
+    addedSlots: [{ slot: 5, key: 'PLANT', value1State: 'empty', value2State: 'control-missing', rawValue: 'do-not-log' }],
     rawHtml: '<input>',
   };
 
@@ -39,7 +39,7 @@ test('runner failure payload preserves the stack and emits only allowed diagnost
     stack: 'safe stack',
     diagnostic: {
       reason: 'slot-added',
-      addedSlots: [{ slot: 5, key: 'PLANT', value1Present: false, value2Present: false }],
+      addedSlots: [{ slot: 5, key: 'PLANT', value1State: 'empty', value2State: 'control-missing' }],
     },
   });
 });
