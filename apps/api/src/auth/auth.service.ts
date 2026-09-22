@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -7,6 +7,7 @@ import { AuthenticatedUser } from './auth-user';
 import { BootstrapDto } from './dto/bootstrap.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { isMockupEvidenceSessionEnabled } from './mockup-evidence-session';
 import { hashPassword, verifyPassword } from './password';
 
 type Claims = { sub: string; role: UserRole; ver: number; iat: number; exp: number; iss: string; aud: string };
@@ -46,6 +47,16 @@ export class AuthService {
       where: { id: user.id }, data: { lastLoginAt: new Date() }, select: this.userSelect(),
     });
     return { user: updated, ...this.issueToken(updated) };
+  }
+
+  async mockupEvidenceSession() {
+    if (!isMockupEvidenceSessionEnabled(process.env)) throw new NotFoundException();
+    const user = await this.prisma.user.findUnique({
+      where: { username: 'mockup.ozge.kaya' },
+      select: this.userSelect(),
+    });
+    if (!user || !user.active || user.role !== UserRole.TECHNICIAN) throw new NotFoundException();
+    return { user, ...this.issueToken(user) };
   }
 
   async authenticateAccessToken(token: string): Promise<AuthenticatedUser> {
