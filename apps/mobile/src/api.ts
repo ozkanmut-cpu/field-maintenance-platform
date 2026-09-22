@@ -292,12 +292,20 @@ export type TechnicianHistoryItem = {
   purposeLabel?: string;
   customerName?: string | null;
   historyLabel?: string;
-  /** Server-authorized: only maintenance entered today or yesterday can be reverted. */
+  /** Server-authorized: only eligible maintenance or non-maintenance visits entered today or yesterday can be reverted. */
   revertEligible?: boolean;
 };
 
 export function revertMaintenance(visitId: string, reason: string) {
   return jsonRequest<Record<string, unknown>>('/maintenance/revert', {
+    method: 'POST',
+    body: JSON.stringify({ visitId, reason }),
+  });
+}
+
+/** Reverts a server-authorized non-maintenance visit made today or yesterday. */
+export function revertNonMaintenanceVisit(visitId: string, reason: string) {
+  return jsonRequest<Record<string, unknown>>('/maintenance/non-maintenance-visit/revert', {
     method: 'POST',
     body: JSON.stringify({ visitId, reason }),
   });

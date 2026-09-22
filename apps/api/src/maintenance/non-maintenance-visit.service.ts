@@ -12,9 +12,10 @@ import {
   UserRole,
 } from '@prisma/client';
 import { AssignmentsService } from '../assignments/assignments.service';
-import { businessDayRange } from '../common/business-time';
+import { businessDateKey, businessDayRange } from '../common/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { NonMaintenanceVisitDto } from './dto/non-maintenance-visit.dto';
+import { RevertNonMaintenanceVisitDto } from './dto/revert-non-maintenance-visit.dto';
 
 const PURPOSE_LABELS: Record<NonMaintenanceVisitPurpose, string> = {
   BREAKDOWN: 'Arıza',
@@ -156,6 +157,42 @@ export class NonMaintenanceVisitService {
       throw error;
     }
   }
+  async revert(dto: RevertNonMaintenanceVisitDto, now = new Date()) {
+    const [visit, actor] = await Promise.all([
+      this.prisma.nonMaintenanceVisit.findUnique({ where: { id: dto.visitId } }),
+      this.prisma.user.findFirst({ where: { id: dto.userId, active: true, role: UserRole.TECHNICIAN } }),
+    ]);
+    if (!visit) throw new NotFoundException('Bakım dışı ziyaret bulunamadı');
+    if (!actor) throw new NotFoundException('Teknisyen bulunamadı veya pasif');
+    if (visit.technicianId !== actor.id) {
+      throw new ForbiddenException('Teknisyen yalnızca kendi bakım dışı ziyaretini geri alabilir');
+    }
+    if (!this.isWithinRevertWindow(visit.recordedAtServer, now)) {
+      throw new BadRequestException('Bakım dışı ziyaret yalnızca girildiği gün veya ertesi gün geri alınabilir');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const reverted = await tx.nonMaintenanceVisit.delete({ where: { id: visit.id } });
+      await tx.adminAuditLog.create({
+        data: {
+          entityType: 'NON_MAINTENANCE_VISIT',
+          entityId: visit.id,
+          action: 'NON_MAINTENANCE_VISIT_REVERTED',
+          actorId: actor.id,
+          oldValue: {
+            pointId: visit.pointId,
+            customerName: visit.customerName,
+            purpose: visit.purpose,
+            visitedAt: visit.visitedAt.toISOString(),
+            recordedAtServer: visit.recordedAtServer.toISOString(),
+          },
+          note: dto.reason.trim(),
+        },
+      });
+      return reverted;
+    });
+  }
+
   async technicianHistory(technicianId: string, dateInput?: string) {
     const technician = await this.prisma.user.findFirst({
       where: { id: technicianId, active: true, role: UserRole.TECHNICIAN },
@@ -179,6 +216,7 @@ export class NonMaintenanceVisitService {
     });
     const items = rows.map((item) => ({
       ...item,
+      revertEligible: !!item.recordedAtServer && this.isWithinRevertWindow(item.recordedAtServer, date),
       purposeLabel: PURPOSE_LABELS[item.purpose],
       historyLabel: `${item.point?.name ?? item.customerName ?? 'Müşteri kaydı yok'} · ${PURPOSE_LABELS[item.purpose]}`,
     }));
@@ -189,6 +227,15 @@ export class NonMaintenanceVisitService {
       count: items.length,
       items,
     };
+  }
+
+  private isWithinRevertWindow(recordedAtServer: Date, now: Date) {
+    const today = businessDateKey(now);
+    const yesterday = new Date(`${today}T12:00:00.000Z`);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const recordedDate = businessDateKey(recordedAtServer);
+    return recordedDate === today || recordedDate === yesterdayKey;
   }
 
   private assertDate(value: Date, field: string) {
