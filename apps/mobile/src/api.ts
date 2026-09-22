@@ -112,6 +112,12 @@ export async function login(username: string, password: string) {
   return result;
 }
 
+export async function startMockupEvidenceSession() {
+  const result = await jsonRequest<{ user: AuthUser; accessToken: string; tokenType: string; expiresIn: number }>('/auth/mockup-evidence-session', { method: 'POST' });
+  await saveSessionToken(result.accessToken);
+  return result;
+}
+
 export function me() {
   return jsonRequest<AuthUser>('/auth/me');
 }
