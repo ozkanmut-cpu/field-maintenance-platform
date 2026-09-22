@@ -159,6 +159,16 @@ test('Export 2 records only structural evidence when a blank non-product criteri
   );
 });
 
+test('Export 2 permits exactly one empty BU_PARTNER slot added by SAP', () => {
+  const after = export2State();
+  after.slots.push({ slot: 7, key: 'BU_PARTNER', value1: '', value2: '' });
+
+  assert.deepEqual(verifyExport2SearchDelta(export1State(), after), {
+    max: '2000',
+    slots: [...export2State().slots, { slot: 7, key: 'BU_PARTNER', value1: '', value2: '' }],
+  });
+});
+
 test('Export 2 rejects duplicate blank product replacement slots', () => {
   const after = export2State();
   after.slots = after.slots

@@ -135,7 +135,12 @@ function verifyExport2SearchDelta(export1State, export2State) {
     if (before.slots.some((previous) => previous.slot === slot.slot)) return false;
     return !replacementSlots.includes(slot);
   });
-  if (addedSlots.length) {
+  const permittedBuPartner = addedSlots.length === 1
+    && addedSlots[0].slot === 7
+    && addedSlots[0].key === 'BU_PARTNER'
+    && addedSlots[0].value1 === ''
+    && addedSlots[0].value2 === '';
+  if (addedSlots.length && !permittedBuPartner) {
     const valueState = (value) => {
       if (value === '') return 'empty';
       if (value === null) return 'control-missing';
