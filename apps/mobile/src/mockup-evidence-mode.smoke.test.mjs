@@ -13,7 +13,7 @@ const api = fs.readFileSync(path.join(here, 'api.ts'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/android-apk.yml'), 'utf8');
 
 function readAndroidConfig(evidenceMode) {
-  const configPath = path.join(root, 'apps/mobile/app.config.cjs');
+  const configPath = path.join(root, 'apps/mobile/app.config.js');
   return JSON.parse(execFileSync(process.execPath, ['-e', `
     const config = require(process.argv[1]);
     const resolved = typeof config === 'function' ? config({ config: {} }) : config;
