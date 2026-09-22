@@ -131,11 +131,22 @@ function verifyExport2SearchDelta(export1State, export2State) {
   if (replacementSlots.length > 1) {
     throw new Error(`SAFE_ABORT_EXPORT2_STATE:product-slot-not-unique:${replacementSlots.length}`);
   }
-  if (after.slots.some((slot) => {
+  const addedSlots = after.slots.filter((slot) => {
     if (before.slots.some((previous) => previous.slot === slot.slot)) return false;
     return !replacementSlots.includes(slot);
-  })) {
-    throw new Error('SAFE_ABORT_EXPORT2_STATE:slot-added');
+  });
+  if (addedSlots.length) {
+    const error = new Error('SAFE_ABORT_EXPORT2_STATE:slot-added');
+    error.diagnostic = {
+      reason: 'slot-added',
+      addedSlots: addedSlots.map((slot) => ({
+        slot: slot.slot,
+        key: slot.key,
+        value1Present: slot.value1 !== null && slot.value1 !== '',
+        value2Present: slot.value2 !== null && slot.value2 !== '',
+      })),
+    };
+    throw error;
   }
   if (productCount !== 1) throw new Error(`SAFE_ABORT_EXPORT2_STATE:product-slot-not-unique:${productCount}`);
   return after;

@@ -6,6 +6,7 @@ const {
   acquireExport1,
   buildDbArgs,
   executeProductionChain,
+  failurePayload,
   requireCredentialEnv,
   runSapChain,
   syncExport1Result,
@@ -21,6 +22,26 @@ test('runner utility contracts load without the production Playwright installati
   const evidence = buildImportEvidence(new Date('2026-09-20T12:00:00.000Z'));
   assert.deepEqual(buildDbArgs('/tmp/x.csv', true, evidence), ['--dry-run', '--acquired-at', '2026-09-20T12:00:00.000Z', '--window-start', '2026-09-06', '--window-end', '2026-09-20', '/tmp/x.csv']);
   assert.deepEqual(buildDbArgs('/tmp/x.csv', false, evidence), ['--acquired-at', '2026-09-20T12:00:00.000Z', '--window-start', '2026-09-06', '--window-end', '2026-09-20', '/tmp/x.csv']);
+});
+
+test('runner failure payload preserves the stack and emits only allowed diagnostic fields', () => {
+  const error = new Error('SAFE_ABORT_EXPORT2_STATE:slot-added');
+  error.stack = 'safe stack';
+  error.diagnostic = {
+    reason: 'slot-added',
+    addedSlots: [{ slot: 5, key: 'PLANT', value1Present: false, value2Present: false, rawValue: 'do-not-log' }],
+    rawHtml: '<input>',
+  };
+
+  assert.deepEqual(failurePayload(error), {
+    ok: false,
+    error: 'SAFE_ABORT_EXPORT2_STATE:slot-added',
+    stack: 'safe stack',
+    diagnostic: {
+      reason: 'slot-added',
+      addedSlots: [{ slot: 5, key: 'PLANT', value1Present: false, value2Present: false }],
+    },
+  });
 });
 
 test('Export 1 captures the complete active search state before executing its search', async () => {
