@@ -32,6 +32,8 @@ test('attempt approvals expose priority, context and a required rejection reason
   assert.match(source, /Tekrarlayan nokta/);
   assert.match(source, /Tekrarlayan teknisyen/);
   assert.match(source, /Nokta detayını aç/);
+  assert.match(source, /onNavigate\('point-detail', \{ pointId: item\.point\.id, detailTab: 'maintenance' \}\)/,
+    'maintenance context must open the selected point maintenance tab');
   assert.match(source, /Bakım bağlamını aç/);
   assert.match(source, /Ret nedeni \(zorunlu\)/);
   assert.match(source, /decision === 'REJECTED' && !note/);
@@ -40,8 +42,12 @@ test('attempt approvals expose priority, context and a required rejection reason
 test('attempt decision updates only the reviewed row and preserves accessible history', () => {
   const reviewBody = source.match(/async function reviewAttempt[\s\S]*?\n}\nasync function changePointStatus/)?.[0] ?? '';
   assert.match(reviewBody, /setAttemptQueue\(\(current\) => current\.filter/);
-  assert.match(reviewBody, /setAttemptHistory\(\(current\) =>/);
+  assert.doesNotMatch(reviewBody, /setAttemptHistory\(/,
+    'the client must not fabricate reviewer identity or review time');
   assert.doesNotMatch(reviewBody, /await load\(\)/,
     'a decision must not replace the whole queue with a global reload');
+  assert.match(source, /Kaydedildi\./);
+  assert.match(source, /Yeniden dene/);
+  assert.match(source, /Kararlar denetim kaydı oluşturur ve bu ekranda geri alınamaz\./);
   assert.match(source, /aria-label="Son yapılamadı kararları"/);
 });

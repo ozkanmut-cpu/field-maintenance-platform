@@ -26,19 +26,23 @@ test('daily summary clears stale data and refreshes whenever the dashboard becom
   assert.match(source, /\[dailySummaryDate, activeSection\]/);
 });
 
-test('dashboard keeps exactly three actionable priorities and uses shared loading states', () => {
+test('dashboard preserves exactly three priority slots with card-level loading and retry states', () => {
   const prioritySection = source.match(/<section className="metricGrid dashboardQueueMetrics"[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.equal((prioritySection.match(/className="metricCard dashboardPriorityState"/g) ?? []).length, 3);
   assert.equal((prioritySection.match(/<MetricCard/g) ?? []).length, 3);
   assert.match(prioritySection, /Ayar bekleyenler ekranını aç/);
   assert.match(prioritySection, /Yapılamadı onaylarını aç/);
   assert.match(prioritySection, /Bakım takviminde gecikenleri aç/);
-  assert.match(source, /AdminListState/);
+  assert.match(prioritySection, /onRetry=\{\(\) => void load\(\)\}/);
+  assert.match(prioritySection, /onRetry=\{\(\) => void loadDailySummary\(\)\}/);
   assert.doesNotMatch(prioritySection, /value=\{[^}]*'—'/,
     'loading counters must not masquerade as a dash value');
 });
 
-test('dashboard reports remain visible instead of living in a blank collapsed container', () => {
+test('dashboard reports are closed by default and toggle without an empty panel shell', () => {
+  assert.match(source, /const \[dashboardReportsOpen, setDashboardReportsOpen\] = useState\(false\)/);
+  assert.match(source, /Raporları ve ayrıntıları göster/);
+  assert.match(source, /Raporları ve ayrıntıları gizle/);
+  assert.match(source, /\{dashboardReportsOpen \? <div className="dashboardReports">/);
   assert.doesNotMatch(source, /<details className="panel dashboardReports">/);
-  assert.doesNotMatch(source, /<summary>Raporlar ve ayrıntılar<\/summary>/);
-  assert.match(source, /<div className="dashboardReports">/);
 });

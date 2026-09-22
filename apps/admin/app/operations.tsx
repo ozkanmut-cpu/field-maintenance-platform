@@ -90,6 +90,9 @@ const [attemptHistory, setAttemptHistory] = useState<AttemptHistoryItem[]>([]);
 const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
 const [reviewingAttemptId, setReviewingAttemptId] = useState('');
 const [attemptReviewErrors, setAttemptReviewErrors] = useState<Record<string, string>>({});
+const [attemptReviewRetries, setAttemptReviewRetries] = useState<Record<string, 'APPROVED' | 'REJECTED'>>({});
+const [attemptReviewNotice, setAttemptReviewNotice] = useState('');
+const [dashboardReportsOpen, setDashboardReportsOpen] = useState(false);
 const [dailySummaryDate, setDailySummaryDate] = useState(istanbulDateKey);
 const [dailySummary, setDailySummary] = useState<DailyAdminSummary | null>(null);
 const [dailySummaryLoading, setDailySummaryLoading] = useState(false);
@@ -293,8 +296,10 @@ finally { setBusy(false); }
 }
 async function reviewAttempt(item: AttemptReviewItem, decision: 'APPROVED' | 'REJECTED') {
 const note = (reviewNotes[item.id] ?? '').trim();
+setAttemptReviewNotice('');
 if (decision === 'REJECTED' && !note) {
 setAttemptReviewErrors((current) => ({ ...current, [item.id]: 'Reddetmek için ret nedeni zorunludur.' }));
+setAttemptReviewRetries((current) => ({ ...current, [item.id]: decision }));
 return;
 }
 const confirmed = window.confirm(decision === 'APPROVED'
@@ -303,21 +308,25 @@ const confirmed = window.confirm(decision === 'APPROVED'
 if (!confirmed) return;
 setReviewingAttemptId(item.id);
 setAttemptReviewErrors((current) => ({ ...current, [item.id]: '' }));
+setAttemptReviewRetries((current) => ({ ...current, [item.id]: decision }));
 try {
-const result = await api<{ closedDueDate?: string | null }>('/api/backend/maintenance/attempt-review', {
+await api<{ closedDueDate?: string | null }>('/api/backend/maintenance/attempt-review', {
 method: 'POST', body: JSON.stringify({ attemptId: item.id, decision, note: note || undefined }),
 });
-const reviewedAt = new Date().toISOString();
 setAttemptQueue((current) => current.filter((queued) => queued.id !== item.id));
-setAttemptHistory((current) => [{
-...item, reviewStatus: decision, reviewedAt, reviewNote: note || null,
-closedDueDate: result.closedDueDate ?? null,
-}, ...current.filter((historyItem) => historyItem.id !== item.id)].slice(0, 20));
+// The decision endpoint does not return authoritative reviewer/time fields.
+// Keep server-backed history unchanged instead of fabricating an audit entry.
 setReviewNotes((current) => {
 const next = { ...current };
 delete next[item.id];
 return next;
 });
+setAttemptReviewRetries((current) => {
+const next = { ...current };
+delete next[item.id];
+return next;
+});
+setAttemptReviewNotice('Kaydedildi.');
 } catch (e) {
 setAttemptReviewErrors((current) => ({ ...current, [item.id]: e instanceof Error ? e.message : String(e) }));
 } finally { setReviewingAttemptId(''); }
@@ -400,13 +409,20 @@ return (
 {loadError ? <div className="error banner" role="alert">{loadError}<button className="ghost" onClick={() => void load()} disabled={loading}>Kuyrukları tekrar yükle</button></div> : null}
 {activeSection === 'dashboard' ? <>
 <section className="metricGrid dashboardQueueMetrics" aria-label="Operasyon kuyrukları">
-{loading ? <AdminListState state="loading" title="Operasyon öncelikleri yükleniyor" description="Gerçek kuyruk sayaçları hazırlanıyor." /> : loadError ? <AdminListState state="error" title="Operasyon öncelikleri alınamadı" description="Kuyrukları yeniden yükleyin." onRetry={() => void load()} /> : <>
-<MetricCard label="Ayar bekleyen" value={setupPending.length} description="Ayar bekleyenler ekranını aç" section="setup-pending" onNavigate={onNavigate} />
-<MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı onaylarını aç" section="approvals" onNavigate={onNavigate} />
+<div className="metricCard dashboardPriorityState">
+{loading ? <AdminListState state="loading" title="Ayar bekleyenler yükleniyor" description="Gerçek kuyruk sayacı hazırlanıyor." /> : loadError ? <AdminListState state="error" title="Ayar bekleyenler alınamadı" description="Kuyruğu yeniden yükleyin." onRetry={() => void load()} /> : <MetricCard label="Ayar bekleyen" value={setupPending.length} description="Ayar bekleyenler ekranını aç" section="setup-pending" onNavigate={onNavigate} />}
+</div>
+<div className="metricCard dashboardPriorityState">
+{loading ? <AdminListState state="loading" title="Bekleyen onaylar yükleniyor" description="Gerçek kuyruk sayacı hazırlanıyor." /> : loadError ? <AdminListState state="error" title="Bekleyen onaylar alınamadı" description="Kuyruğu yeniden yükleyin." onRetry={() => void load()} /> : <MetricCard label="Bekleyen onay" value={attemptQueue.length} description="Yapılamadı onaylarını aç" section="approvals" onNavigate={onNavigate} />}
+</div>
+<div className="metricCard dashboardPriorityState">
 {dailySummaryLoading ? <AdminListState state="loading" title="Geciken işler yükleniyor" description="Bakım takvimi sayacı hazırlanıyor." /> : dailySummary ? <MetricCard label="Geciken açık iş" value={dailySummary.metrics.overdueOpen} description="Bakım takviminde gecikenleri aç" section="maintenance-calendar" onNavigate={onNavigate} /> : <AdminListState state="error" title="Geciken iş sayısı alınamadı" description="Günlük özeti yeniden yükleyin." onRetry={() => void loadDailySummary()} />}
-</>}
+</div>
 </section>
-<div className="dashboardReports">
+<button type="button" className="ghost iconAction" aria-expanded={dashboardReportsOpen} onClick={() => setDashboardReportsOpen((current) => !current)}>
+{dashboardReportsOpen ? 'Raporları ve ayrıntıları gizle' : 'Raporları ve ayrıntıları göster'}
+</button>
+{dashboardReportsOpen ? <div className="dashboardReports">
 <section className="panel">
 <div className="panelHeader"><div><h2>Günlük Operasyon Özeti</h2><p>Seçilen İstanbul iş günü için saha hareketi, açık işler ve evrak yükü.</p></div><div className="rowActions"><input type="date" value={dailySummaryDate} onChange={(e) => setDailySummaryDate(e.target.value)} aria-label="Günlük özet tarihi" /><button className="ghost iconAction" onClick={() => void loadDailySummary()} disabled={dailySummaryLoading}><AdminIcon name="refresh" size={17} /><span>{dailySummaryLoading ? 'YÜKLENİYOR' : 'YENİLE'}</span></button></div></div>
 {dailySummaryError ? <div className="error banner" role="alert">{dailySummaryError}</div> : dailySummary ? <>
@@ -469,7 +485,7 @@ return (
 </> : <AdminListState state="loading" title="Teknisyen özeti hazırlanıyor" description="Teknisyen ve tarih seçimine göre günlük operasyon verileri yükleniyor." />}
 </section>
 <KpiReportingPanel technicians={technicians} />
-</div>
+</div> : null}
 </> : null}
 {activeSection === 'regions' ? <section className="panel" id="regions">
 <div className="panelHeader">
@@ -528,9 +544,10 @@ return (
 {activeSection === 'approvals' ? <>
 <section className="panel priorityPanel" id="approvals">
 <div className="panelHeader">
-<div><h2>Bekleyen Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p></div>
+<div><h2>Bekleyen Yapılamadı Onayları</h2><p>Teknisyenin kapatamadığı bakım görevlerini incele. Onaylanan görev kapanır; reddedilen görev açık kalır.</p><small className="muted">Kararlar denetim kaydı oluşturur ve bu ekranda geri alınamaz.</small></div>
 <span className="pill">{attemptQueue.length} bekliyor</span>
 </div>
+{attemptReviewNotice ? <div className="banner success" role="status">{attemptReviewNotice}</div> : null}
 {loading ? <AdminListState state="loading" title="Onay verileri yükleniyor" description="Bekleyen kayıtlar ve karar geçmişi hazırlanıyor." /> : <section className="dashboardGrid" aria-label="Yapılamadı onay özeti">
 <div className="dashboardCard"><span>Bekleyen kayıtlar</span><strong>{attemptQueue.length}</strong><small>Yönetici kararı gerekiyor</small></div>
 <div className="dashboardCard"><span>Son 20 onay</span><strong>{reviewedAttemptCounts.approved}</strong><small>İlgili görev kapatıldı</small></div>
@@ -542,11 +559,11 @@ return (
 <tbody>
 {loading ? <tr><td colSpan={5}><AdminListState state="loading" title="Onaylar yükleniyor" description="Bekleyen kayıtlar getiriliyor." /></td></tr> : prioritizedAttemptQueue.length === 0 ? <tr><td colSpan={5}><AdminListState state="success" title="Bekleyen onay yok" description="İncelenmesi gereken yapılamadı kaydı bulunmuyor." /></td></tr> : prioritizedAttemptQueue.map((item) => (
 <tr key={item.id}>
-<td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region?.name || 'Bölge yok'}</div><div className="rowActions"><button className="ghost small" onClick={() => onNavigate('point-detail', { pointId: item.point.id, detailTab: 'general' })}>Nokta detayını aç</button><button className="ghost small" onClick={() => onNavigate('maintenance-calendar', { pointId: item.point.id })}>Bakım bağlamını aç</button></div></td>
+<td><strong>{item.point.name}</strong><div className="muted">{item.point.code} · {item.point.region?.name || 'Bölge yok'}</div><div className="rowActions"><button className="ghost small" onClick={() => onNavigate('point-detail', { pointId: item.point.id, detailTab: 'general' })}>Nokta detayını aç</button><button className="ghost small" onClick={() => onNavigate('point-detail', { pointId: item.point.id, detailTab: 'maintenance' })}>Bakım bağlamını aç</button></div></td>
 <td>{item.technician.name}{item.assistedForTechnician ? <div className="muted">{item.assistedForTechnician.name} için yardım</div> : null}</td>
 <td>{item.reason === 'BUSINESS_CLOSED' ? 'İşletme kapalı' : item.reason === 'AUTHORIZED_PERSON_UNAVAILABLE' ? 'Yetkili kişi yok' : item.reason === 'ACCESS_FAILED' ? 'Erişim sağlanamadı' : 'Diğer'}{item.note ? <div className="muted">{item.note}</div> : null}</td>
 <td>{new Date(item.attemptedAt).toLocaleString('tr-TR')}<div className="rowActions">{item.isOldest ? <span className="pill">En eski bekleyen</span> : null}{item.isOverdue ? <span className="pill">Gecikmiş</span> : null}{item.repeatedPoint ? <span className="pill">Tekrarlayan nokta</span> : null}{item.repeatedTechnician ? <span className="pill">Tekrarlayan teknisyen</span> : null}</div></td>
-<td><label className="muted">Ret nedeni (zorunlu)<input value={reviewNotes[item.id] ?? ''} onChange={(event) => setReviewNotes((current) => ({ ...current, [item.id]: event.target.value }))} aria-label={`Ret nedeni (zorunlu) - ${item.point.name}`} aria-required="true" placeholder="Reddedilecekse nedeni yazın" /></label>{attemptReviewErrors[item.id] ? <div className="error" role="alert">{attemptReviewErrors[item.id]}</div> : null}<div className="actions"><button className="small" disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, 'REJECTED')}>Reddet</button><button disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, 'APPROVED')}>{reviewingAttemptId === item.id ? 'İŞLENİYOR' : 'ONAYLA / KAPAT'}</button></div></td>
+<td><label className="muted">Ret nedeni (zorunlu)<input value={reviewNotes[item.id] ?? ''} onChange={(event) => setReviewNotes((current) => ({ ...current, [item.id]: event.target.value }))} aria-label={`Ret nedeni (zorunlu) - ${item.point.name}`} aria-required="true" placeholder="Reddedilecekse nedeni yazın" /></label>{attemptReviewErrors[item.id] ? <div className="error" role="alert">{attemptReviewErrors[item.id]}{attemptReviewRetries[item.id] ? <button className="ghost small" disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, attemptReviewRetries[item.id])}>Yeniden dene</button> : null}</div> : null}<div className="actions"><button className="small" disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, 'REJECTED')}>Reddet</button><button disabled={reviewingAttemptId === item.id} onClick={() => void reviewAttempt(item, 'APPROVED')}>{reviewingAttemptId === item.id ? 'İŞLENİYOR' : 'ONAYLA / KAPAT'}</button></div></td>
 </tr>
 ))}
 </tbody>
