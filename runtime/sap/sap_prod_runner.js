@@ -35,7 +35,24 @@ function failurePayload(error) {
         value2State: String(slot.value2State),
       })),
     }
-    : undefined;
+    : diagnostic?.reason === 'record-date-outside-range'
+      && Number.isInteger(diagnostic.rowIndex)
+      && diagnostic.rowIndex >= 0
+      && diagnostic.dateField === 'Kayıt tarihi'
+      && /^\d{4}-\d{2}-\d{2}$/.test(diagnostic.recordDate)
+      && /^\d{4}-\d{2}-\d{2}$/.test(diagnostic.windowStart)
+      && /^\d{4}-\d{2}-\d{2}$/.test(diagnostic.windowEnd)
+      && (diagnostic.direction === 'before-start' || diagnostic.direction === 'after-end')
+      ? {
+        reason: 'record-date-outside-range',
+        rowIndex: diagnostic.rowIndex,
+        dateField: 'Kayıt tarihi',
+        recordDate: diagnostic.recordDate,
+        windowStart: diagnostic.windowStart,
+        windowEnd: diagnostic.windowEnd,
+        direction: diagnostic.direction,
+      }
+      : undefined;
   return {
     ok: false,
     error: error.message,
