@@ -21,6 +21,10 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) { return this.auth.login(dto); }
 
+  @Public()
+  @Post('mockup-evidence-session')
+  mockupEvidenceSession() { return this.auth.mockupEvidenceSession(); }
+
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser) { return user; }
 

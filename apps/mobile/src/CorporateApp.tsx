@@ -12,8 +12,9 @@ import {
   DueTask, EfesimExtractResult, extractEfesim, HelpTarget, helpTargets, login, me, MissingPaperworkItem, ProspectRecord,
   ProspectVisitPurpose, recordMaintenanceAttempt, recordNonMaintenanceVisit, restoreSessionToken, revertMaintenance, revertNonMaintenanceVisit, technicianDashboard,
   TechnicianDashboard, technicianHistory, TechnicianHistoryItem, myCustomers, updateCustomerEquipment, MyCustomer,
-  NearbyPoint, NonMaintenanceVisitType,
+  NearbyPoint, NonMaintenanceVisitType, startMockupEvidenceSession,
 } from './api';
+import { mockupEvidenceModeEnabled } from './mockup-evidence-mode';
 import { matchesSearch } from './search';
 import { nearbyPoints, sortNearbyItems } from './nearby';
 import { NearbyScreen } from './NearbyScreen';
@@ -174,6 +175,17 @@ export default function CorporateApp() {
       if (session.user.role !== 'TECHNICIAN') { await clearSessionToken(); throw new Error('Bu uygulama teknisyen hesabı gerektiriyor.'); }
       setUser(session.user); setPassword(''); resetNavigation();
     } catch (e) { Alert.alert('Giriş yapılamadı', message(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function signInMockupEvidence() {
+    if (!mockupEvidenceModeEnabled) return;
+    setBusy(true);
+    try {
+      const session = await startMockupEvidenceSession();
+      if (session.user.role !== 'TECHNICIAN') { await clearSessionToken(); throw new Error('Mockup oturumu teknisyen hesabı gerektiriyor.'); }
+      setUser(session.user); resetNavigation();
+    } catch (e) { Alert.alert('Mockup oturumu açılamadı', message(e)); }
     finally { setBusy(false); }
   }
 
@@ -508,7 +520,7 @@ export default function CorporateApp() {
   }
 
   if (sessionLoading) return <SafeAreaView edges={['top','bottom']} style={styles.center}><ActivityIndicator size="large" /><Text>Oturum kontrol ediliyor...</Text></SafeAreaView>;
-  if (!user) return <Login username={username} password={password} setUsername={setUsername} setPassword={setPassword} busy={busy} signIn={signIn} />;
+  if (!user) return <Login username={username} password={password} setUsername={setUsername} setPassword={setPassword} busy={busy} signIn={signIn} mockupEvidenceMode={mockupEvidenceModeEnabled} signInMockupEvidence={signInMockupEvidence} />;
 
   const title = screen === 'CUSTOMERS' || screen === 'CUSTOMER' ? 'Müşterilerim' : screen === 'NEARBY' ? 'Yakınımdakiler' : screen === 'EQUIPMENT_CONFIRM' ? 'Ekipman Kontrolü' : screen === 'HELP' ? 'Yardım Et' : screen === 'MISSING_ITEMS' ? 'Eksikler' : screen === 'NEW' || screen === 'EFESIM_RESULT' || screen === 'PROSPECT' || screen === 'VISIT_SAVED' ? 'Yeni Nokta' : screen === 'HISTORY' ? 'Geçmiş' : screen.startsWith('NON_MAINTENANCE') ? 'Bakım Dışı Ziyaret' : 'İşler';
   return <SafeAreaView edges={['top','bottom']} style={styles.safe}><StatusBar style="light" /><View style={styles.shell}>
@@ -564,7 +576,7 @@ function DecisionModal({open,onRequestClose,title,detail,options,cancelLabel='Va
 function SearchBox({value,onChange,placeholder}:{value:string;onChange:(v:string)=>void;placeholder:string}) { return <View style={styles.searchBox}><Feather name="search" size={18} color="#667989" /><TextInput style={styles.searchInput} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#8795A1" autoCorrect={false} returnKeyType="search" />{value?<TouchableOpacity onPress={()=>onChange('')}><Feather name="x" size={18} color="#8795A1" /></TouchableOpacity>:null}</View>; }
 function distanceMetersStatic(lat1:number,lon1:number,lat2:number,lon2:number){const r=6371000;const p1=lat1*Math.PI/180,p2=lat2*Math.PI/180;const dp=(lat2-lat1)*Math.PI/180,dl=(lon2-lon1)*Math.PI/180;const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return r*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function formatDistance(m:number){return m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(m<10000?1:0)} km`;}
-function Login(p: { username:string; password:string; setUsername:(v:string)=>void; setPassword:(v:string)=>void; busy:boolean; signIn:()=>void }) {
+function Login(p: { username:string; password:string; setUsername:(v:string)=>void; setPassword:(v:string)=>void; busy:boolean; signIn:()=>void; mockupEvidenceMode:boolean; signInMockupEvidence:()=>void }) {
   return <SafeAreaView style={styles.loginSafe}><StatusBar style="light" />
     <View style={styles.loginHero}>
       <View style={styles.loginBrandRow}><Image source={APP_ICON} style={styles.loginLogo}/><View><Text style={styles.loginBrand}>fıçıbakım</Text><Text style={styles.loginBrandSub}>SAHA BAKIM</Text></View></View>
@@ -574,6 +586,7 @@ function Login(p: { username:string; password:string; setUsername:(v:string)=>vo
       <Text style={styles.formLabel}>KULLANICI ADI</Text><TextInput style={styles.loginInput} value={p.username} onChangeText={p.setUsername} autoCapitalize="none" autoComplete="username" placeholder="Kullanıcı adın" placeholderTextColor="#8A99A6" />
       <Text style={styles.formLabel}>ŞİFRE</Text><TextInput style={styles.loginInput} value={p.password} onChangeText={p.setPassword} secureTextEntry autoComplete="password" placeholder="Şifren" placeholderTextColor="#8A99A6" onSubmitEditing={p.signIn} />
       <PrimaryButton title={p.busy?'GİRİŞ YAPILIYOR...':'GİRİŞ YAP'} icon="log-in" onPress={p.signIn} disabled={p.busy} />
+      {p.mockupEvidenceMode && <SecondaryButton title="MOCKUP TEST OTURUMU" icon="play-circle" onPress={p.signInMockupEvidence} disabled={p.busy} />}
       {p.busy && <ActivityIndicator color={BLUE} />}
     </View>
   </SafeAreaView>;
