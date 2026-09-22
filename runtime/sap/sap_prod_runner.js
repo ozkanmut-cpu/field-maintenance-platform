@@ -133,6 +133,7 @@ async function acquireExport1(page, run, options = {}) {
 async function syncExport1Result(export1, run, options = {}) {
   const runDbFn = options.runDbFn || runDb;
   const shadow = runDbFn(export1.file, true, export1.importEvidence);
+  if (shadow.ok !== true) throw new Error('SAFE_ABORT_DB:shadow-not-ok');
   if (shadow.blockedDeletes > 0) throw new Error('SAFE_ABORT_DB:blocked-deletes');
   if (options.allowLiveApply !== true) {
     run.advance('DRY_RUN_COMPLETE');
@@ -148,7 +149,9 @@ async function executeProductionChain(page, run, options = {}) {
   const clock = options.clock || Date.now;
   const storeDir = options.storeDir || `${RUNTIME_DIR}/secondary-sources`;
   const allowLiveApply = allowLiveDbApply(options.env);
-  return runSapChain({
+  const runSapChainFn = options.runSapChainFn || runSapChain;
+  const runDbFn = options.runDbFn || runDb;
+  return runSapChainFn({
     acquireExport1: () => acquireExport1(page, run),
     acquireExport2: (export1) => acquireExport2(page, {
       now: clock(),
@@ -161,7 +164,7 @@ async function executeProductionChain(page, run, options = {}) {
       downloadDir: `${RUNTIME_DIR}/downloads/cooler-movement`,
     }),
     persistCoolerMovement: (download) => persistCoolerMovement({ ...download, storeDir }),
-    syncExport1: (export1) => syncExport1Result(export1, run, { allowLiveApply }),
+    syncExport1: (export1) => syncExport1Result(export1, run, { allowLiveApply, runDbFn }),
   });
 }
 

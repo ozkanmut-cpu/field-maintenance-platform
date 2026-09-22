@@ -5,6 +5,7 @@ const {
   allowLiveDbApply,
   acquireExport1,
   buildDbArgs,
+  executeProductionChain,
   requireCredentialEnv,
   runSapChain,
   syncExport1Result,
@@ -154,7 +155,7 @@ test('Export 1 business sync applies to the live database only with explicit opt
     allowLiveApply: true,
     runDbFn: (file, dryRun, receivedEvidence) => {
       calls.push(['db', file, dryRun, receivedEvidence]);
-      return dryRun ? { blockedDeletes: 0 } : { ok: true, inserted: 1 };
+      return dryRun ? { ok: true, blockedDeletes: 0 } : { ok: true, inserted: 1 };
     },
   });
 
@@ -180,6 +181,40 @@ test('default Export 1 business sync never applies to the live database', async 
   assert.deepEqual(calls, ['dry', ['advance', 'DRY_RUN_COMPLETE']]);
   assert.equal(result.db, undefined);
   assert.equal(result.dryRunComplete, true);
+});
+
+test('production chain derives live apply only from the exact environment opt-in', async () => {
+  for (const [value, expectLiveApply] of [[undefined, false], ['true', false], ['1', true]]) {
+    const calls = [];
+    const run = { advance: (state) => calls.push(['advance', state]) };
+    await executeProductionChain({}, run, {
+      env: value === undefined ? {} : { SAP_ALLOW_LIVE_DB_APPLY: value },
+      runSapChainFn: async (adapters) => adapters.syncExport1({ file: '/download/export1.csv' }),
+      runDbFn: (_file, dryRun) => {
+        calls.push(dryRun ? 'dry' : 'live');
+        return dryRun ? { ok: true, blockedDeletes: 0 } : { ok: true };
+      },
+    });
+    assert.deepEqual(calls, expectLiveApply ? ['dry', 'live', ['advance', 'DB_SYNCED']] : ['dry', ['advance', 'DRY_RUN_COMPLETE']]);
+  }
+});
+
+test('a failed Export 1 shadow sync never completes or applies', async () => {
+  for (const allowLiveApply of [false, true]) {
+    const calls = [];
+    const run = { advance: (state) => calls.push(['advance', state]) };
+    await assert.rejects(
+      () => syncExport1Result({ file: '/download/export1.csv' }, run, {
+        allowLiveApply,
+        runDbFn: (_file, dryRun) => {
+          calls.push(dryRun ? 'dry' : 'live');
+          return { ok: false, blockedDeletes: 0 };
+        },
+      }),
+      /shadow-not-ok/,
+    );
+    assert.deepEqual(calls, ['dry']);
+  }
 });
 
 test('blocked Export 1 dry-run prevents the real business write', async () => {
